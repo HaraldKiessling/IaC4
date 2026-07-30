@@ -87,7 +87,7 @@ Basierend auf den Secret-Abhängigkeiten ergibt sich diese Ausführungsreihenfol
 Beide nutzen dasselbe Terraform-Verzeichnis (`terraform/`), lesen und schreiben dieselben Secrets (`TAILSCALE_OAUTH_CLIENT_ID/SECRET`) und verwalten dieselbe Ressource (Tailscale OAuth-Client). Sie können nicht parallel laufen und erzeugen inkonsistente Zustände.
 
 #### P-003: Kein Terraform-Backend in 03 und 04
-Terraform State wird nicht persistiert (kein S3, GCS oder alternatives Backend). Jeder GitHub-Actions-Runner startet mit leerem Workspace → `terraform apply` erstellt bei jedem Run einen **neuen** OAuth-Client in Tailscale, ohne den alten zu revoken. **17 Runs von 03 + 13 Runs von 04 = ~30 Ghost-Clients in Tailscale.**
+Terraform State wird nicht persistiert (kein S3, GCS oder alternatives Backend). Jeder GitHub-Actions-Runner startet mit leerem Workspace → `terraform apply` erstellt bei jedem Run einen **neuen** OAuth-Client in Tailscale, ohne den alten zu widerrufen. **17 Runs von 03 + 13 Runs von 04 = ~30 Ghost-Clients in Tailscale.**
 
 #### P-004: Workflow-Nummern inkonsistent
 Die Nummerierung `00 → 01 → 02 → 03 → 04` suggeriert eine lineare Reihenfolge. Die tatsächliche Dependency-Kette ist `00 → 03 → 01 → 02`. Siehe Dependency-Graph oben.
