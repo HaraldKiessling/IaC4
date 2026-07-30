@@ -60,6 +60,7 @@ Jeder PR muss beantworten (5W):
 - **W**elche Alternativen gab es?
 - **W**ie wurde priorisiert?
 - **W**as passiert bei Fehlschlag?
+- **PR-Body MUSS `Closes #<nummer>` enthalten**, wenn der PR ein Issue löst
 
 ### P3b – Separation of Concerns
 Ein PR macht **genau eine Sache**:
@@ -103,7 +104,7 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 ### Checkliste vor Fertig-Meldung
 Bevor ein PR als "ready" gemeldet wird:
 1. ✅ CI-Checks alle grün
-2. ✅ PR-Beschreibung: Was + Warum + Alternativen (P3)
+2. ✅ PR-Beschreibung: Was + Warum + Alternativen + `Closes #N` bei Issue-Bezug (P3)
 3. ✅ Living Docs: arc42 + AGENTS.md aktuell
 4. ✅ Secrets-Check: nichts committet
 5. ✅ Branch auf aktuellem `main` (ggf. rebased)
