@@ -1,6 +1,17 @@
 ---
 # IaC4 – Site-Playbook
 # Führt alle Phasen sequentiell aus (je nach Tag)
+#
+# Phase 0: cloud-config               → SSH via Public-IP (manuell, VPS-Installation)
+# Phase 1: baseline                    → System-Grundsetup
+# Phase 2a: tailscale                  → Tailscale-Join
+# Phase 2b: ssh-restrict               → SSH auf Public-IP schließen 🔒
+# Phase 2c: docker-traefik             → Docker + Traefik
+# Phase 2d: services                   → Qdrant, CodeServer
+# Phase 2e: openclaw                   → OpenClaw Gateway
+#
+# Nach Phase 2b ist der VPS nur noch via Tailscale erreichbar!
+
 - name: Phase 1 – System-Baseline
   ansible.builtin.import_playbook: 01-baseline.yml
   tags: [phase1, baseline]
@@ -9,14 +20,18 @@
   ansible.builtin.import_playbook: 02-tailscale.yml
   tags: [phase2a, tailscale]
 
-- name: Phase 2b – Docker & Traefik
+- name: Phase 2b – SSH-Restrict 🔒
+  ansible.builtin.import_playbook: 02-ssh-restrict.yml
+  tags: [phase2b, ssh-restrict]
+
+- name: Phase 2c – Docker & Traefik
   ansible.builtin.import_playbook: 03-docker-traefik.yml
-  tags: [phase2b, docker, traefik]
+  tags: [phase2c, docker, traefik]
 
-- name: Phase 2c – Services
+- name: Phase 2d – Services
   ansible.builtin.import_playbook: 04-services.yml
-  tags: [phase2c, services]
+  tags: [phase2d, services]
 
-- name: Phase 2d – OpenClaw
+- name: Phase 2e – OpenClaw
   ansible.builtin.import_playbook: 05-openclaw.yml
-  tags: [phase2d, openclaw]
+  tags: [phase2e, openclaw]

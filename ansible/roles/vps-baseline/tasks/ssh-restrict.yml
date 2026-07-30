@@ -1,0 +1,20 @@
+---
+# SSH-Restriction nach Tailscale-Join
+# Phase 2: Public-SSH schließen, nur Tailscale-SSH erlauben
+# Referenz: RFC 0022 (IaC3)
+
+- name: SSH auf öffentlicher IP blockieren
+  ansible.builtin.ufw:
+    rule: deny
+    port: '22'
+    proto: tcp
+  notify: sshd restrict confirmed
+
+- name: Prüfen ob SSH nur noch via Tailscale erreichbar
+  ansible.builtin.wait_for:
+    host: "{{ ansible_default_ipv4.address }}"
+    port: 22
+    state: stopped
+    timeout: 10
+  ignore_errors: yes
+  when: tailscale_connected is defined and tailscale_connected

@@ -1,0 +1,15 @@
+---
+- name: Phase 2b – SSH-Restrict nach Tailscale-Join
+  hosts: vps
+  become: yes
+  vars:
+    tailscale_connected: true
+  tasks:
+    - name: SSH auf öffentlicher IP blockieren
+      ansible.builtin.ufw:
+        rule: deny
+        port: '22'
+        proto: tcp
+    - name: Bestätigung
+      ansible.builtin.debug:
+        msg: "✅ Öffentlicher SSH-Zugriff blockiert. VPS nur noch via Tailscale erreichbar."

@@ -1,6 +1,8 @@
 ---
-- name: Phase 1 – System-Baseline
+- name: Phase 1 – System-Baseline (ohne SSH-Restrict)
   hosts: vps
   become: yes
   roles:
-    - vps-baseline
+    - role: vps-baseline
+      vars:
+        skip_ssh_restrict: true
