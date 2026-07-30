@@ -6,7 +6,7 @@
 ## Repository
 **Name:** HaraldKiessling/IaC4
 **Architektur:** arc42-light in `docs/arc42/` (DE)
-**Branch:** `main` (geschützt) | `dev` (Integration) | `feature/*` (Entwicklung)
+**Branch:** `main` (geschützt) | `dev` (autonomer Push) | `feature/*` (Entwicklung)
 
 ## 🔴 Harte Regeln (brechen = Rollback)
 
@@ -14,13 +14,20 @@
 |-------|----------|
 | **Nie `overwrite_existing_content = true`** in Terraform-ACL (Vorfall 2026-07-30) | Alle |
 | **Nie direkter Push auf `main`** – nur via PR | Alle |
+| **`dev` Push** = autonom (kein PR nötig) | Orchestrator |
+| **PR `grün` vor Fertig-Meldung** – erst done, wenn alle CI-Checks pass | Alle |
 | **Nie Secrets committen** – immer GH Secrets + `.env.example` | Alle |
 | **Nie Gateway-Prozess killen** (Vorfall 2026-07-16, 6h Downtime) | Alle |
-| **PR mergen** = nur Harald | Orchestrator |
+| **PR mergen** = Harald genehmigt → Agent merge | Orchestrator |
 | **PROD-Deploy** = nur Harald | Orchestrator |
+| **Pre-Flight Validation vor Push** – yamllint + markdownlint lokal prüfen | Alle |
+| **Force-Push nicht auf PR-Branches** – nur auf ungeteilte Feature-Branches | Alle |
+| **PR-Checkliste vor Fertig-Meldung** – CI grün, Doku aktuell, Secrets-Check, Branch rebased | Orchestrator |
 
 ## ✅ Autonom (kein Approval nötig)
 - Feature-Branch → Push → DEV-Deploy
+- **`dev` Branch → Push** = direkt (kein PR)
+- **PR merge (main)** = nach Harald-Approval
 - Code schreiben, testen, committen
 - Issue-Templates verwenden (Feature/Bug/Change)
 - arc42-Doku aktuell halten (P4)
@@ -41,19 +48,39 @@ Jede Änderung beginnt mit einem Konzept:
 - GROSS (>1h Arbeit): Kurzkonzept in docs/decisions/ ablegen
 - Dann: Branch → Code → PR
 
-### P3 – Review mit 5W
-Jeder PR muss beantworten:
+### P3 – Entscheidungen statt "könnte"
+Kein "könnte", "vielleicht", "man könnte". Stattdessen:
+1. **Alternativen evidenzbasiert ausarbeiten** (fachlich, nicht spekulativ)
+2. **Mit Begründung eine Entscheidung treffen** oder **mindestens eine Empfehlung**
+3. Wenn Daten fehlen: nachfragen, nicht raten
+
+Jeder PR muss beantworten (5W):
 - **W**as ändert sich?
 - **W**arum (fachliche Begründung)?
 - **W**elche Alternativen gab es?
 - **W**ie wurde priorisiert?
 - **W**as passiert bei Fehlschlag?
 
+### P3b – Separation of Concerns
+Ein PR macht **genau eine Sache**:
+- `fix/*` → Code-Reparaturen
+- `feat/*` → Neue Features
+- `chore/*` → CI/Tooling/Config
+- `docs/*` → Doku/Regeln
+- **Nicht:** Code + CI + Doku-Regeln im selben PR
+
 ### P4 – Living Docs
 Nach jeder Code-Änderung prüfen:
 - Betrifft das arc42-Kapitel? → aktualisieren
 - Betrifft das AGENTS.md? → aktualisieren
 - Commit-Nachricht: "docs(scope): ..." für reine Doku-Änderungen
+
+### P4b – Pre-Flight Validation (vor Push)
+Vor `git push` immer lokal prüfen:
+- **YAML:** `yamllint .github/workflows/*.yml ansible/**/*.yml`
+- **Markdown:** `markdownlint docs/**/*.md`
+- **Workflow-Syntax:** Gibt es `***`-Reste oder offensichtliche Fehler?
+- **Secrets:** Kein Token/Passwort im Diff?
 
 ### P5 – Gap-Analysen
 Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
@@ -67,8 +94,27 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 
 ### P7 – Autonome Entwicklung
 - Feature/BugFix → DEV-Deploy = autonom
-- MAIN/PROD = Harald
+- **PR erst als "erledigt" melden, wenn CI grün ist**
+- **`dev` Branch → Push** = autonom
+- **PR merge (main)** = nach Harald-Approval
 - Technische Entscheidungen bis DEV: frei
+- MAIN/PROD = Harald
+
+### Checkliste vor Fertig-Meldung
+Bevor ein PR als "ready" gemeldet wird:
+1. ✅ CI-Checks alle grün
+2. ✅ PR-Beschreibung: Was + Warum + Alternativen (P3)
+3. ✅ Living Docs: arc42 + AGENTS.md aktuell
+4. ✅ Secrets-Check: nichts committet
+5. ✅ Branch auf aktuellem `main` (ggf. rebased)
+6. ✅ Kein Force-Push auf PR-Branches
+
+### P7c – Post-Merge-Checkliste
+Nach jedem erfolgreichen Merge nach `main`:
+1. Feature-Branch lokal + remote löschen (`git branch -d <name> && git push origin --delete <name>`)
+2. Offene PR-Branches auf neuen `main` rebasen (`git rebase origin/main`)
+3. Obsolete PRs schließen (Kommentar mit Begründung)
+4. Issue-Closing prüfen: Wurden im PR referenzierte Issues (`Closes #...`) automatisch geschlossen?
 
 ## 🏗️ Repo-Struktur
 ```
