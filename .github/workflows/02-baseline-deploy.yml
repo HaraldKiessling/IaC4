@@ -17,7 +17,6 @@ jobs:
     name: "Phase 1 – System-Baseline"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
 
@@ -46,9 +45,6 @@ jobs:
       - name: Ansible installieren
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
 
-      - name: Ansible Collections installieren
-        run: |
-          ansible-galaxy collection install -r ansible/requirements.yml --force -p /usr/share/ansible/collections
 
       - name: Inventory-Datei erstellen
         run: |
@@ -58,8 +54,6 @@ jobs:
 
       - name: Phase 1 – Ansible Baseline ausführen
         working-directory: ansible
-        env:
-          ANSIBLE_COLLECTIONS_PATHS: /usr/share/ansible/collections:~/.ansible/collections
         run: |
           ansible-playbook playbooks/01-baseline.yml \
             -i /tmp/inventory
