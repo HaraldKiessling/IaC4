@@ -17,13 +17,15 @@ permissions:
 
 jobs:
   generate:
-    name: "SSH-Key generieren"
+    name: "SSH-Key generieren + Secrets + cloud-config"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       KEY_COMMENT: "iac4-deploy-key-$(date +%Y%m%d)"
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Prüfen ob SSH_KEY bereits existiert
         id: check
         env:
@@ -38,8 +40,9 @@ jobs:
       - name: Sicherheitsstopp (force=false + Key existiert)
         if: steps.check.outputs.exists == 'true' && github.event.inputs.force != 'true'
         run: |
-          echo "❌ SSH_KEY existiert bereits. Setze force=true zum Überschreiben!"
-          echo "⚠️  Das überschreibt den Public-Key in cloud-config.yaml"
+          echo "❌ SSH_KEY existiert bereits."
+          echo "Setze force=true zum Überschreiben!"
+          echo "⚠️  Das ändert auch den Public-Key in cloud-config.yaml!"
           exit 1
 
       - name: SSH-Key-Paar generieren
@@ -62,11 +65,28 @@ jobs:
           echo "$PUBLIC_KEY" | gh secret set SSH_KEY_PUB --repo ${{ github.repository }}
           echo "✅ SSH_KEY und SSH_KEY_PUB in GH Secrets gespeichert"
 
-      - name: Public Key anzeigen (für cloud-config.yaml)
+      - name: cloud-config.yaml mit neuem Public-Key aktualisieren
         if: steps.check.outputs.exists == 'false' || github.event.inputs.force == 'true'
         run: |
-          echo ""
-          echo "=== Neuer Public-Key (in cloud-config.yaml eintragen) ==="
-          echo "$PUBLIC_KEY"
-          echo ""
-          echo "⚠️  Vergiss nicht, den Public-Key in cloud-config.yaml zu aktualisieren!"
+          # Public-Key aus env in cloud-config.yaml eintragen
+          ESCAPED_KEY=$(echo "$PUBLIC_KEY" | sed 's|/|\\/|g')
+          sed -i "s|ssh-ed25519 AAAA.*iac4-deploy-key|${ESCAPED_KEY}|" cloud-config.yaml
+          echo "✅ cloud-config.yaml aktualisiert"
+
+      - name: Änderungen committen
+        if: steps.check.outputs.exists == 'false' || github.event.inputs.force == 'true'
+        run: |
+          git config user.email "harald.kiessling@web.de"
+          git config user.name "IaC4 SSH-Key Bot"
+          git add cloud-config.yaml
+          git commit -m "chore(ssh): rotate SSH key - $KEY_COMMENT"
+          git push
+          echo "✅ cloud-config.yaml committed"
+
+      - name: Public Key anzeigen
+        if: always()
+        run: |
+          if [ -n "$PUBLIC_KEY" ]; then
+            echo "=== Neuer Public-Key ==="
+            echo "$PUBLIC_KEY"
+          fi
