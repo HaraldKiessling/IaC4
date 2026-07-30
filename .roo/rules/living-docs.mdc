@@ -1,0 +1,8 @@
+# Living Docs (P4)
+
+Nach jeder Code-Änderung:
+1. Prüfen: Betrifft das docs/arc42/? → aktualisieren
+2. Prüfen: Betrifft das AGENTS.md? → aktualisieren
+3. Commit-Typ `docs(scope):` bei reinen Doku-Änderungen
+
+arc42-Platzhalter sind OK (Kapitel 06, 10) – aber als solche markiert.

@@ -1,0 +1,10 @@
+# Vendor-Docs vor eigener Interpretation
+
+Vor Änderungen an:
+- **Ansible**: docs.ansible.com lesen
+- **OpenClaw**: docs.openclaw.ai + `/usr/lib/node_modules/openclaw/docs/`
+- **Tailscale**: tailscale.com/docs
+- **Qdrant**: qdrant.tech/documentation
+- **Docker/Traefik**: offizielle Dokumentation
+
+Keine "ich glaube"-Aussagen zu Tool-Verhalten ohne Quellenangabe.

@@ -1,0 +1,7 @@
+# Tailscale ACL – NIEMALS überschreiben
+
+- `terraform/acl.tf` existiert NICHT in IaC4 (wurde entfernt)
+- ACL-Änderungen brauchen KOORDINIERTEN Prozess (alle Projekte)
+- Nie `overwrite_existing_content = true` ohne vollständige ACL mit ia3+ia4+ha
+- OAuth-Client verwendet `tag:ci` (nicht `tag:ia4`)
+- IaC4-VPS wird via `tag:ci` authentifiziert (nicht tag:ia4)

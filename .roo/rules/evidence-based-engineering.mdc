@@ -1,0 +1,8 @@
+# Evidence-Based Engineering (P1)
+
+- `web_search` nutzen für aktuelle Best Practices
+- `web_fetch` für Vendor-Doku (Ansible, OpenClaw, Tailscale, Qdrant)
+- Lokale OpenClaw-Docs in `/usr/lib/node_modules/openclaw/docs/` beachten
+- Empfehlungen immer mit Quellen belegen
+- Bei Unsicherheit: recherchieren, nicht raten
+- Kein IaC3-Wissen blind übernehmen (jede Übernahme braucht P1-Prüfung)

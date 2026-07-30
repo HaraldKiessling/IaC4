@@ -1,0 +1,7 @@
+# Single Source of Truth
+
+- **AGENTS.md** ist primäre Anlaufstelle für Agenten
+- **docs/arc42/** ist autoritative Architektur-Dokumentation
+- **cloud-config.yaml** (Repo) ist die einzig gültige Bootstrap-Config
+- **GH Secrets** sind der einzig gültige Ort für Secrets (nicht .env)
+- Bei Widersprüchen: AGENTS.md > arc42-Doku > mündliche Absprachen

@@ -1,0 +1,8 @@
+# SSH-Transition (Security)
+
+- Phase 0-2a: SSH via Public-IP 🔓 (Bootstrap, nötig)
+- Phase 2b: **UFW deny 22** – SSH schliessen 🔒
+- Ab Phase 2c: SSH NUR via Tailscale 🔒
+
+**Nie** öffentliches SSH dauerhaft offen lassen.
+Die SSH-Transition ist ein Security-Gate.

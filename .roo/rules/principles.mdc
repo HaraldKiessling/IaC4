@@ -1,0 +1,25 @@
+# IaC4 Leitprinzipien (P1-P7)
+
+Diese Regeln gelten für ALLE Änderungen in diesem Repository.
+
+## P1 – Evidenz
+Jede Behauptung braucht einen Beleg (web_search, web_fetch, Vendor-Docs).
+Nicht: "Ich glaube", "Meiner Erfahrung nach" ohne Quelle.
+
+## P2 – Konzepte vor Code
+Jede Änderung beginnt mit Issue oder Kurzkonzept in docs/decisions/.
+
+## P3 – Review mit 5W
+Jeder PR muss beantworten: Was, Warum, Welche Alternativen, Priorisierung, Fehlschlags-Folgen.
+
+## P4 – Living Docs
+Nach Code-Änderungen arc42-Doku und AGENTS.md prüfen/aktualisieren.
+
+## P5 – Gap-Analysen
+Regelmäßig IST vs. SOLL in docs/arc42/.
+
+## P6 – Nachhaltigkeit
+Keine Workarounds. Tech-Debt in docs/arc42/11 dokumentieren.
+
+## P7 – Autonome Entwicklung
+Feature/BugFix → DEV-Deploy = autonom. MAIN/PROD = Harald.
