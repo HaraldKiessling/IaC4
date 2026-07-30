@@ -1,6 +1,6 @@
 #cloud-config
-# IaC4 – VPS-Provisioning (Template)
-# Vor dem ersten Deploy: SSH-Public-Key ersetzen
+# IaC4 – VPS-Provisioning (fertig zum Einspielen)
+# SSH-Key für GH Actions Deploy-User
 
 users:
   - name: deploy-user
@@ -23,14 +23,17 @@ packages:
   - tailscale
 
 runcmd:
+  # UFW: Nur SSH erlauben
   - ufw default deny incoming
   - ufw default allow outgoing
   - ufw allow ssh
   - ufw --force enable
+  # Swap (2GB)
   - fallocate -l 2G /swapfile
   - chmod 600 /swapfile
   - mkswap /swapfile
   - swapon /swapfile
   - echo '/swapfile none swap sw 0 0' >> /etc/fstab
   - sysctl -w vm.swappiness=1
+  # Tailscale aktivieren
   - systemctl enable --now tailscaled
