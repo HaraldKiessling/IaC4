@@ -1,7 +1,6 @@
 #cloud-config
-# IaC4 – VPS-Provisioning (Phase 0: Bootstrap)
-# Minimal: User + SSH-Key + Firewall
-# Tailscale und alles weitere via Ansible (Phasen 2+)
+# IaC4 – VPS-Provisioning
+# User: deploy-user | SSH: iac4-deploy-key-20260730
 
 users:
   - name: deploy-user
@@ -16,10 +15,6 @@ disable_root: true
 package_update: true
 
 packages:
-  - curl
-  - wget
-  - htop
-  - unzip
   - ufw
 
 runcmd:
@@ -27,7 +22,7 @@ runcmd:
   - ufw default allow outgoing
   - ufw allow ssh
   - ufw --force enable
-  - fallocate -l 2G /swapfile
+  - fallocate -l 4G /swapfile
   - chmod 600 /swapfile
   - mkswap /swapfile
   - swapon /swapfile
