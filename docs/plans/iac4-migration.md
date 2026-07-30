@@ -1,0 +1,76 @@
+# IaC4 Migration – Gesamtplan
+
+> **Übergeordnetes Ziel:** IaC3-Inhalte nach IaC4 migrieren, VPS DEV via Tailscale bereitstellen.
+> **Stand:** 2026-07-30 | **Methodik:** docs/workflows/methodology.md
+
+## ✅ Phase 0: Grundstruktur (erledigt)
+
+- [x] Repo-Struktur entworfen und gepusht (58 Dateien)
+- [x] arc42-Dokumentation (12 Kapitel DE) angelegt
+- [x] Issue-Templates (Feature/Bug/Change) hinterlegt
+- [x] SSH-Key-Paar generiert + GH Secrets gesetzt
+- [x] Cloud-config mit deploy-user + SSH-Key erstellt
+- [x] `.roo/rules/` für Zoo Code angelegt
+- [x] `.openclaw/agents/` mit Rollen angelegt
+- [x] Arbeitsmethodik dokumentiert (8-Schritte)
+- [x] Plan-Management dokumentiert (docs/plans/)
+
+## ✅ Phase 1: Tailscale OAuth (erledigt)
+
+- [x] Terraform OAuth-Client erzeugt (IaC4 GH Secrets gespeichert)
+- [x] OAuth-Client tag:ia3 hinzugefügt (für SSH-ACL-Kompatibilität)
+- [x] Workflow 03 (rotate OAuth) erstellt (force=false)
+
+## 🟡 Phase 2: VPS DEV via Tailscale (aktuell)
+
+- [x] Cloud-config korrigiert (NOPASSWD:***)
+- [x] VPS DEV installiert (deploy-user + SSH-Key)
+- [x] Workflow 02 (Tailscale Bootstrap) erstellt
+- [x] Handler `creates:` gefixt (skip Bug)
+- [x] Auth-Key `ephemeral: false` (permanenter Server)
+- [x] Auth-Key `tag:ia3` (ACL-kompatibel)
+- [ ] **VPS neu installieren** (letzte cloud-config)
+- [ ] Workflow 02 erneut starten
+- [ ] SSH-Zugriff via Tailscale bestätigen
+
+## ⬜ Phase 3: Ansible-Rollen befüllen
+
+- [ ] vps-baseline: Tasks implementieren
+- [ ] docker: Tasks implementieren
+- [ ] traefik: Tasks implementieren
+- [ ] qdrant: Collection-Setup (3072d/Cosine)
+- [ ] code-server: Tasks implementieren
+- [ ] openclaw-gateway: Tasks implementieren
+
+## ⬜ Phase 4: Services deployen
+
+- [ ] Docker + Traefik auf DEV deployen
+- [ ] Qdrant auf DEV deployen
+- [ ] Code-Server auf DEV deployen
+
+## ⬜ Phase 5: OpenClaw Minimal
+
+- [ ] OpenClaw Gateway auf DEV deployen
+- [ ] Memory-Backend (Qdrant) konfigurieren
+- [ ] WebSearch-Tool einrichten
+
+## ⬜ Phase 6: CI/CD ausbauen
+
+- [ ] 01-baseline-deploy: Vollständiger Run
+- [ ] 02-service-deploy: Vollständiger Run
+- [ ] 03-openclaw-install: Vollständiger Run
+- [ ] CI mit Quality-Gates
+
+## ⬜ Phase 7: Post-Deploy + Security
+
+- [ ] Post-Deploy-Verifikation (scripts/verify-deployment.sh)
+- [ ] arc42 living docs updaten (P4)
+- [ ] Gap-Analyse (P5)
+- [ ] Tech-Debt in K11 aktualisieren
+
+## 🔴 Tech-Debt (dokumentiert in arc42 K11)
+
+- [ ] Qdrant-Volume-Backup
+- [ ] Ollama (niedrige Prio)
+- [ ] Monitoring/Alerting
+- [ ] Fehlende API-Secrets (Gemini, OpenRouter)
