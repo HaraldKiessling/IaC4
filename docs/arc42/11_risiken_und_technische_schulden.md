@@ -5,14 +5,16 @@
 ## Technische Schulden
 | # | Beschreibung | Priorität | Geplant |
 |---|-------------|-----------|---------|
-| T-001 | Backup/Disaster-Recovery nicht implementiert | Mittel | Nach Phase-1-Stabilisierung |
+| T-001 | Backup/Disaster-Recovery (Qdrant-Volume) nicht implementiert | Mittel | Nach Phase-2-Stabilisierung |
 | T-002 | OpenClaw-Konfiguration manuell (Phase 3 nicht automatisiert) | Niedrig | Nach Option-B-Migration |
 | T-003 | Kein Monitoring/Alerting | Niedrig | Später |
-| T-004 | Ollama installiert aber ungenutzt (von IaC3) | Niedrig | Entfernen bei IaC4-Migration |
+| T-004 | Ollama nicht migriert (von IaC3, aktuell ungenutzt) | Niedrig | Entfernen bei IaC4-Migration |
+| T-005 | Fehlende API-Secrets (Gemini, OpenRouter) in IaC4 | 🔴 Hoch | Manuell von IaC3 kopieren |
 
 ## Risiken
-| Risiko | Wahrscheinlichkeit | Impact | Mitigation |
-|--------|-------------------|--------|------------|
-| VPS-Crash | Gering | Hoch | IaC4-Repo + Make deploy |
+| Risiko | Wahrsch. | Impact | Mitigation |
+|--------|----------|--------|------------|
+| VPS-Crash | Gering | Hoch | IaC4-Repo + Make deploy (ca. 10 Min) |
+| SSH-Lockout bei Tailscale-Ausfall | Sehr gering | 🔴 Hoch | UFW-Fallback-Regel oder IPMI |
 | GitHub-Ausfall | Gering | Mittel | Lokales Backup des Repos |
-| Tailscale-Ausfall | Sehr gering | Hoch | SSH-Fallback-Key auf VPS |
+| ADR-010: ACL-Fragmentierung | Mittel | Mittel | Koordinierter ACL-Prozess nötig |

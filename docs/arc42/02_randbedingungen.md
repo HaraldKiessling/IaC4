@@ -2,8 +2,9 @@
 
 ## Technisch
 - **VPS:** Ubuntu 24.04 LTS (x86_64)
+- **VPS-User:** `deploy-user` (sudo + SSH-Key)
 - **Automation:** GitHub Actions + Ansible
-- **Netzwerk:** Tailscale (Mesh-VPN)
+- **Netzwerk:** Public-IP initial, dann Tailscale (Mesh-VPN, dauerhaft)
 - **Container:** Docker + Compose
 - **CI/CD:** GitHub Actions (Ubuntu-latest Runner)
 
@@ -11,10 +12,11 @@
 - **Ein-Personen-Projekt** (Harald)
 - **DEV + PROD:** Ein VPS pro Stage
 - **Budget:** Keine kostenpflichtigen Dienste (außer VPS-Hosting)
-- **Zugriff:** Nur via Tailscale (keine öffentlichen Ports außer Traefik)
+- **Zugriff:** Initial Public-IP SSH (Bootstrap), nach Phase 2b nur Tailscale
+- **IaC3-Abgrenzung:** Kein Petrus, keine RFCs, arc42-light
 
 ## Konventions-Übersicht
 - **Branching:** Feature/BugFix → PR → DEV → PR → MAIN
 - **Commits:** Conventional Commits
 - **Dokumentation:** arc42-light in docs/arc42/ (Deutsch)
-- **Repo:** Monorepo für Entwicklungstools, separate Repos für Projekte
+- **Repo:** Monorepo für IaC4; separate Repos für home-assistant und openclaw-config

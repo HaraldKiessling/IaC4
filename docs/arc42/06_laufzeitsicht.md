@@ -1,24 +1,50 @@
 # 6. Laufzeitsicht
 
-> Nur für kritische Abläufe ausgefüllt.
+## Deployment-Ablauf (vollständig)
 
-## Deployment-Ablauf
 ```
-GH Actions Dispatch
-  → Runner prüft Ansible-Syntax
-  → Verbindung via Tailscale zum VPS
-  → Phase 1: Baseline (Pakete, SSH, Tailscale)
-  → Phase 2a: Docker + Traefik
-  → Phase 2b: Services (Qdrant, CodeServer)
-  → Phase 2c: OpenClaw Gateway
-  → Post-Deploy-Verifikation: Health-Check
+                    ╔═══════════════════════╗
+                    ║  VPS Neuinstallation  ║
+                    ╚═══════════════════════╝
+                              │
+                    cloud-config.yaml einspielen
+                              │
+                    SSH via Public-IP 🔓
+                              ▼
+              ╔═══════════════════════════╗
+              ║ Phase 1: Baseline (Ansible) ║
+              ╚═══════════════════════════╝
+              → System-Update, Pakete, Swap
+              → SSH via Public-IP 🔓
+                              │
+                              ▼
+           ╔═══════════════════════════════╗
+           ║ Phase 2a: Tailscale-Join (Ansible)║
+           ╚═══════════════════════════════╝
+           → OAuth-Token → Pre-Auth-Key → tailscale up
+           → SSH via Public-IP 🔓
+                              │
+                              ▼
+            ╔══════════════════════════════╗
+            ║ Phase 2b: SSH-Restrict 🔒     ║
+            ╚══════════════════════════════╝
+            → UFW deny 22 (Public-IP dicht)
+            → SSH NUR noch via Tailscale 🔒
+                              │
+                              ▼
+            ╔══════════════════════════════╗
+            ║ Phasen 2c-e: Docker, Services,║
+            ║ OpenClaw (alle via Tailscale) ║
+            ╚══════════════════════════════╝
 ```
 
 ## Disaster Recovery
 ```bash
-# Neuen VPS provisionieren (cloud-config.yaml → SSH-Key)
+# 1. VPS neu provisionieren (cloud-config.yaml)
+# 2. SSH via Public-IP (Phase 0)
+# 3. Ansible-Gesamtdurchlauf (Phasen 1-2e)
 git clone https://github.com/HaraldKiessling/IaC4.git
 cd IaC4
 make deploy target=prod   # < 10 Minuten
-# Qdrant-Volume-Restore für Memory
+# 4. Qdrant-Volume-Restore für Memory-Kontinuität
 ```
