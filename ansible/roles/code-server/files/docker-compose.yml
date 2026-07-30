@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: code-server
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Berlin
+      - PASSWORD={{ code_server_password }}
+      - SUDO_PASSWORD={{ code_server_sudo_password }}
+    volumes:
+      - code-server-data:/config
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.code-server.rule=Host(`{{ code_server_hostname }}`)"
+      - "traefik.http.services.code-server.loadbalancer.server.port=8443"
+
+volumes:
+  code-server-data:
+
+networks:
+  traefik-public:
+    external: true
