@@ -1,4 +1,4 @@
-name: "04 – Tailscale Terraform (OAuth + ACLs)"
+name: "01 – Tailscale Terraform (OAuth + ACLs)"
 
 on:
   pull_request:
@@ -18,6 +18,14 @@ on:
         options:
           - 'false'
           - 'true'
+      force:
+        description: 'Neuen Client erzwingen (alte manuell in TS-UI revoken)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: write
@@ -26,6 +34,7 @@ permissions:
 
 env:
   TF_VERSION: "1.11.0"
+  TF_STATE_CACHE_KEY: "terraform-state-iac4-main"
 
 jobs:
   terraform:
@@ -45,6 +54,13 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      - name: Terraform State aus Cache holen
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: terraform/terraform.tfstate*
+          key: ${{ env.TF_STATE_CACHE_KEY }}
+
       - name: Terraform Init
         run: terraform init
 
@@ -54,9 +70,27 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
+      - name: Auf OAuth-Force-Prüfung
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "⚠️  force=true – Neuer OAuth-Client wird erstellt"
+            echo "🔴 Hinweis: Alter Client muss in Tailscale-UI (Trust credentials) manuell revokt werden!"
+            echo "force_create=true" >> $GITHUB_OUTPUT
+          else
+            echo "force_create=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Terraform Plan
         id: plan
         run: |
+          PLAN_ARGS=""
+          if [ "${{ steps.check.outputs.force_create }}" = "true" ]; then
+            # State löschen, damit Terraform einen neuen Client erstellt
+            rm -f terraform.tfstate terraform.tfstate.backup
+          fi
           terraform plan -no-color -input=false -out=plan_output 2>&1 | tee plan_stdout.txt
           echo "exitcode=$?" >> $GITHUB_OUTPUT
 
@@ -79,13 +113,18 @@ jobs:
         if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
         run: terraform apply -auto-approve plan_output
 
-      - name: OAuth-Secrets in GitHub speichern
+      - name: OAuth-Secrets in GH speichern
         if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          CLIENT_ID=$(terraform output -raw new_oauth_client_id)
-          CLIENT_SECRET=$(terraform output -raw new_oauth_client_secret)
+          CLIENT_ID=$(terraform output -raw new_oauth_client_id 2>/dev/null)
+          CLIENT_SECRET=$(terraform output -raw new_oauth_client_secret 2>/dev/null)
+
+          if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ]; then
+            echo "❌ Konnte OAuth-Credentials nicht aus Terraform-Output lesen"
+            exit 1
+          fi
 
           gh secret set TAILSCALE_OAUTH_CLIENT_ID \
             --body "$CLIENT_ID" \
@@ -96,3 +135,10 @@ jobs:
             --repo ${{ github.repository }}
 
           echo "✅ IaC4 OAuth-Secrets gespeichert"
+
+      - name: Terraform State in Cache speichern
+        if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
+        uses: actions/cache/save@v4
+        with:
+          path: terraform/terraform.tfstate*
+          key: ${{ env.TF_STATE_CACHE_KEY }}

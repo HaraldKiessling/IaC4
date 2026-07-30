@@ -36,10 +36,9 @@
 | # | Name | Phase | Trigger |
 |---|------|-------|---------|
 | 00 | SSH-Key-Paar generieren | Grundstruktur | `workflow_dispatch` |
-| 01 | Baseline Deploy | VPS-Konfiguration | `workflow_dispatch` |
-| 02 | Tailscale Bootstrap | VPS-Konfiguration | `workflow_dispatch` |
-| 03 | OAuth-Client (erzeugen/prüfen) | Grundstruktur | `workflow_dispatch` |
-| 04 | Tailscale Terraform (OAuth + ACLs) | Grundstruktur | PR/Push auf `terraform/**` + `workflow_dispatch` |
+| 01 | Tailscale Terraform (OAuth + ACLs, Merge aus 03+04) | Grundstruktur | PR/Push `terraform/**` + `workflow_dispatch` |
+| 02 | Baseline Deploy | VPS-Konfiguration | `workflow_dispatch` |
+| 03 | Tailscale Bootstrap | VPS-Konfiguration | `workflow_dispatch` |
 | CI | Lint + Quality Gate | CI | Push/PR auf `main`/`dev` |
 
 ### Secret-Abhängigkeiten
@@ -49,10 +48,9 @@ Jeder Workflow liest und schreibt bestimmte GitHub Secrets. Die folgende Tabelle
 | Workflow | READ Secrets | WRITE Secrets |
 |----------|--------------|--------------|
 | **00** | `GH_TOKEN` | **`SSH_KEY`**, **`SSH_KEY_PUB`** |
-| **01** | `SSH_KEY`, `VPS_USER`, `VPS_DEV_PUBLIC_IP` | – |
-| **02** | `SSH_KEY`, `VPS_USER`, `VPS_DEV_PUBLIC_IP`/`VPS_PROD_PUBLIC_IP`, **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET` | – |
-| **03** | `GH_TOKEN`, `TAILSCALE_API_KEY`, `TAILSCALE_TAILNET` | **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`** |
-| **04** | `TAILSCALE_API_KEY`, `TAILSCALE_TAILNET`, `GH_TOKEN` | **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`** |
+| **01** | `TAILSCALE_API_KEY`, `TAILSCALE_TAILNET`, `GH_TOKEN` | **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`** |
+| **02** | `SSH_KEY`, `VPS_USER`, `VPS_DEV_PUBLIC_IP` | – |
+| **03** | `SSH_KEY`, `VPS_USER`, `VPS_DEV_PUBLIC_IP`/`VPS_PROD_PUBLIC_IP`, **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET` | – |
 | **CI** | – | – |
 
 ### Logisch zwingende Reihenfolge
@@ -61,22 +59,22 @@ Basierend auf den Secret-Abhängigkeiten ergibt sich diese Ausführungsreihenfol
 
 ```
 00 ─────────────────────────────────────────────
-   │ WRITE: SSH_KEY, SSH_KEY_PUB               → wird von 01, 02 gelesen
-   ↓
-03 ─────────────────────────────────────────────
-   │ WRITE: TAILSCALE_OAUTH_CLIENT_ID/SECRET    → wird von 02 gelesen
+   │ WRITE: SSH_KEY, SSH_KEY_PUB               → wird von 02, 03 gelesen
    ↓
 01 ─────────────────────────────────────────────
-   │ READ: SSH_KEY → deployed Baseline via SSH auf public-IP
+   │ WRITE: TAILSCALE_OAUTH_CLIENT_ID/SECRET    → wird von 03 gelesen
    ↓
 02 ─────────────────────────────────────────────
+   │ READ: SSH_KEY → deployed Baseline via SSH auf public-IP
+   ↓
+03 ─────────────────────────────────────────────
    │ READ: SSH_KEY + OAuth-Secrets → Tailscale install + SSH restrict
-   │ NACH 02: VPS nur noch via Tailscale erreichbar
+   │ NACH 03: VPS nur noch via Tailscale erreichbar
    ↓
 [04 / Phase-3-Service-Workflows – geplant]
 ```
 
-**Kernregel:** 03 muss VOR 02 laufen (OAuth-Secrets), 01 muss VOR 02 laufen (SSH-Zugriff via public-IP). Die aktuelle Nummerierung (00→01→02→03→04) suggeriert eine falsche Reihenfolge.
+**Kernregel:** 03 muss VOR 02 laufen (OAuth-Secrets), 01 muss VOR 02 laufen (SSH-Zugriff via public-IP). Die Nummerierung wurde auf 00→01→02→03 korrigiert (00→01→02→03).
 
 ### Bekannte Probleme
 

@@ -1,4 +1,4 @@
-name: "01 – Baseline Deploy (Phase 1)"
+name: "02 – Baseline Deploy (Phase 1)"
 
 on:
   workflow_dispatch:
@@ -18,12 +18,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      VPS_PUBLIC_IP: ${{ secrets.VPS_DEV_PUBLIC_IP }}
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: VPS-IP basierend auf Target setzen
+        run: |
+          if [ "${{ inputs.target }}" = "dev" ]; then
+            echo "VPS_PUBLIC_IP=${{ secrets.VPS_DEV_PUBLIC_IP }}" >> $GITHUB_ENV
+          elif [ "${{ inputs.target }}" = "prod" ]; then
+            echo "VPS_PUBLIC_IP=${{ secrets.VPS_PROD_PUBLIC_IP }}" >> $GITHUB_ENV
+          else
+            echo "❌ Unbekanntes Target: ${{ inputs.target }}"
+            exit 1
+          fi
+          echo "Target: ${{ inputs.target }} → IP: $VPS_PUBLIC_IP"
 
       - name: SSH-Key vorbereiten
         run: |
@@ -50,4 +61,4 @@ jobs:
       - name: Post-Deploy Check
         run: |
           echo "✅ Phase 1 abgeschlossen"
-          echo "Nächster Schritt: 02-tailscale-bootstrap.yml ausführen"
+          echo "Nächster Schritt: 03-tailscale-bootstrap.yml ausführen"
