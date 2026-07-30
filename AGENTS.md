@@ -48,8 +48,13 @@ Jede Änderung beginnt mit einem Konzept:
 - GROSS (>1h Arbeit): Kurzkonzept in docs/decisions/ ablegen
 - Dann: Branch → Code → PR
 
-### P3 – Review mit 5W
-Jeder PR muss beantworten:
+### P3 – Entscheidungen statt "könnte"
+Kein "könnte", "vielleicht", "man könnte". Stattdessen:
+1. **Alternativen evidenzbasiert ausarbeiten** (fachlich, nicht spekulativ)
+2. **Mit Begründung eine Entscheidung treffen** oder **mindestens eine Empfehlung**
+3. Wenn Daten fehlen: nachfragen, nicht raten
+
+Jeder PR muss beantworten (5W):
 - **W**as ändert sich?
 - **W**arum (fachliche Begründung)?
 - **W**elche Alternativen gab es?
