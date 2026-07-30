@@ -15,6 +15,7 @@
 | **Nie `overwrite_existing_content = true`** in Terraform-ACL (Vorfall 2026-07-30) | Alle |
 | **Nie direkter Push auf `main`** – nur via PR | Alle |
 | **`dev` Push** = autonom (kein PR nötig) | Orchestrator |
+| **PR `grün` vor Fertig-Meldung** – erst done, wenn alle CI-Checks pass | Alle |
 | **Nie Secrets committen** – immer GH Secrets + `.env.example` | Alle |
 | **Nie Gateway-Prozess killen** (Vorfall 2026-07-16, 6h Downtime) | Alle |
 | **PR mergen** = Harald genehmigt → Agent merge | Orchestrator |
@@ -70,6 +71,8 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 
 ### P7 – Autonome Entwicklung
 - Feature/BugFix → DEV-Deploy = autonom
+- **PR erst als "erledigt" melden, wenn CI grün ist**
+- **`dev` Branch → Push** = autonom
 - **`dev` Branch → Push** = autonom
 - **PR merge (main)** = nach Harald-Approval
 - Technische Entscheidungen bis DEV: frei
