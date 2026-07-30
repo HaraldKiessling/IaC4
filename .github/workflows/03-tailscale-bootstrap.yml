@@ -93,6 +93,8 @@ jobs:
 
       - name: Phase 2a – Tailscale installieren & joinen
         working-directory: ansible
+        env:
+          ANSIBLE_COLLECTIONS_PATHS: /usr/share/ansible/collections:~/.ansible/collections
         run: |
           ansible-playbook playbooks/02-tailscale.yml \
             -i /tmp/inventory \
@@ -100,6 +102,8 @@ jobs:
 
       - name: Phase 2b – SSH-Restrict (UFW deny 22)
         working-directory: ansible
+        env:
+          ANSIBLE_COLLECTIONS_PATHS: /usr/share/ansible/collections:~/.ansible/collections
         run: |
           ansible-playbook playbooks/02-ssh-restrict.yml \
             -i /tmp/inventory

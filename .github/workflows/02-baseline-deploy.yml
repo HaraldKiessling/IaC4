@@ -58,6 +58,8 @@ jobs:
 
       - name: Phase 1 – Ansible Baseline ausführen
         working-directory: ansible
+        env:
+          ANSIBLE_COLLECTIONS_PATHS: /usr/share/ansible/collections:~/.ansible/collections
         run: |
           ansible-playbook playbooks/01-baseline.yml \
             -i /tmp/inventory
