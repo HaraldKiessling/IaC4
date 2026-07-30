@@ -1,6 +1,6 @@
 #cloud-config
-# IaC4 – Minimales VPS-Provisioning
-# Vor dem ersten Deploy ausfüllen: public-ssh-key ersetzen
+# IaC4 – VPS-Provisioning
+# Vor dem ersten Deploy: SSH-Public-Key prüfen
 
 users:
   - name: openclaw
@@ -8,7 +8,7 @@ users:
     groups: sudo
     shell: /bin/bash
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAA...   # HIER PUBLIC-KEY EINSETZEN"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEkOYAaYV2j6PDXHAbND5BjkpTEeUZXcYp3zJ5H0gdbw iac4-deploy-key-20260730"
 
 package_update: true
 packages:
@@ -20,4 +20,3 @@ packages:
 
 runcmd:
   - systemctl enable --now tailscaled
-  # Tailscale-Join erfolgt in Ansible-Phase 2a
