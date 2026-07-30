@@ -1,4 +1,17 @@
-# Deployment-Stufen & Branching-Modell
+# Deployment-Stufen & SSH-Transition
+
+## SSH-Strategie (RFC 0022/0033)
+
+```
+Phase 0: cloud-config → SSH via Public-IP 🔓  (Bootstrap, notwendig)
+Phase 1: baseline      → System-Grundsetup
+Phase 2a: tailscale    → Tailscale-Join
+Phase 2b: ssh-restrict → SSH auf Public-IP blockieren 🔒
+Phase 2c-e: docker, services, openclaw  → Nur via Tailscale-SSH
+```
+
+Nach Phase 2b ist der VPS **nicht mehr über die öffentliche IP erreichbar**.
+SSH/Zugriff nur noch via Tailscale (MagicDNS).
 
 ## Branching
 
@@ -6,7 +19,7 @@
 Feature/BugFix-Branch
        │ PR
        ▼
-     DEV (← automatischer Deploy)
+     DEV (← automatischer Deploy via Tailscale)
        │ PR (grüne CI + DEV-Deploy erforderlich)
        ▼
      MAIN (← nur mit Haralds OK)
@@ -15,26 +28,6 @@ Feature/BugFix-Branch
      PROD (← nur mit Haralds OK)
 ```
 
-## Deploy-Phasen
-
-| Phase | Playbook | Dauer | Beschreibung |
-|-------|----------|-------|-------------|
-| 1 | `01-baseline.yml` | < 2 Min | SSH, Pakete, Tailscale-Join |
-| 2a | `02-tailscale.yml` | < 1 Min | Tailscale-Auth-Key rotieren |
-| 2b | `03-docker-traefik.yml` | < 2 Min | Docker + Traefik Core |
-| 2c | `04-services.yml` | < 3 Min | Qdrant, CodeServer |
-| 2d | `05-openclaw.yml` | < 3 Min | OpenClaw Gateway |
-| 3 | – | Laufzeit | OpenClaw-Selbstkonfiguration (nur Memory/Laufzeit) |
-
-## Deploy-Quellen
-
-| Quelle | Target | Approval |
-|--------|--------|----------|
-| Feature/BugFix | DEV | ❌ |
-| DEV (Branch) | DEV (auto) | ❌ |
-| MAIN | DEV (auto) | ❌ |
-| MAIN → PROD | PROD | ✅ Harald |
-
-## Quality Gates
+## Qualitäts-Gates
 
 Siehe `qa/quality-gates.md`.
