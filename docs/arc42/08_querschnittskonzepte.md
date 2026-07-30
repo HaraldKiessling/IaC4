@@ -76,6 +76,15 @@ Basierend auf den Secret-Abhängigkeiten ergibt sich diese Ausführungsreihenfol
 
 **Kernregel:** 03 muss VOR 02 laufen (OAuth-Secrets), 01 muss VOR 02 laufen (SSH-Zugriff via public-IP). Die Nummerierung wurde auf 00→01→02→03 korrigiert (00→01→02→03).
 
+
+
+#### P-005: Terraform-State-Cache ist kein echtes Backend
+Der Terraform-State wird via GitHub Actions Cache (`actions/cache@v4`) persistiert – kein S3/GCS/Backend.
+- **Vorteil:** Keine externe Infrastruktur nötig
+- **Limitierung:** Bei parallelen Runs auf demselben Branch kann der Cache inkonsistent werden
+- **Empfehlung:** Sobald mehrere Teammitglieder parallel arbeiten, auf ein echtes Terraform-Backend migrieren (z.B. S3 + DynamoDB-Locking)
+- Siehe auch: ADR-014, T-006
+
 ### Bekannte Probleme
 
 #### P-001: Workflow 01 ignoriert `target`-Input

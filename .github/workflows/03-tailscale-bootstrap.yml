@@ -72,7 +72,7 @@ jobs:
                     "reusable": false,
                     "ephemeral": false,
                     "preauthorized": true,
-                    "tags": ["tag:ia3"]
+                    "tags": ["tag:ia4"]
                   }
                 }
               }

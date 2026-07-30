@@ -34,7 +34,7 @@ permissions:
 
 env:
   TF_VERSION: "1.11.0"
-  TF_STATE_CACHE_KEY: "terraform-state-iac4-main"
+  TF_STATE_CACHE_KEY: "terraform-state-${{ github.ref_name }}"
 
 jobs:
   terraform:
@@ -60,6 +60,8 @@ jobs:
         with:
           path: terraform/terraform.tfstate*
           key: ${{ env.TF_STATE_CACHE_KEY }}
+          restore-keys: |
+            terraform-state-${{ github.ref_name }}-
 
       - name: Terraform Init
         run: terraform init
@@ -86,7 +88,6 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: |
-          PLAN_ARGS=""
           if [ "${{ steps.check.outputs.force_create }}" = "true" ]; then
             # State löschen, damit Terraform einen neuen Client erstellt
             rm -f terraform.tfstate terraform.tfstate.backup
