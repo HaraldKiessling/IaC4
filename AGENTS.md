@@ -96,7 +96,6 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 - Feature/BugFix → DEV-Deploy = autonom
 - **PR erst als "erledigt" melden, wenn CI grün ist**
 - **`dev` Branch → Push** = autonom
-- **`dev` Branch → Push** = autonom
 - **PR merge (main)** = nach Harald-Approval
 - Technische Entscheidungen bis DEV: frei
 - MAIN/PROD = Harald
