@@ -46,6 +46,10 @@ jobs:
       - name: Ansible installieren
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
 
+      - name: Ansible Collections installieren
+        run: |
+          ansible-galaxy collection install -r ansible/requirements.yml
+
       - name: Inventory-Datei erstellen
         run: |
           echo "[vps]" > /tmp/inventory
