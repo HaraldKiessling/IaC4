@@ -20,6 +20,7 @@ jobs:
     name: "Tailscale install + join + restrict SSH"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
       VPS_PUBLIC_IP: ""  # wird im Step gesetzt
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}

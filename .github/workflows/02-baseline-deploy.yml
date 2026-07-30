@@ -17,6 +17,7 @@ jobs:
     name: "Phase 1 – System-Baseline"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
 
