@@ -82,7 +82,7 @@ jobs:
       - name: OAuth-Secrets in GitHub speichern
         if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           CLIENT_ID=$(terraform output -raw new_oauth_client_id)
           CLIENT_SECRET=$(terraform output -raw new_oauth_client_secret)
