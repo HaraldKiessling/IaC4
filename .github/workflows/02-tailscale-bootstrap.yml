@@ -24,7 +24,7 @@ jobs:
       VPS_PUBLIC_IP: ${{ secrets.VPS_DEV_PUBLIC_IP }}
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +38,6 @@ jobs:
       - name: Ansible installieren
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
 
-      # OAuth-Flow: Client → Token → Pre-Auth-Key → Tailscale-Join
       - name: Tailscale Auth-Key via OAuth generieren
         id: authkey
         env:
@@ -46,13 +45,10 @@ jobs:
           TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
         run: |
-          # OAuth-Token holen
           TOKEN_RESP=$(curl -s -d "client_id=$TS_CLIENT_ID" \
             -d "client_secret=$TS_CLIENT_SECRET" \
             "https://api.tailscale.com/api/v2/oauth/token")
           ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r '.access_token')
-
-          # Pre-Auth-Key erstellen (einmalig, ephemeral)
           KEY_RESP=$(curl -s -X POST \
             "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/keys" \
             -u "$ACCESS_TOKEN:" \
@@ -74,16 +70,18 @@ jobs:
           echo "::add-mask::$AUTH_KEY"
 
       - name: Phase 2a – Tailscale installieren & joinen
+        working-directory: ansible
         run: |
-          ansible-playbook ansible/playbooks/02-tailscale.yml \
+          ansible-playbook playbooks/02-tailscale.yml \
             -i "$VPS_PUBLIC_IP," \
             -u "$VPS_USER" \
             --private-key ~/.ssh/id_ed25519 \
             -e "tailscale_auth_key=${{ steps.authkey.outputs.auth_key }}"
 
       - name: Phase 2b – SSH-Restrict (UFW deny 22)
+        working-directory: ansible
         run: |
-          ansible-playbook ansible/playbooks/02-ssh-restrict.yml \
+          ansible-playbook playbooks/02-ssh-restrict.yml \
             -i "$VPS_PUBLIC_IP," \
             -u "$VPS_USER" \
             --private-key ~/.ssh/id_ed25519
