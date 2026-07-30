@@ -1,33 +1,53 @@
 # Deployment-Stufen & SSH-Transition
 
-## SSH-Strategie (RFC 0022/0033)
+## Überblick
 
 ```
-Phase 0: cloud-config → SSH via Public-IP 🔓  (Bootstrap, notwendig)
-Phase 1: baseline      → System-Grundsetup
-Phase 2a: tailscale    → Tailscale-Join
-Phase 2b: ssh-restrict → SSH auf Public-IP blockieren 🔒
-Phase 2c-e: docker, services, openclaw  → Nur via Tailscale-SSH
+Phase 0: cloud-config beim VPS-Setup
+         → deploy-user mit SSH-Key
+         → UFW (nur SSH offen)
+         → KEIN Tailscale (wird via Ansible installiert)
+         → VPS via PUBLIC-IP erreichbar 🔓
+
+Phase 1: Ansible-Baseline (via SSH auf Public-IP)
+         → System aktualisieren, Pakete, Swap
+         → SSH via Public-IP 🔓
+
+Phase 2a: Tailscale-Join (via SSH auf Public-IP)
+         → tailscale installieren & joinen
+         → SSH via Public-IP 🔓 (noch offen)
+
+Phase 2b: SSH-Restrict
+         → UFW deny 22 🔒
+         → SSH NUR noch via Tailscale (MagicDNS)
+
+Phase 2c+: Docker, Services, OpenClaw
+         → Alle via Tailscale-SSH 🔒
 ```
 
-Nach Phase 2b ist der VPS **nicht mehr über die öffentliche IP erreichbar**.
-SSH/Zugriff nur noch via Tailscale (MagicDNS).
+## Secrets für Bootstrap
 
-## Branching
+Für die Phasen 1-2a (vor Tailscale) wird die **öffentliche IP** des VPS benötigt.
+Aktuell gesetzt:
 
-```
-Feature/BugFix-Branch
-       │ PR
-       ▼
-     DEV (← automatischer Deploy via Tailscale)
-       │ PR (grüne CI + DEV-Deploy erforderlich)
-       ▼
-     MAIN (← nur mit Haralds OK)
-       │ workflow_dispatch
-       ▼
-     PROD (← nur mit Haralds OK)
-```
+| Secret | Wert | Nutzung |
+|--------|------|---------|
+| `VPS_DEV_HOST` | `vps-dev.tailcfea8a.ts.net` | Nach Phase 2b |
+| `VPS_DEV_PUBLIC_IP` | (muss gesetzt werden) | Für Phasen 1-2a |
+| `SSH_KEY` | 🔑 (private Key) | SSH-Zugriff |
+| `VPS_USER` | `deploy-user` | SSH-User |
 
-## Qualitäts-Gates
+Nach Phase 2b wechselt der Workflow automatisch auf `VPS_DEV_HOST`.
 
-Siehe `qa/quality-gates.md`.
+## SSH-Key
+
+- **Private Key:** in GH Secret `SSH_KEY`
+- **Public Key:** in `cloud-config.yaml` (beim VPS-Setup eingespielt)
+- **Typ:** ED25519, generiert 2026-07-30
+
+## Workflow-Reihenfolge
+
+1. `01-baseline-deploy.yml` → Phase 1 (via Public-IP)
+2. `02-service-deploy.yml` → Phase 2a (via Public-IP)
+3. `03-ssh-restrict.yml` → Phase 2b (via Public-IP, blockiert danach)
+4. Danach: alle weiteren via Tailscale
