@@ -1,14 +1,14 @@
 #cloud-config
 # IaC4 – VPS-Provisioning (Template)
-# Vor dem ersten Deploy: SSH-Public-Key ersetzen
+# SSH-Key ersetzen, tailscale wird via Ansible installiert
 
 users:
   - name: deploy-user
-    sudo: ALL=(ALL) NOPASSWD:ALL
+    sudo: ALL=(ALL) NOPASSWD:***
     groups: sudo
     shell: /bin/bash
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEkOYAaYV2j6PDXHAbND5BjkpTEeUZXcYp3zJ5H0gdbw iac4-deploy-key-20260730"
+      - "ssh-ed25519 AAAA...  # PUBLIC-KEY EINSETZEN"
 
 ssh_pwauth: false
 disable_root: true
@@ -20,7 +20,6 @@ packages:
   - htop
   - unzip
   - ufw
-  - tailscale
 
 runcmd:
   - ufw default deny incoming
@@ -33,4 +32,3 @@ runcmd:
   - swapon /swapfile
   - echo '/swapfile none swap sw 0 0' >> /etc/fstab
   - sysctl -w vm.swappiness=1
-  - systemctl enable --now tailscaled

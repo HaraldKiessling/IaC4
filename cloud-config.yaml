@@ -1,10 +1,11 @@
 #cloud-config
-# IaC4 – VPS-Provisioning (fertig zum Einspielen)
-# SSH-Key für GH Actions Deploy-User
+# IaC4 – VPS-Provisioning (Phase 0: Bootstrap)
+# Minimal: User + SSH-Key + Firewall
+# Tailscale und alles weitere via Ansible (Phasen 2+)
 
 users:
   - name: deploy-user
-    sudo: ALL=(ALL) NOPASSWD:ALL
+    sudo: ALL=(ALL) NOPASSWD:***
     groups: sudo
     shell: /bin/bash
     ssh_authorized_keys:
@@ -20,20 +21,15 @@ packages:
   - htop
   - unzip
   - ufw
-  - tailscale
 
 runcmd:
-  # UFW: Nur SSH erlauben
   - ufw default deny incoming
   - ufw default allow outgoing
   - ufw allow ssh
   - ufw --force enable
-  # Swap (2GB)
   - fallocate -l 2G /swapfile
   - chmod 600 /swapfile
   - mkswap /swapfile
   - swapon /swapfile
   - echo '/swapfile none swap sw 0 0' >> /etc/fstab
   - sysctl -w vm.swappiness=1
-  # Tailscale aktivieren
-  - systemctl enable --now tailscaled
