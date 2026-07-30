@@ -1,0 +1,46 @@
+---
+- name: System aktualisieren
+  ansible.builtin.apt:
+    update_cache: yes
+    upgrade: dist
+    cache_valid_time: 3600
+
+- name: Notwendige Pakete installieren
+  ansible.builtin.apt:
+    name:
+      - curl
+      - wget
+      - htop
+      - ufw
+      - unzip
+      - fail2ban
+    state: present
+
+- name: requiretty für openclaw-User deaktivieren (Pipelining)
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers
+    state: present
+    regexp: '^Defaults:openclaw !requiretty'
+    line: 'Defaults:openclaw !requiretty'
+    validate: 'visudo -cf %s'
+
+- name: Swap einrichten
+  community.general.swapfile:
+    path: /swapfile
+    size_mb: 2048
+    state: present
+
+- name: Zeitzone einstellen
+  community.general.timezone:
+    name: Europe/Berlin
+
+- name: SSH-Konfiguration härten
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - { regexp: '^PermitRootLogin', line: 'PermitRootLogin prohibit-password' }
+    - { regexp: '^PasswordAuthentication', line: 'PasswordAuthentication no' }
+  notify: sshd restart

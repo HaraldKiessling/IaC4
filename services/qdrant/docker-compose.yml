@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - traefik-public
+
+volumes:
+  qdrant-data:
+
+networks:
+  traefik-public:
+    external: true

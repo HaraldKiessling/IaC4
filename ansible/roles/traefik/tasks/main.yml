@@ -1,0 +1,17 @@
+---
+- name: Traefik-Verzeichnis anlegen
+  ansible.builtin.file:
+    path: /opt/traefik
+    state: directory
+    mode: '0755'
+
+- name: Traefik docker-compose.yml deployen
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /opt/traefik/docker-compose.yml
+    mode: '0644'
+
+- name: Traefik-Container starten
+  community.docker.docker_compose_v2:
+    project_src: /opt/traefik
+    state: present

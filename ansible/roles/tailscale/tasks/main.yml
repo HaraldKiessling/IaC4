@@ -1,0 +1,14 @@
+---
+- name: Tailscale installieren
+  ansible.builtin.shell: |
+    curl -fsSL https://tailscale.com/install.sh | sh
+  args:
+    creates: /usr/bin/tailscale
+  notify: tailscale auth
+
+- name: Tailscale-Auth-Key prüfen
+  ansible.builtin.assert:
+    that:
+      - tailscale_auth_key is defined
+      - tailscale_auth_key | length > 0
+    fail_msg: "TAILSCALE_AUTH_KEY nicht gesetzt"

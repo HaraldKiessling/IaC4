@@ -1,0 +1,36 @@
+name: "🏗️ Feature-Request"
+description: "Neue Funktionalität für IaC4"
+title: "[FEATURE] "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: "## Fachliche Begründung (max 3 Sätze)"
+  - type: textarea
+    id: rationale
+    attributes:
+      label: "Warum?"
+      placeholder: "Welches Problem wird gelöst?"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: "Akzeptanzkriterien"
+      placeholder: "- [ ] Qdrant-Collection erreichbar\n- [ ] Health-Check erfolgreich"
+    validations:
+      required: true
+  - type: input
+    id: component
+    attributes:
+      label: "Betroffene Komponente"
+      description: "Verweis auf docs/arc42/05_bausteinsicht.md"
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priorität"
+      options: ["niedrig", "mittel", "hoch", "kritisch"]
+    validations:
+      required: true

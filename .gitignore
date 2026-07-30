@@ -1,0 +1,40 @@
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Python/Ansible
+__pycache__/
+*.pyc
+*.retry
+.inventory_*
+*.log
+
+# Secrets
+.env
+!*.example
+*.pem
+*.key
+oauth-creds.txt
+.secrets/
+.ssh_vps/
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+
+# Build/Artifacts
+dist/
+build/
+*.tar.gz
+*.zip
+
+# Temp
+/tmp/

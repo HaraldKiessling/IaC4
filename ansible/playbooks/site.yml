@@ -1,0 +1,22 @@
+---
+# IaC4 – Site-Playbook
+# Führt alle Phasen sequentiell aus (je nach Tag)
+- name: Phase 1 – System-Baseline
+  ansible.builtin.import_playbook: 01-baseline.yml
+  tags: [phase1, baseline]
+
+- name: Phase 2a – Tailscale
+  ansible.builtin.import_playbook: 02-tailscale.yml
+  tags: [phase2a, tailscale]
+
+- name: Phase 2b – Docker & Traefik
+  ansible.builtin.import_playbook: 03-docker-traefik.yml
+  tags: [phase2b, docker, traefik]
+
+- name: Phase 2c – Services
+  ansible.builtin.import_playbook: 04-services.yml
+  tags: [phase2c, services]
+
+- name: Phase 2d – OpenClaw
+  ansible.builtin.import_playbook: 05-openclaw.yml
+  tags: [phase2d, openclaw]

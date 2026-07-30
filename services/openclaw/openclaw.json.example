@@ -1,0 +1,15 @@
+{
+  // IaC4 – OpenClaw Minimal Config (Beispiel)
+  // Kopieren nach ~/.openclaw/openclaw.json
+  gateway: {
+    mode: "local",
+    port: 18789,
+    bind: "loopback"
+  },
+  agents: {
+    defaults: {
+      workspace: "~/.openclaw/workspace"
+    }
+  },
+  // Provider-Keys via GH Secrets oder onboard-Befehl setzen
+}

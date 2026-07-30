@@ -1,0 +1,6 @@
+---
+- name: tailscale auth
+  ansible.builtin.shell: |
+    tailscale up --auth-key={{ tailscale_auth_key }} --hostname={{ inventory_hostname }}
+  args:
+    creates: /var/lib/tailscale/tailscaled.state

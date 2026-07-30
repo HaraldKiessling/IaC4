@@ -1,0 +1,6 @@
+---
+- name: Phase 1 – System-Baseline
+  hosts: vps
+  become: yes
+  roles:
+    - vps-baseline

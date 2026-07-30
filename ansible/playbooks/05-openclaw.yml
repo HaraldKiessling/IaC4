@@ -1,0 +1,6 @@
+---
+- name: Phase 2d – OpenClaw Gateway
+  hosts: vps
+  become: yes
+  roles:
+    - openclaw-gateway

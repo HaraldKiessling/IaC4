@@ -1,0 +1,6 @@
+---
+- name: Phase 2a – Tailscale-Join
+  hosts: vps
+  become: yes
+  roles:
+    - tailscale

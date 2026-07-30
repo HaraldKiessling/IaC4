@@ -1,0 +1,7 @@
+---
+- name: Phase 2b – Docker & Traefik
+  hosts: vps
+  become: yes
+  roles:
+    - docker
+    - traefik

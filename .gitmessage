@@ -1,0 +1,8 @@
+# IaC4: <type>(<scope>): <description>
+#
+# Types: feat | fix | docs | chore | refactor | test
+# Scope: ansible | workflow | docs | terraform | openclaw | qdrant | traefik | baseline
+# Max 72 chars, imperative mood
+#
+# Body: Why this change, what it enables, alternatives considered (P3).
+# Footer: ref #ISSUE or closes #ISSUE

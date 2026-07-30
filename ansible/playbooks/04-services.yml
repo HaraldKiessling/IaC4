@@ -1,0 +1,7 @@
+---
+- name: Phase 2c – Services
+  hosts: vps
+  become: yes
+  roles:
+    - qdrant
+    - code-server

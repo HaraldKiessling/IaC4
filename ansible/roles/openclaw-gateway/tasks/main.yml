@@ -1,0 +1,49 @@
+---
+- name: Node.js 24 installieren (nodesource)
+  ansible.builtin.shell: |
+    curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+  args:
+    creates: /etc/apt/sources.list.d/nodesource.list
+
+- name: Node.js installieren
+  ansible.builtin.apt:
+    name: nodejs
+    state: present
+
+- name: OpenClaw CLI installieren
+  ansible.builtin.shell: |
+    curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash
+  args:
+    creates: /usr/local/bin/openclaw
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/usr/local/bin"
+
+- name: openclaw.json Konfiguration schreiben
+  ansible.builtin.template:
+    src: openclaw.json.j2
+    dest: ~/.openclaw/openclaw.json
+    mode: '0600'
+  become_user: "{{ ansible_user }}"
+
+- name: Gateway-Daemon installieren
+  ansible.builtin.shell: |
+    openclaw gateway install
+  args:
+    creates: /etc/systemd/system/openclaw-gateway.service
+  environment:
+    HOME: "/home/{{ ansible_user }}"
+
+- name: Gateway starten
+  ansible.builtin.systemd:
+    name: openclaw-gateway
+    state: started
+    enabled: yes
+
+- name: Gateway-Health prüfen
+  ansible.builtin.uri:
+    url: "http://localhost:{{ openclaw_gateway_port }}/health"
+    status_code: 200
+  register: health
+  until: health.status == 200
+  retries: 6
+  delay: 5

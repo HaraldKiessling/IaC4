@@ -1,0 +1,16 @@
+{
+  // IaC4 – OpenClaw Minimal Config
+  gateway: {
+    mode: "local",
+    port: {{ openclaw_gateway_port }},
+    bind: "loopback"
+  },
+  agents: {
+    defaults: {
+      workspace: "~/.openclaw/workspace"
+    }
+  },
+  providers: {
+    // Wird via `openclaw onboard` gesetzt
+  }
+}

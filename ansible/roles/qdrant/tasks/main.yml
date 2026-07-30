@@ -1,0 +1,41 @@
+---
+- name: Qdrant-Verzeichnis anlegen
+  ansible.builtin.file:
+    path: /opt/qdrant
+    state: directory
+    mode: '0755'
+
+- name: Qdrant docker-compose.yml deployen
+  ansible.builtin.copy:
+    src: docker-compose.yml
+    dest: /opt/qdrant/docker-compose.yml
+    mode: '0644'
+
+- name: Qdrant-Container starten
+  community.docker.docker_compose_v2:
+    project_src: /opt/qdrant
+    state: present
+
+- name: Auf Qdrant warten
+  ansible.builtin.uri:
+    url: http://localhost:6333/health
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 3
+
+- name: Gemini-Embedding-Collection anlegen
+  ansible.builtin.uri:
+    url: http://localhost:6333/collections
+    method: PUT
+    headers:
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: embeddings
+      vectors:
+        size: 3072
+        distance: Cosine
+    status_code: 200
+  failed_when: false  # Existiert bereits? Dann ignorieren

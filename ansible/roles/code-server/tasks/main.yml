@@ -1,0 +1,17 @@
+---
+- name: Code-Server-Verzeichnis anlegen
+  ansible.builtin.file:
+    path: /opt/code-server
+    state: directory
+    mode: '0755'
+
+- name: Code-Server docker-compose.yml deployen
+  ansible.builtin.copy:
+    src: docker-compose.yml
+    dest: /opt/code-server/docker-compose.yml
+    mode: '0644'
+
+- name: Code-Server-Container starten
+  community.docker.docker_compose_v2:
+    project_src: /opt/code-server
+    state: present

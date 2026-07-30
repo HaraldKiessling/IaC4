@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: IaC4 Diskussion
+    url: https://github.com/HaraldKiessling/IaC4/discussions
+    about: Für offene Fragen und Ideen vor Erstellung eines Issues

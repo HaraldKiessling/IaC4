@@ -1,0 +1,31 @@
+---
+- name: Docker-GPG-Key hinzufügen
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Docker-Repository hinzufügen
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Docker installieren
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: openclaw-User zur Docker-Gruppe hinzufügen
+  ansible.builtin.user:
+    name: openclaw
+    groups: docker
+    append: yes
+
+- name: Docker-Netzwerk anlegen
+  community.docker.docker_network:
+    name: "{{ docker_network }}"
+    state: present

@@ -1,0 +1,8 @@
+---
+# Globale Variablen – Referenz auf GH Secrets
+docker_network: "traefik-public"
+tailscale_auth_key: "{{ lookup('env', 'TAILSCALE_AUTH_KEY') }}"
+openclaw_llm_provider: "{{ lookup('env', 'OPENCLAW_LLM_PROVIDER') | default('anthropic', true) }}"
+openclaw_llm_api_key: "{{ lookup('env', 'OPENCLAW_LLM_API_KEY') }}"
+openclaw_websearch_api_key: "{{ lookup('env', 'OPENCLAW_WEBSEARCH_API_KEY') }}"
+openclaw_gateway_port: 18789

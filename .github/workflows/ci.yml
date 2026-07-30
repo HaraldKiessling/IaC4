@@ -1,0 +1,25 @@
+name: CI – Lint + Quality Gate
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: YAML Lint
+        uses: ibiqlik/action-yamllint@v3
+      - name: Markdown Lint
+        uses: DavidAnson/markdownlint-cli2-action@v16
+        with:
+          globs: 'docs/**/*.md'
+      - name: Check arc42 Living Docs
+        run: |
+          echo "Prüfe ob docs/arc42/ alle 12 Kapitel enthält…"
+          for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+            [ -f "docs/arc42/${i}_"*".md" ] && echo "  ✅ Kapitel $i" || echo "  ⚠️  Kapitel $i fehlt"
+          done

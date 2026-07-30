@@ -1,0 +1,26 @@
+name: "📋 Change-Request"
+description: "Änderung an bestehender Funktionalität"
+title: "[CHANGE] "
+labels: ["change"]
+body:
+  - type: textarea
+    id: reason
+    attributes:
+      label: "Grund der Änderung"
+      placeholder: "Was hat sich geändert, dass eine Änderung nötig wird?"
+    validations:
+      required: true
+  - type: textarea
+    id: effect
+    attributes:
+      label: "Erwarteter Effekt"
+      placeholder: "Was verbessert sich? Was sind die Nebenwirkungen?"
+    validations:
+      required: true
+  - type: input
+    id: arc42ref
+    attributes:
+      label: "Betroffene arc42-Stelle"
+      description: "Kapitel + Seite in docs/arc42/"
+    validations:
+      required: true

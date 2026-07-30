@@ -1,0 +1,23 @@
+name: "01 – Baseline Deploy (Phase 1)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Ziel-VPS'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Ansible Baseline
+        run: |
+          ansible-playbook ansible/playbooks/01-baseline.yml \
+            -i ansible/inventories/${{ inputs.target }}/hosts.yml

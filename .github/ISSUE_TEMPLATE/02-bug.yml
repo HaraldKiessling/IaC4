@@ -1,0 +1,33 @@
+name: "🐛 Bug-Report"
+description: "Ein Defekt im IST-Zustand"
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: actual
+    attributes:
+      label: "IST-Zustand"
+      placeholder: "Was passiert aktuell?"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "SOLL-Zustand"
+      placeholder: "Was sollte passieren?"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Reproduktion"
+      placeholder: "1. … 2. … 3. …"
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: "Severity"
+      options: ["Minor", "Major", "Critical"]
+    validations:
+      required: true
