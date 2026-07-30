@@ -19,7 +19,7 @@ jobs:
   tailscale-bootstrap:
     name: "Tailscale install + join + restrict SSH"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       VPS_PUBLIC_IP: ${{ secrets.VPS_DEV_PUBLIC_IP }}
       VPS_USER: ${{ secrets.VPS_USER }}
@@ -69,25 +69,26 @@ jobs:
           echo "auth_key=$AUTH_KEY" >> $GITHUB_OUTPUT
           echo "::add-mask::$AUTH_KEY"
 
+      - name: Inventory-Datei erstellen
+        run: |
+          echo "[vps]" > /tmp/inventory
+          echo "vps-dev ansible_host=$VPS_PUBLIC_IP ansible_user=$VPS_USER" >> /tmp/inventory
+          cat /tmp/inventory
+
       - name: Phase 2a – Tailscale installieren & joinen
         working-directory: ansible
         run: |
           ansible-playbook playbooks/02-tailscale.yml \
-            -i "vps ansible_host=$VPS_PUBLIC_IP," \
-            -u "$VPS_USER" \
-            --private-key ~/.ssh/id_ed25519 \
+            -i /tmp/inventory \
             -e "tailscale_auth_key=${{ steps.authkey.outputs.auth_key }}"
 
       - name: Phase 2b – SSH-Restrict (UFW deny 22)
         working-directory: ansible
         run: |
           ansible-playbook playbooks/02-ssh-restrict.yml \
-            -i "vps ansible_host=$VPS_PUBLIC_IP," \
-            -u "$VPS_USER" \
-            --private-key ~/.ssh/id_ed25519
+            -i /tmp/inventory
 
       - name: Post-Bootstrap Check
         run: |
-          echo "✅ Tailscale installiert | SSH auf Public-IP blockiert"
-          echo "Zugriff jetzt nur noch via:"
-          echo "  ssh $VPS_USER@vps-${{ inputs.target }}.${{ secrets.TAILSCALE_TAILNET }}"
+          echo "✅ Workflow abgeschlossen"
+          echo "Prüfe Tailscale: ssh $VPS_USER@vps-${{ inputs.target }}.${{ secrets.TAILSCALE_TAILNET }}"
