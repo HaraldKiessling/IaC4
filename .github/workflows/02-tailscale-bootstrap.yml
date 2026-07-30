@@ -58,7 +58,7 @@ jobs:
                 "devices": {
                   "create": {
                     "reusable": false,
-                    "ephemeral": true,
+                    "ephemeral": false,
                     "preauthorized": true,
                     "tags": ["tag:ci"]
                   }
