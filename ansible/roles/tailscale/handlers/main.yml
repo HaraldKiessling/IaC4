@@ -2,7 +2,5 @@
 - name: tailscale auth
   ansible.builtin.shell: |
     tailscale up --auth-key={{ tailscale_auth_key }} --hostname={{ inventory_hostname }}
-  # KEIN creates! Installations-Script erzeugt state file bereits
-  # Das führt sonst zum Skippen von tailscale up
   register: ts_up_result
   changed_when: ts_up_result.rc == 0

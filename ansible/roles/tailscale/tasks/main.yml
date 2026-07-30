@@ -12,3 +12,10 @@
       - tailscale_auth_key is defined
       - tailscale_auth_key | length > 0
     fail_msg: "TAILSCALE_AUTH_KEY nicht gesetzt"
+
+- name: UFW-Regel für Tailscale (UDP 41641)
+  community.general.ufw:
+    rule: allow
+    port: '41641'
+    proto: udp
+  when: ansible_facts.os_family == "Debian"
