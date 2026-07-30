@@ -14,10 +14,40 @@ on:
 
 jobs:
   baseline:
+    name: "Phase 1 – System-Baseline"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VPS_PUBLIC_IP: ${{ secrets.VPS_DEV_PUBLIC_IP }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+
     steps:
       - uses: actions/checkout@v4
-      - name: Run Ansible Baseline
+
+      - name: SSH-Key vorbereiten
         run: |
-          ansible-playbook ansible/playbooks/01-baseline.yml \
-            -i ansible/inventories/${{ inputs.target }}/hosts.yml
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_PUBLIC_IP" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ansible installieren
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
+
+      - name: Inventory-Datei erstellen
+        run: |
+          echo "[vps]" > /tmp/inventory
+          echo "vps-${{ inputs.target }} ansible_host=$VPS_PUBLIC_IP ansible_user=$VPS_USER" >> /tmp/inventory
+          cat /tmp/inventory
+
+      - name: Phase 1 – Ansible Baseline ausführen
+        working-directory: ansible
+        run: |
+          ansible-playbook playbooks/01-baseline.yml \
+            -i /tmp/inventory
+
+      - name: Post-Deploy Check
+        run: |
+          echo "✅ Phase 1 abgeschlossen"
+          echo "Nächster Schritt: 02-tailscale-bootstrap.yml ausführen"

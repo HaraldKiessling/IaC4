@@ -21,12 +21,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      VPS_PUBLIC_IP: ${{ secrets.VPS_DEV_PUBLIC_IP }}
+      VPS_PUBLIC_IP: ""  # wird im Step gesetzt
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: VPS-IP basierend auf Target setzen
+        run: |
+          if [ "${{ inputs.target }}" = "dev" ]; then
+            echo "VPS_PUBLIC_IP=${{ secrets.VPS_DEV_PUBLIC_IP }}" >> $GITHUB_ENV
+          elif [ "${{ inputs.target }}" = "prod" ]; then
+            echo "VPS_PUBLIC_IP=${{ secrets.VPS_PROD_PUBLIC_IP }}" >> $GITHUB_ENV
+          else
+            echo "❌ Unbekanntes Target: ${{ inputs.target }}"
+            exit 1
+          fi
+          echo "Target: ${{ inputs.target }} → IP: $VPS_PUBLIC_IP"
 
       - name: SSH-Key vorbereiten
         run: |
@@ -72,7 +84,7 @@ jobs:
       - name: Inventory-Datei erstellen
         run: |
           echo "[vps]" > /tmp/inventory
-          echo "vps-dev ansible_host=$VPS_PUBLIC_IP ansible_user=$VPS_USER" >> /tmp/inventory
+          echo "vps-${{ inputs.target }} ansible_host=$VPS_PUBLIC_IP ansible_user=$VPS_USER" >> /tmp/inventory
           cat /tmp/inventory
 
       - name: Phase 2a – Tailscale installieren & joinen

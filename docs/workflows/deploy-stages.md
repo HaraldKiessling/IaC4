@@ -47,7 +47,8 @@ Nach Phase 2b wechselt der Workflow automatisch auf `VPS_DEV_HOST`.
 
 ## Workflow-Reihenfolge
 
-1. `01-baseline-deploy.yml` → Phase 1 (via Public-IP)
-2. `02-service-deploy.yml` → Phase 2a (via Public-IP)
-3. `03-ssh-restrict.yml` → Phase 2b (via Public-IP, blockiert danach)
-4. Danach: alle weiteren via Tailscale
+1. `00-generate-ssh-key.yml`           → SSH-Key-Paar generieren + Secrets anlegen (einmalig)
+2. `01-baseline-deploy.yml`            → Phase 1 (via Public-IP)
+3. `02-tailscale-bootstrap.yml`        → Phase 2a + 2b (via Public-IP, schliesst SSH 🔒)
+4. `04-tailscale-terraform.yml`        → Tailscale OAuth + ACLs (Terraform Plan/Apply)
+5. Danach: weitere Services via Tailscale

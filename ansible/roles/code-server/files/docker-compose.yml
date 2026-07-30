@@ -9,16 +9,15 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=Europe/Berlin
-      # Wird via Ansible-Template gesetzt oder manuell überschreiben:
-      - PASSWORD=${CODE_SERVER_PASSWORD:-changeme}
-      - SUDO_PASSWORD=${CODE_SERVER_SUDO_PASSWORD:-changeme}
+      - PASSWORD={{ code_server_password }}
+      - SUDO_PASSWORD={{ code_server_sudo_password }}
     volumes:
       - code-server-data:/config
     networks:
       - traefik-public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.code-server.rule=Host(`${CODE_SERVER_HOSTNAME:-code.example.com}`)"
+      - "traefik.http.routers.code-server.rule=Host(`{{ code_server_hostname }}`)"
       - "traefik.http.services.code-server.loadbalancer.server.port=8443"
 
 volumes:

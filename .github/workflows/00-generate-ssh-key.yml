@@ -29,7 +29,7 @@ jobs:
       - name: Prüfen ob SSH_KEY bereits existiert
         id: check
         env:
-          GH_TOKEN: *** secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           if gh secret list --repo ${{ github.repository }} | grep -q "^SSH_KEY"; then
             echo "exists=true" >> $GITHUB_OUTPUT
@@ -59,7 +59,7 @@ jobs:
       - name: Private Key in GH Secrets speichern
         if: steps.check.outputs.exists == 'false' || github.event.inputs.force == 'true'
         env:
-          GH_TOKEN: *** secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           echo "$PRIVATE_KEY" | gh secret set SSH_KEY --repo ${{ github.repository }}
           echo "$PUBLIC_KEY" | gh secret set SSH_KEY_PUB --repo ${{ github.repository }}
