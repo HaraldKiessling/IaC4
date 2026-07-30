@@ -52,7 +52,7 @@ jobs:
 
       - name: Ansible Collections installieren
         run: |
-          ansible-galaxy collection install -r ansible/requirements.yml
+          sudo ansible-galaxy collection install -r ansible/requirements.yml --force -p /usr/share/ansible/collections
 
       - name: Tailscale Auth-Key via OAuth generieren
         id: authkey

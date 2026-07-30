@@ -48,7 +48,7 @@ jobs:
 
       - name: Ansible Collections installieren
         run: |
-          ansible-galaxy collection install -r ansible/requirements.yml
+          ansible-galaxy collection install -r ansible/requirements.yml --force -p /usr/share/ansible/collections
 
       - name: Inventory-Datei erstellen
         run: |
