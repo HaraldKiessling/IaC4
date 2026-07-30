@@ -18,7 +18,7 @@
 | ADR-011 | **Gemini-Embedding-001 (3072d, Cosine)** | – | Bereits in ZooCode etabliert, hervorragende Qualität | 2026-07-30 |
 | ADR-012 | **OpenClaw-Minimal (Gateway + Memory)** | ADR-005 | Nur LLM-Keys, Memory, WebSearch. Kein Felix/Petrus | 2026-07-30 |
 | ADR-013 | **Config-Reproduzierbarkeit: Option C** | ADR-005 | Phase 1+2 in Git/Ansible, Phase 3 nur Laufzeit. Später B | 2026-07-30 |
-| ADR-014 | **Workflow-Struktur überarbeiten** | ADR-005 (Phasen), ADR-008 (OAuth) | Analyse der 6 Workflows ergab Nummerierungskonflikte (00→01→02→03→04 falsch), 03/04-Redundanz, fehlendes Terraform-Backend (State flüchtig) und Bug in 01 (target ignoriert). Siehe arc42 K8 (CI/CD-Workflows) für Details. Notwendige Massnahmen: (1) 03+04 zu einem Workflow mergen, (2) Terraform-Backend konfigurieren, (3) 01 target-Fix, (4) Workflows neu nummerieren nach Dependency-Kette. | 2026-07-30 |
+| ADR-014 | **Workflow-Struktur überarbeitet** | ADR-005 (Phasen), ADR-008 (OAuth) | ✅ Alle 4 Massnahmen umgesetzt: 03+04 gemergt (01), Terraform-State-Cache via GH Cache, 02 target-Fix, Workflows neu nummeriert (00→01→02→03). Siehe arc42 K8. | 2026-07-30 |
 
 ## Abhängigkeitsgraph (vereinfacht)
 ```
