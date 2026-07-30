@@ -10,6 +10,9 @@
 | T-003 | Kein Monitoring/Alerting | Niedrig | Später |
 | T-004 | Ollama nicht migriert (von IaC3, aktuell ungenutzt) | Niedrig | Entfernen bei IaC4-Migration |
 | T-005 | Fehlende API-Secrets (Gemini, OpenRouter) in IaC4 | 🔴 Hoch | Manuell von IaC3 kopieren |
+| T-006 | Kein Terraform-Backend (03/04) – OAuth-Client-Ghosts in Tailscale (~30 verwaiste Clients) | 🔴 Hoch | Workflow-Restrukturierung (ARC42 K8) |
+| T-007 | Workflow 01 ignoriert target=prod – hartcodiert auf VPS_DEV_PUBLIC_IP | Mittel | Nächster PR (ARC42 K8) |
+| T-008 | Workflow 03/04-Redundanz – gleiche Secrets, gleiche Terraform-Ressourcen | Mittel | Merge zu einem Workflow (ARC42 K8) |
 
 ## Risiken
 | Risiko | Wahrsch. | Impact | Mitigation |
