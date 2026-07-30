@@ -1,0 +1,72 @@
+name: "00 – SSH-Key-Paar generieren"
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Vorhandenen Key überschreiben? (default: false)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    name: "SSH-Key generieren"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KEY_COMMENT: "iac4-deploy-key-$(date +%Y%m%d)"
+
+    steps:
+      - name: Prüfen ob SSH_KEY bereits existiert
+        id: check
+        env:
+          GH_TOKEN: *** secrets.GH_TOKEN }}
+        run: |
+          if gh secret list --repo ${{ github.repository }} | grep -q "^SSH_KEY"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sicherheitsstopp (force=false + Key existiert)
+        if: steps.check.outputs.exists == 'true' && github.event.inputs.force != 'true'
+        run: |
+          echo "❌ SSH_KEY existiert bereits. Setze force=true zum Überschreiben!"
+          echo "⚠️  Das überschreibt den Public-Key in cloud-config.yaml"
+          exit 1
+
+      - name: SSH-Key-Paar generieren
+        if: steps.check.outputs.exists == 'false' || github.event.inputs.force == 'true'
+        run: |
+          ssh-keygen -t ed25519 -f /tmp/iac4-key -N "" -C "$KEY_COMMENT"
+          echo "PRIVATE_KEY<<EOF" >> $GITHUB_ENV
+          cat /tmp/iac4-key >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          echo "PUBLIC_KEY<<EOF" >> $GITHUB_ENV
+          cat /tmp/iac4-key.pub >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Private Key in GH Secrets speichern
+        if: steps.check.outputs.exists == 'false' || github.event.inputs.force == 'true'
+        env:
+          GH_TOKEN: *** secrets.GH_TOKEN }}
+        run: |
+          echo "$PRIVATE_KEY" | gh secret set SSH_KEY --repo ${{ github.repository }}
+          echo "$PUBLIC_KEY" | gh secret set SSH_KEY_PUB --repo ${{ github.repository }}
+          echo "✅ SSH_KEY und SSH_KEY_PUB in GH Secrets gespeichert"
+
+      - name: Public Key anzeigen (für cloud-config.yaml)
+        if: steps.check.outputs.exists == 'false' || github.event.inputs.force == 'true'
+        run: |
+          echo ""
+          echo "=== Neuer Public-Key (in cloud-config.yaml eintragen) ==="
+          echo "$PUBLIC_KEY"
+          echo ""
+          echo "⚠️  Vergiss nicht, den Public-Key in cloud-config.yaml zu aktualisieren!"
