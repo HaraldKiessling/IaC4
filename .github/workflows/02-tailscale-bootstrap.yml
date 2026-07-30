@@ -73,7 +73,7 @@ jobs:
         working-directory: ansible
         run: |
           ansible-playbook playbooks/02-tailscale.yml \
-            -i "$VPS_PUBLIC_IP," \
+            -i "vps ansible_host=$VPS_PUBLIC_IP," \
             -u "$VPS_USER" \
             --private-key ~/.ssh/id_ed25519 \
             -e "tailscale_auth_key=${{ steps.authkey.outputs.auth_key }}"
@@ -82,7 +82,7 @@ jobs:
         working-directory: ansible
         run: |
           ansible-playbook playbooks/02-ssh-restrict.yml \
-            -i "$VPS_PUBLIC_IP," \
+            -i "vps ansible_host=$VPS_PUBLIC_IP," \
             -u "$VPS_USER" \
             --private-key ~/.ssh/id_ed25519
 
