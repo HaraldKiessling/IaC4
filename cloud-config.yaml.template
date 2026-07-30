@@ -3,8 +3,8 @@
 # Vor dem ersten Deploy: SSH-Public-Key prüfen
 
 users:
-  - name: openclaw
-    sudo: ALL=(ALL) NOPASSWD:ALL
+  - name: deploy-user
+    sudo: ALL=(ALL) NOPASSWD:***
     groups: sudo
     shell: /bin/bash
     ssh_authorized_keys:

@@ -2,7 +2,7 @@
 
 ## Security
 - SSH-Only via Tailscale (kein öffentlicher SSH-Port)
-- sudo ohne Passwort für openclaw-User (für Ansible-Pipelining)
+- sudo ohne Passwort für deploy-user (für Ansible-Pipelining)
 - `requiretty` deaktiviert (für Ansible-Pipelining)
 - Secrets in GH Actions (nie im Repo)
 

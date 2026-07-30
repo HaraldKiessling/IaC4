@@ -23,7 +23,7 @@
     src: openclaw.json.j2
     dest: ~/.openclaw/openclaw.json
     mode: '0600'
-  become_user: "{{ ansible_user }}"
+  become_user: "deploy-user"
 
 - name: Gateway-Daemon installieren
   ansible.builtin.shell: |
@@ -31,7 +31,7 @@
   args:
     creates: /etc/systemd/system/openclaw-gateway.service
   environment:
-    HOME: "/home/{{ ansible_user }}"
+    HOME: "/home/deploy-user"
 
 - name: Gateway starten
   ansible.builtin.systemd:

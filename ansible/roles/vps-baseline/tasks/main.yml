@@ -16,12 +16,12 @@
       - fail2ban
     state: present
 
-- name: requiretty für openclaw-User deaktivieren (Pipelining)
+- name: requiretty für deploy-user deaktivieren (Pipelining)
   ansible.builtin.lineinfile:
     path: /etc/sudoers
     state: present
-    regexp: '^Defaults:openclaw !requiretty'
-    line: 'Defaults:openclaw !requiretty'
+    regexp: '^Defaults:deploy-user !requiretty'
+    line: 'Defaults:deploy-user !requiretty'
     validate: 'visudo -cf %s'
 
 - name: Swap einrichten

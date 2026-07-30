@@ -19,9 +19,9 @@
       - docker-compose-plugin
     state: present
 
-- name: openclaw-User zur Docker-Gruppe hinzufügen
+- name: "deploy-user"-User zur Docker-Gruppe hinzufügen
   ansible.builtin.user:
-    name: openclaw
+    name: "deploy-user"
     groups: docker
     append: yes
 
