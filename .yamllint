@@ -1,0 +1,32 @@
+extends: default
+
+rules:
+  # Längere Zeilen in GH Actions sind unvermeidbar (${{ }} Ausdrücke)
+  line-length:
+    max: 160
+    level: warning
+    allow-non-breakable-inline-mappings: true
+
+  # GH Actions erlaubt "on:" / "yes" / "true" als truthy
+  truthy:
+    level: warning
+
+  # "---" am Anfang ist nice-to-have aber kein must
+  document-start:
+    level: warning
+
+  # Leerzeichen in Kommentaren sind Geschmackssache
+  comments:
+    level: warning
+
+  # Kein Braces-Style erzwingen
+  braces:
+    max-spaces-inside: 1
+    min-spaces-inside: 0
+    level: warning
+
+  # Kein Brackets-Style erzwingen
+  brackets:
+    max-spaces-inside: 0
+    min-spaces-inside: 0
+    level: warning
