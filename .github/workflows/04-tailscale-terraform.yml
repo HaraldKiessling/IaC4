@@ -1,0 +1,98 @@
+name: "04 – Tailscale Terraform (OAuth + ACLs)"
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/**'
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Apply ausführen?'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+env:
+  TF_VERSION: "1.11.0"
+
+jobs:
+  terraform:
+    name: "Terraform Plan/Apply"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/
+    env:
+      TF_IN_AUTOMATION: true
+      TF_VAR_tailscale_api_key: ${{ secrets.TAILSCALE_API_KEY }}
+      TF_VAR_tailscale_tailnet: ${{ secrets.TAILSCALE_TAILNET }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -no-color -input=false -out=plan_output 2>&1 | tee plan_stdout.txt
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+
+      - name: PR Kommentar (Plan)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('terraform/plan_stdout.txt', 'utf8');
+            const output = `## IaC4 Terraform Plan (Tailscale)\n\`\`\`\n${plan.slice(0, 65000)}\n\`\`\``;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Terraform Apply
+        if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
+        run: terraform apply -auto-approve plan_output
+
+      - name: OAuth-Secrets in GitHub speichern
+        if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CLIENT_ID=$(terraform output -raw new_oauth_client_id)
+          CLIENT_SECRET=$(terraform output -raw new_oauth_client_secret)
+
+          gh secret set TAILSCALE_OAUTH_CLIENT_ID \
+            --body "$CLIENT_ID" \
+            --repo ${{ github.repository }}
+
+          gh secret set TAILSCALE_OAUTH_CLIENT_SECRET \
+            --body "$CLIENT_SECRET" \
+            --repo ${{ github.repository }}
+
+          echo "✅ IaC4 OAuth-Secrets gespeichert"
