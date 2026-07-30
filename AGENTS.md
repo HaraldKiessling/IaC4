@@ -6,7 +6,7 @@
 ## Repository
 **Name:** HaraldKiessling/IaC4
 **Architektur:** arc42-light in `docs/arc42/` (DE)
-**Branch:** `main` (geschützt) | `dev` (Integration) | `feature/*` (Entwicklung)
+**Branch:** `main` (geschützt) | `dev` (autonomer Push) | `feature/*` (Entwicklung)
 
 ## 🔴 Harte Regeln (brechen = Rollback)
 
@@ -14,6 +14,7 @@
 |-------|----------|
 | **Nie `overwrite_existing_content = true`** in Terraform-ACL (Vorfall 2026-07-30) | Alle |
 | **Nie direkter Push auf `main`** – nur via PR | Alle |
+| **`dev` Push** = autonom (kein PR nötig) | Orchestrator |
 | **Nie Secrets committen** – immer GH Secrets + `.env.example` | Alle |
 | **Nie Gateway-Prozess killen** (Vorfall 2026-07-16, 6h Downtime) | Alle |
 | **PR mergen** = nur Harald | Orchestrator |
@@ -21,6 +22,7 @@
 
 ## ✅ Autonom (kein Approval nötig)
 - Feature-Branch → Push → DEV-Deploy
+- **`dev` Branch → Push** = direkt (kein PR)
 - Code schreiben, testen, committen
 - Issue-Templates verwenden (Feature/Bug/Change)
 - arc42-Doku aktuell halten (P4)
@@ -67,6 +69,7 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 
 ### P7 – Autonome Entwicklung
 - Feature/BugFix → DEV-Deploy = autonom
+- **`dev` Branch → Push** = autonom
 - MAIN/PROD = Harald
 - Technische Entscheidungen bis DEV: frei
 
