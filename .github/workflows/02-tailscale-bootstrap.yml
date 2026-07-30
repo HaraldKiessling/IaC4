@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   tailscale-bootstrap:
-    name: "Tailscale install + restrict SSH"
+    name: "Tailscale install + join + restrict SSH"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -36,9 +36,42 @@ jobs:
           ssh-keyscan -H "$VPS_PUBLIC_IP" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Ansible installieren
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
+
+      # OAuth-Flow: Client → Token → Pre-Auth-Key → Tailscale-Join
+      - name: Tailscale Auth-Key via OAuth generieren
+        id: authkey
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ansible
+          # OAuth-Token holen
+          TOKEN_RESP=$(curl -s -d "client_id=$TS_CLIENT_ID" \
+            -d "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token")
+          ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r '.access_token')
+
+          # Pre-Auth-Key erstellen (einmalig, ephemeral)
+          KEY_RESP=$(curl -s -X POST \
+            "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/keys" \
+            -u "$ACCESS_TOKEN:" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "capabilities": {
+                "devices": {
+                  "create": {
+                    "reusable": false,
+                    "ephemeral": true,
+                    "preauthorized": true,
+                    "tags": ["tag:ci"]
+                  }
+                }
+              }
+            }')
+          AUTH_KEY=$(echo "$KEY_RESP" | jq -r '.key')
+          echo "auth_key=$AUTH_KEY" >> $GITHUB_OUTPUT
+          echo "::add-mask::$AUTH_KEY"
 
       - name: Phase 2a – Tailscale installieren & joinen
         run: |
@@ -46,10 +79,7 @@ jobs:
             -i "$VPS_PUBLIC_IP," \
             -u "$VPS_USER" \
             --private-key ~/.ssh/id_ed25519 \
-            -e "ansible_host=$VPS_PUBLIC_IP"
-        env:
-          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_PRE_AUTH_KEY }}
-        continue-on-error: yes
+            -e "tailscale_auth_key=${{ steps.authkey.outputs.auth_key }}"
 
       - name: Phase 2b – SSH-Restrict (UFW deny 22)
         run: |
@@ -57,10 +87,9 @@ jobs:
             -i "$VPS_PUBLIC_IP," \
             -u "$VPS_USER" \
             --private-key ~/.ssh/id_ed25519
-        continue-on-error: yes
 
-      - name: Bestätigung
+      - name: Post-Bootstrap Check
         run: |
-          echo "✅ Tailscale installiert und SSH auf Public-IP blockiert"
-          echo "VPS jetzt nur noch via Tailscale erreichbar:"
-          echo "  ssh $VPS_USER@vps-${{ inputs.target }}.tailcfea8a.ts.net"
+          echo "✅ Tailscale installiert | SSH auf Public-IP blockiert"
+          echo "Zugriff jetzt nur noch via:"
+          echo "  ssh $VPS_USER@vps-${{ inputs.target }}.${{ secrets.TAILSCALE_TAILNET }}"
