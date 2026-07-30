@@ -105,6 +105,13 @@ Bevor ein PR als "ready" gemeldet wird:
 5. ✅ Branch auf aktuellem `main` (ggf. rebased)
 6. ✅ Kein Force-Push auf PR-Branches
 
+### P7c – Post-Merge-Checkliste
+Nach jedem erfolgreichen Merge nach `main`:
+1. Feature-Branch lokal + remote löschen (`git branch -d <name> && git push origin --delete <name>`)
+2. Offene PR-Branches auf neuen `main` rebasen (`git rebase origin/main`)
+3. Obsolete PRs schließen (Kommentar mit Begründung)
+4. Issue-Closing prüfen: Wurden im PR referenzierte Issues (`Closes #...`) automatisch geschlossen?
+
 ## 🏗️ Repo-Struktur
 ```
 IaC4/
