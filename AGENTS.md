@@ -20,6 +20,9 @@
 | **Nie Gateway-Prozess killen** (Vorfall 2026-07-16, 6h Downtime) | Alle |
 | **PR mergen** = Harald genehmigt → Agent merge | Orchestrator |
 | **PROD-Deploy** = nur Harald | Orchestrator |
+| **Pre-Flight Validation vor Push** – yamllint + markdownlint lokal prüfen | Alle |
+| **Force-Push nicht auf PR-Branches** – nur auf ungeteilte Feature-Branches | Alle |
+| **PR-Checkliste vor Fertig-Meldung** – CI grün, Doku aktuell, Secrets-Check, Branch rebased | Orchestrator |
 
 ## ✅ Autonom (kein Approval nötig)
 - Feature-Branch → Push → DEV-Deploy
@@ -53,11 +56,26 @@ Jeder PR muss beantworten:
 - **W**ie wurde priorisiert?
 - **W**as passiert bei Fehlschlag?
 
+### P3b – Separation of Concerns
+Ein PR macht **genau eine Sache**:
+- `fix/*` → Code-Reparaturen
+- `feat/*` → Neue Features
+- `chore/*` → CI/Tooling/Config
+- `docs/*` → Doku/Regeln
+- **Nicht:** Code + CI + Doku-Regeln im selben PR
+
 ### P4 – Living Docs
 Nach jeder Code-Änderung prüfen:
 - Betrifft das arc42-Kapitel? → aktualisieren
 - Betrifft das AGENTS.md? → aktualisieren
 - Commit-Nachricht: "docs(scope): ..." für reine Doku-Änderungen
+
+### P4b – Pre-Flight Validation (vor Push)
+Vor `git push` immer lokal prüfen:
+- **YAML:** `yamllint .github/workflows/*.yml ansible/**/*.yml`
+- **Markdown:** `markdownlint docs/**/*.md`
+- **Workflow-Syntax:** Gibt es `***`-Reste oder offensichtliche Fehler?
+- **Secrets:** Kein Token/Passwort im Diff?
 
 ### P5 – Gap-Analysen
 Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
@@ -77,6 +95,15 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 - **PR merge (main)** = nach Harald-Approval
 - Technische Entscheidungen bis DEV: frei
 - MAIN/PROD = Harald
+
+### Checkliste vor Fertig-Meldung
+Bevor ein PR als "ready" gemeldet wird:
+1. ✅ CI-Checks alle grün
+2. ✅ PR-Beschreibung: Was + Warum + Alternativen (P3)
+3. ✅ Living Docs: arc42 + AGENTS.md aktuell
+4. ✅ Secrets-Check: nichts committet
+5. ✅ Branch auf aktuellem `main` (ggf. rebased)
+6. ✅ Kein Force-Push auf PR-Branches
 
 ## 🏗️ Repo-Struktur
 ```
