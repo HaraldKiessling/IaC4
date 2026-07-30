@@ -1,7 +1,5 @@
 #cloud-config
 # IaC4 – VPS-Provisioning
-# User: deploy-user | SSH: iac4-deploy-key-20260730
-
 users:
   - name: deploy-user
     sudo: ALL=(ALL) NOPASSWD:ALL
@@ -9,14 +7,11 @@ users:
     shell: /bin/bash
     ssh_authorized_keys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEkOYAaYV2j6PDXHAbND5BjkpTEeUZXcYp3zJ5H0gdbw iac4-deploy-key-20260730"
-
 ssh_pwauth: false
 disable_root: true
 package_update: true
-
 packages:
   - ufw
-
 runcmd:
   - ufw default deny incoming
   - ufw default allow outgoing
