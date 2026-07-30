@@ -1,8 +1,23 @@
 ---
-# Globale Variablen – Referenz auf GH Secrets
+# Globale Variablen (Ansible)
+# Secrets werden via GH Actions Workflows als Extra-Vars (-e) oder env injiziert.
+# lookup('env') hier als Fallback, wenn Variablen nicht explizit gesetzt sind.
+
 docker_network: "traefik-public"
-tailscale_auth_key: "{{ lookup('env', 'TAILSCALE_AUTH_KEY') }}"
+
+# Traefik – Let's Encrypt
+traefik_acme_email: "{{ lookup('env', 'TRAEFIK_ACME_EMAIL') | default('admin@example.com', true) }}"
+
+# Code-Server – Zugangsdaten (MÜSSEN via Extra-Vars oder GH Secrets gesetzt werden)
+code_server_password: "{{ lookup('env', 'CODE_SERVER_PASSWORD') | default('changeme', true) }}"
+code_server_sudo_password: "{{ lookup('env', 'CODE_SERVER_SUDO_PASSWORD') | default('changeme', true) }}"
+code_server_hostname: "{{ lookup('env', 'CODE_SERVER_HOSTNAME') | default('code.example.com', true) }}"
+
+# Tailscale – Auth (wird dynamisch im Workflow generiert)
+tailscale_auth_key: "{{ lookup('env', 'TAILSCALE_AUTH_KEY') | default('', true) }}"
+
+# OpenClaw
 openclaw_llm_provider: "{{ lookup('env', 'OPENCLAW_LLM_PROVIDER') | default('anthropic', true) }}"
-openclaw_llm_api_key: "{{ lookup('env', 'OPENCLAW_LLM_API_KEY') }}"
-openclaw_websearch_api_key: "{{ lookup('env', 'OPENCLAW_WEBSEARCH_API_KEY') }}"
+openclaw_llm_api_key: "{{ lookup('env', 'OPENCLAW_LLM_API_KEY') | default('', true) }}"
+openclaw_websearch_api_key: "{{ lookup('env', 'OPENCLAW_WEBSEARCH_API_KEY') | default('', true) }}"
 openclaw_gateway_port: 18789

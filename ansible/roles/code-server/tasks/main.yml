@@ -6,8 +6,8 @@
     mode: '0755'
 
 - name: Code-Server docker-compose.yml deployen
-  ansible.builtin.copy:
-    src: docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
     dest: /opt/code-server/docker-compose.yml
     mode: '0644'
 

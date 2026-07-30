@@ -62,7 +62,7 @@
 **Was:** Prüfung vor Commit
 **Checkliste:**
 - [ ] Secrets? → Block
-- [ ] NOPASSWD:*** vs ***? → Ganz genau!
+- [ ] NOPASSWD:`***` vs `***`? → Ganz genau!
 - [ ] IaC3 blind kopiert? → Prüfen
 - [ ] Idempotent? (2. Lauf = 1. Lauf?)
 - [ ] P4: arc42 aktualisiert?

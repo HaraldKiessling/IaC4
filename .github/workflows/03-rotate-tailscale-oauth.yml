@@ -31,7 +31,7 @@ jobs:
       - name: Prüfen ob TAILSCALE_OAUTH_CLIENT_ID existiert
         id: check
         env:
-          GH_TOKEN: *** secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           ID_EXISTS=$(gh secret list --repo ${{ github.repository }} --jq '[.[] | select(.name=="TAILSCALE_OAUTH_CLIENT_ID")] | length' 2>/dev/null || echo "0")
           SECRET_EXISTS=$(gh secret list --repo ${{ github.repository }} --jq '[.[] | select(.name=="TAILSCALE_OAUTH_CLIENT_SECRET")] | length' 2>/dev/null || echo "0")
@@ -76,10 +76,10 @@ jobs:
 
       - name: OAuth-Secrets in GH speichern
         env:
-          GH_TOKEN: *** secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           CLIENT_ID=$(terraform output -raw new_oauth_client_id 2>/dev/null)
-          CLIENT_SECRET=*** output -raw new_oauth_client_secret 2>/dev/null)
+          CLIENT_SECRET=$(terraform output -raw new_oauth_client_secret 2>/dev/null)
 
           if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ]; then
             echo "❌ Konnte OAuth-Credentials nicht aus Terraform-Output lesen"

@@ -19,8 +19,7 @@ services:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
-      # Email via TRAEFIK_ACME_EMAIL setzen (z.B. in .env):
-      - "--certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL:-admin@example.com}"
+      - "--certificatesresolvers.letsencrypt.acme.email={{ traefik_acme_email }}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/etc/traefik/acme.json"
 
 volumes:
