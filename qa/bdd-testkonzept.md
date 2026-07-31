@@ -66,7 +66,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 - **Skripte:** `scripts/bdd/` – `bdd-lib.ps1` (Helfer), `*.bdd.ps1` (Features), `run-all.ps1` (Aggregator)
 - **Exit-Codes:** 0 = alle Szenarien grün; 1 = mind. ein Szenario rot (Workflow failt sichtbar)
 - **Timeout:** Job 15 min (SSH-ConnectTimeout 10 s, Public-Port-Test 5 s)
-- **Voraussetzungen (Secrets):** `SSH_KEY`, `VPS_USER`, `TAILSCALE_OAUTH_CLIENT_ID/SECRET`, `TAILSCALE_TAILNET`, `TAILSCALE_API_KEY`, `VPS_DEV_PUBLIC_IP` (dev) / `VPS_PROD_PUBLIC_IP` (prod)
+- **Voraussetzungen (Secrets):** `SSH_KEY`, `VPS_USER`, `TAILSCALE_OAUTH_CLIENT_ID/SECRET` (OAuth-only – Access-Token wird aus dem Client-Paar erzeugt, kein API-Key), `TAILSCALE_TAILNET`, `VPS_DEV_PUBLIC_IP` (dev) / `VPS_PROD_PUBLIC_IP` (prod)
 
 ## 6. Konventionen
 

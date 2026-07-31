@@ -86,6 +86,7 @@ jobs:
             --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
             "https://api.tailscale.com/api/v2/oauth/token")
           ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r '.access_token')
+          echo "::add-mask::${ACCESS_TOKEN}"
           echo "TS_TOKEN=${ACCESS_TOKEN}" >> $GITHUB_ENV
           KEY_RESP=$(curl -s --max-time 30 -X POST \
             "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/keys" \
