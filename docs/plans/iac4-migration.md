@@ -2,7 +2,8 @@
 
 > **Übergeordnetes Ziel:** IaC3-Inhalte nach IaC4 migrieren, VPS DEV via Tailscale bereitstellen.
 > **Stand:** 2026-07-31 | **Methodik:** docs/workflows/methodology.md
-> **Aktuell:** Phase 2 (VPS DEV via Tailscale) — VPS DEV frisch installiert, Workflow 03 (Tailscale Bootstrap) in Arbeit (MagicDNS-Join-Fix). Nach DEV-Erfolg: PROD-Migration (Phase 8), dann IaC3 = Backup (Phase 9).
+> **Aktuell:** Phase 3 (Ansible-Rollen befüllen) — Phase 2 abgeschlossen 2026-07-31 (Workflow 02+03 grün, SSH via Tailscale bestätigt).
+> **Workflow-Nummern = Ausführungsreihenfolge:** 02 (Bootstrap) → 03 (Baseline) → Services (docs/workflows/deploy-stages.md)
 
 ## ✅ Phase 0: Grundstruktur (erledigt)
 
@@ -22,21 +23,21 @@
 - [x] OAuth-Client tag:ia3 hinzugefügt (für SSH-ACL-Kompatibilität)
 - [x] Workflow 01 (Tailscale Terraform / rotate OAuth) erstellt (force=false)
 
-## 🟡 Phase 2: VPS DEV via Tailscale (aktuell)
+## ✅ Phase 2: VPS DEV via Tailscale (erledigt)
 
 - [x] Cloud-config korrigiert (NOPASSWD:***)
 - [x] VPS DEV installiert (deploy-user + SSH-Key)
-- [x] Workflow 03 (Tailscale Bootstrap) erstellt
+- [x] Workflow 02 (Tailscale Bootstrap) erstellt
 - [x] Handler `creates:` gefixt (skip Bug)
 - [x] Auth-Key `ephemeral: false` (permanenter Server)
 - [x] Auth-Key `tag:ia3` (ACL-kompatibel)
 - [x] **VPS neu installieren** (letzte cloud-config)
-- [ ] Workflow 03 (Tailscale Bootstrap) grün (Join-Fix in Arbeit: fix/workflow-magicdns-deploy)
-- [ ] SSH-Zugriff via Tailscale bestätigen
+- [x] Workflow 02 (Tailscale Bootstrap) grün — 2026-07-31 (Join tag:ci + Re-Tag tag:ia3, UFW-Restrict mit CGNAT-Allow, Cleanup = Rename)
+- [x] SSH-Zugriff via Tailscale bestätigen — 2026-07-31 (SSH-Check in Workflow 02/03 erfolgreich: deploy-user@<Tailscale-IP>)
 
 ## ⬜ Phase 3: Ansible-Rollen befüllen
 
-- [ ] vps-baseline: Tasks implementieren
+- [x] vps-baseline: Tasks implementiert (Baseline-Deploy grün, 2026-07-31)
 - [ ] docker: Tasks implementieren
 - [ ] traefik: Tasks implementieren
 - [ ] qdrant: Collection-Setup (3072d/Cosine)
@@ -57,7 +58,7 @@
 
 ## ⬜ Phase 6: CI/CD ausbauen
 
-- [ ] 02-baseline-deploy: Vollständiger Run
+- [ ] 03-baseline-deploy: Vollständiger Run
 - [ ] 04-service-deploy (neu): Vollständiger Run
 - [ ] 05-openclaw-install (neu): Vollständiger Run
 - [ ] CI mit Quality-Gates
@@ -74,9 +75,9 @@
 > **Voraussetzung:** Phase 2-7 auf DEV vollständig grün (Tailscale, Baseline, Services, OpenClaw, CI/CD).
 
 - [ ] VPS PROD mit IaC4-Cloud-Config neu installieren (deploy-user + IaC4-SSH-Key)
-- [ ] Workflow 03 (Tailscale Bootstrap) auf `target=prod` ausführen
+- [ ] Workflow 02 (Tailscale Bootstrap) auf `target=prod` ausführen
 - [ ] SSH-Zugriff via Tailscale auf PROD bestätigen
-- [ ] Baseline + Services + OpenClaw auf PROD deployen (Workflows 02, 04, 05)
+- [ ] Baseline + Services + OpenClaw auf PROD deployen (Workflows 03, 04, 05)
 - [ ] Post-Deploy-Verifikation + Gap-Analyse PROD
 - [ ] IaC3-Deployments auf PROD stoppen (IaC3 → Backup-Modus)
 

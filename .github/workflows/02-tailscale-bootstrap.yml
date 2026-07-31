@@ -1,4 +1,11 @@
-name: "03 – Tailscale Bootstrap (Phase 2a + 2b)"
+# =============================================================================
+# 02 – Tailscale Bootstrap — MUSS VOR Workflow 03 (Baseline-Deploy) laufen!
+#   Läuft über Public-IP (einziger offener Weg beim frischen VPS).
+#   Schließt SSH auf der Public-IP (UFW), Allow nur für Tailscale-CGNAT.
+#   Cleanup: offline vps-<target>-Nodes → umbenennen (NIE löschen).
+# Siehe docs/workflows/deploy-stages.md
+# =============================================================================
+name: "02 – Tailscale Bootstrap (Phase 2a + 2b, via Public-IP)"
 
 on:
   workflow_dispatch:
@@ -86,7 +93,7 @@ jobs:
           echo "auth_key=$AUTH_KEY" >> $GITHUB_OUTPUT
           echo "::add-mask::$AUTH_KEY"
 
-      - name: Alten Node mit Ziel-Hostname entfernen (Tailscale-API)
+      - name: Alten Node mit Ziel-Hostname umbenennen (Cleanup, Tailscale-API)
         continue-on-error: true
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
