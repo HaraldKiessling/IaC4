@@ -100,28 +100,27 @@ jobs:
           TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
-          # SICHERHEIT: Nur OFFLINE-Nodes mit exakt dem Ziel-Hostnamen löschen.
-          # Online-Nodes (z.B. vps-prod während IaC3-Betrieb) werden NIE gelöscht,
-          # sondern nur auf tag:ia3 re-tagged (ACL: tag:ci → tag:ia3).
-          for DEVICE_ID in $(curl -s \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .id'); do
-            ONLINE=$(curl -s "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
-              -H "Authorization: Bearer ${TS_API_KEY}" | jq -r '.device.online // false')
-            if [ "$ONLINE" = "true" ]; then
-              curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
-                -H "Authorization: Bearer ${TS_API_KEY}" \
-                -H "Content-Type: application/json" \
-                -d '{"tags": ["tag:ia3"]}' > /dev/null
-              echo "✅ Online-Node ${NODE} (${DEVICE_ID}) auf tag:ia3 gesetzt (unverändert)"
-            else
-              # SICHERHEIT: NIE löschen — nur umbenennen (Node bleibt im Tailnet erhalten)
+          # SICHERHEIT: NIE löschen. Umbenennen nur Nodes mit lastSeen > 24h
+          # (aktive/frische Nodes bleiben unangetastet). GET /device/{id} liefert
+          # für den CI-Key keine Daten (online=null) — daher lastSeen aus der Liste.
+          LISTE=$(curl -s \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,lastSeen" \
+            -H "Authorization: Bearer ${TS_API_KEY}")
+          for DEVICE_ID in $(echo "$LISTE" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n or .hostname == ($n + "-1")) | .id'); do
+            LAST=$(echo "$LISTE" | jq -r --arg id "$DEVICE_ID" '.devices[] | select(.id == $id) | .lastSeen // ""')
+            AGE_SEC=0
+            if [ -n "$LAST" ] && [ "$LAST" != "null" ]; then
+              AGE_SEC=$(( $(date +%s) - $(date -d "$LAST" +%s) ))
+            fi
+            if [ "$AGE_SEC" -gt 86400 ]; then
               NEW_NAME="${NODE}-old-$(date +%s)"
               curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/name" \
                 -H "Authorization: Bearer ${TS_API_KEY}" \
                 -H "Content-Type: application/json" \
                 -d "{\"name\": \"${NEW_NAME}\"}" > /dev/null
-              echo "✅ Offline-Node ${NODE} (${DEVICE_ID}) → ${NEW_NAME} umbenannt (nicht gelöscht)"
+              echo "✅ Alter Node ${NODE} (${DEVICE_ID}, lastSeen vor ${AGE_SEC}s) umbenannt → ${NEW_NAME}"
+            else
+              echo "Node ${NODE} (${DEVICE_ID}) ist aktiv (lastSeen vor ${AGE_SEC}s) — NICHT umbenannt"
             fi
           done
           echo "Cleanup ${NODE} abgeschlossen"
@@ -139,15 +138,18 @@ jobs:
             -i /tmp/inventory \
             -e "tailscale_auth_key=${{ steps.authkey.outputs.auth_key }}"
 
-      - name: "Node auf tag:ia3 re-taggen (ACL: Runner tag:ci → tag:ia3)"
+      - name: "Node auf tag:ia3 re-taggen (frischester Node aus API-Liste)"
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
           TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
+          # Frischesten vps-<target>[-1]-Node aus der Liste nehmen (lastSeen desc).
+          # GET /device/{id} liefert für den CI-Key keine Daten — daher Liste nutzen.
           DEVICE_ID=$(curl -s \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .id' | head -1)
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,lastSeen" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" \
+            '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].id // empty' | head -1)
           if [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ]; then
             RESP=$(curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
               -H "Authorization: Bearer ${TS_API_KEY}" \
@@ -155,7 +157,7 @@ jobs:
               -d '{"tags": ["tag:ia3"]}')
             echo "Re-Tag ${NODE} (${DEVICE_ID}): $(echo "$RESP" | jq -c '{keys: keys, error: .error, message: .message}' 2>/dev/null || echo "$RESP")"
           else
-            echo "❌ Kein Node ${NODE} nach Join gefunden"
+            echo "❌ Kein Node ${NODE} nach Join in der API-Liste gefunden"
             exit 1
           fi
 
@@ -183,12 +185,46 @@ jobs:
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
             -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
           echo "SSH-Verifikation via Tailscale-IP: ${TS_IP}"
+          echo "TS_IP=${TS_IP}" >> $GITHUB_ENV
           sleep 15
           echo "--- Peer-Status:"
           tailscale status 2>&1 | grep -i "vps" || echo "(keine vps-Peers sichtbar)"
           echo "--- Tailscale-Ping (Netzwerk-Test):"
           tailscale ping -c 2 "${TS_IP}" 2>&1 || echo "❌ Tailscale-Ping fehlgeschlagen (ACL/Netz?)"
           echo "--- SSH-Test:"
-          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+          if ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
               "$VPS_USER@${TS_IP}" \
-              "hostname; tailscale ip -4" || echo "❌ SSH via Tailscale fehlgeschlagen"
+              "hostname; tailscale ip -4"; then
+            echo "SSH_OK=true" >> $GITHUB_ENV
+          else
+            echo "SSH_OK=false" >> $GITHUB_ENV
+            echo "❌ SSH via Tailscale fehlgeschlagen"
+          fi
+
+      - name: "Verwaiste vps-<target>-old-* Nodes löschen (SSH-Erfolg = Beweis)"
+        if: env.SSH_OK == 'true'
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          NODE="vps-${{ inputs.target }}"
+          # SSH via Tailscale war erfolgreich → aktiver Node funktioniert nachweislich.
+          # Alle verwaisten -old- Nodes (Anzeigename startet mit vps-<target>-old-)
+          # sind damit sicher löschbar. NUR dieser Präfix, nie andere Maschinen!
+          DELETED=0
+          # SICHERHEIT: Der Node, gegen den SSH gerade erfolgreich war (TS_IP),
+          # wird NIE gelöscht — auch wenn sein Anzeigename -old- enthält
+          # (früherer Rename-Bug konnte den aktiven Node so benennen!).
+          for DEVICE_ID in $(curl -s \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,name,addresses" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg p "${NODE}-old-" --arg ip "${TS_IP}" \
+            '.devices[] | select((.name | startswith($p)) and ((.addresses // []) | index($ip) == null)) | .id'); do
+            curl -s -X DELETE "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
+              -H "Authorization: Bearer ${TS_API_KEY}" > /dev/null
+            echo "✅ Verwaister Node ${DEVICE_ID} (${NODE}-old-*) gelöscht"
+            DELETED=1
+          done
+          if [ "$DELETED" = "0" ]; then
+            echo "Keine verwaisten ${NODE}-old-* Nodes vorhanden"
+          fi
+
