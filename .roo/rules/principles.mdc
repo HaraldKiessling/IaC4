@@ -33,6 +33,7 @@ Geteilte Ressourcen (ACL/Configs) integrativ ändern, nie ersetzen.
 ## P7 – Autonome Entwicklung
 Feature/BugFix → DEV-Deploy = autonom. MAIN/PROD = Harald.
 Nachweis (grüne CI + Tests) vor Genehmigungs-Anfrage. Approval = Auftrag: handeln, nicht erneut rückfragen.
+Unabhängiger PR-Review (Autor ≠ Reviewer) vor Merge – Ergebnis im PR-Thread dokumentieren, Befunde bearbeiten oder als Follow-up verfolgen (Issue #37).
 
 ## P8 – Wiederholungsfehler-Stopp
 2× gleicher Fehler → STOPP: Ursache analysieren, Regel prüfen, Plan B aus Quelle/Referenz.

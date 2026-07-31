@@ -21,6 +21,7 @@
 - [ ] P4: arc42-Doku aktualisiert? → Prüfen
 - [ ] Commit-Nachricht informativ?
 - [ ] Quellen angegeben? (P1)
+- [ ] Review-Ergebnis im PR-Thread dokumentiert (✅ Freigabe / Befundliste, Issue #37)
 
 ### ℹ️ Bei Fehlern
 - Nicht selbst fixen → Issue/Befund an Orchestrator
