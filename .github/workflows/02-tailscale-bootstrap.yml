@@ -167,9 +167,18 @@ jobs:
           NODE="vps-${{ inputs.target }}"
           # Frischesten vps-<target>[-1]-Node aus der Liste nehmen (lastSeen desc).
           # GET /device/{id} liefert für den CI-Key keine Daten — daher Liste nutzen.
-          DEVICE_ID=$(curl -s \
+          API_RESP=$(curl -sS -w "\nHTTP_CODE:%{http_code}" \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,lastSeen" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" \
+            -H "Authorization: Bearer ${TS_API_KEY}")
+          HTTP_CODE=$(printf '%s' "$API_RESP" | tail -1 | cut -d: -f2)
+          API_BODY=$(printf '%s' "$API_RESP" | sed '$d')
+          echo "🔎 Tailscale-API (Re-Tag): HTTP ${HTTP_CODE}"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ API-Fehler (HTTP ${HTTP_CODE}):"
+            printf '%s' "$API_BODY" | head -5
+            exit 1
+          fi
+          DEVICE_ID=$(printf '%s' "$API_BODY" | jq -r --arg n "$NODE" \
             '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].id // empty' | head -1)
           if [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ]; then
             RESP=$(curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \

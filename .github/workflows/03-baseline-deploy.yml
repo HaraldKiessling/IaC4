@@ -66,9 +66,18 @@ jobs:
           TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
-          TS_IP=$(curl -s \
+          API_RESP=$(curl -sS -w "\nHTTP_CODE:%{http_code}" \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+            -H "Authorization: Bearer ${TS_API_KEY}")
+          HTTP_CODE=$(printf '%s' "$API_RESP" | tail -1 | cut -d: -f2)
+          API_BODY=$(printf '%s' "$API_RESP" | sed '$d')
+          echo "🔎 Tailscale-API (IP-Ermittlung): HTTP ${HTTP_CODE}"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ API-Fehler (HTTP ${HTTP_CODE}):"
+            printf '%s' "$API_BODY" | head -5
+            exit 1
+          fi
+          TS_IP=$(printf '%s' "$API_BODY" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
           if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
             echo "❌ Keine Tailscale-IP für Node ${NODE} gefunden."
             echo "   Vorbedingung nicht erfüllt: Workflow 02 (Tailscale-Bootstrap) muss zuerst laufen!"
