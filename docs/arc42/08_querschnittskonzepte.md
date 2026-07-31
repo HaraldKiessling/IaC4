@@ -37,8 +37,8 @@
 |---|------|-------|---------|
 | 00 | SSH-Key-Paar generieren | Grundstruktur | `workflow_dispatch` |
 | 01 | Tailscale Terraform (OAuth + ACLs, Merge aus 03+04) | Grundstruktur | PR/Push `terraform/**` + `workflow_dispatch` |
-| 02 | Baseline Deploy | VPS-Konfiguration | `workflow_dispatch` |
-| 03 | Tailscale Bootstrap | VPS-Konfiguration | `workflow_dispatch` |
+| 02 | Tailscale Bootstrap (Phase 2a+2b) | VPS-Konfiguration | `workflow_dispatch` |
+| 03 | Baseline Deploy (Phase 1) | VPS-Konfiguration | `workflow_dispatch` |
 | CI | Lint + Quality Gate | CI | Push/PR auf `main`/`dev` |
 
 ### Secret-Abhängigkeiten
@@ -49,8 +49,8 @@ Jeder Workflow liest und schreibt bestimmte GitHub Secrets. Die folgende Tabelle
 |----------|--------------|--------------|
 | **00** | `GH_TOKEN` | **`SSH_KEY`**, **`SSH_KEY_PUB`** |
 | **01** | `TAILSCALE_API_KEY`, `TAILSCALE_TAILNET`, `GH_TOKEN` | **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`** |
-| **02** | `SSH_KEY`, `VPS_USER`, `VPS_DEV_PUBLIC_IP` | – |
-| **03** | `SSH_KEY`, `VPS_USER`, `VPS_DEV_PUBLIC_IP`/`VPS_PROD_PUBLIC_IP`, **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET` | – |
+| **02** | `SSH_KEY`, `VPS_USER`, `VPS_DEV_PUBLIC_IP` (dev) / `VPS_PROD_PUBLIC_IP` (prod), **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET`, `TAILSCALE_API_KEY` | – |
+| **03** | `SSH_KEY`, `VPS_USER`, **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET`, `TAILSCALE_API_KEY` (IP via Tailscale-API – keine Public-IP-Secrets) | – |
 | **CI** | – | – |
 
 ### Logisch zwingende Reihenfolge
@@ -62,19 +62,19 @@ Basierend auf den Secret-Abhängigkeiten ergibt sich diese Ausführungsreihenfol
    │ WRITE: SSH_KEY, SSH_KEY_PUB               → wird von 02, 03 gelesen
    ↓
 01 ─────────────────────────────────────────────
-   │ WRITE: TAILSCALE_OAUTH_CLIENT_ID/SECRET    → wird von 03 gelesen
+   │ WRITE: TAILSCALE_OAUTH_CLIENT_ID/SECRET    → wird von 02, 03 gelesen
    ↓
 02 ─────────────────────────────────────────────
-   │ READ: SSH_KEY → deployed Baseline via SSH auf public-IP
+   │ READ: SSH_KEY + OAuth-Secrets → Tailscale install + join + SSH-Restrict (via Public-IP)
    ↓
 03 ─────────────────────────────────────────────
-   │ READ: SSH_KEY + OAuth-Secrets → Tailscale install + SSH restrict
-   │ NACH 03: VPS nur noch via Tailscale erreichbar
+   │ READ: SSH_KEY + Tailscale → Phase-1-Baseline via Tailscale-IP
+   │ NACH 02: VPS nur noch via Tailscale erreichbar
    ↓
 [04 / Phase-3-Service-Workflows – geplant]
 ```
 
-**Kernregel:** 03 muss VOR 02 laufen (OAuth-Secrets), 01 muss VOR 02 laufen (SSH-Zugriff via public-IP). Die Nummerierung wurde auf 00→01→02→03 korrigiert (00→01→02→03).
+**Kernregel:** 02 muss VOR 03 laufen (Bootstrap via Public-IP, danach Baseline via Tailscale-IP), 01 muss VOR 02 laufen (OAuth-Secrets), 00 muss VOR 02/03 laufen (SSH_KEY). Die Nummerierung entspricht der Ausführungsreihenfolge: 00 (SSH-Key) → 01 (OAuth/ACL) → 02 (Bootstrap) → 03 (Baseline).
 
 
 

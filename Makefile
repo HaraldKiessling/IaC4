@@ -5,9 +5,9 @@ help:          ## Zeigt diese Hilfe
 	awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 lint:          ## Lintet YAML + Markdown
-	@echo "=== YAML Lint ===" && yamllint . --strict || true
-	@echo "=== Markdown Lint ===" && markdownlint 'docs/**/*.md' || true
-	@echo "=== Ansible Syntax ===" && ansible-playbook --syntax-check ansible/playbooks/site.yml 2>/dev/null || true
+	@echo "=== YAML Lint ===" && yamllint .
+	@echo "=== Markdown Lint ===" && markdownlint 'docs/**/*.md'
+	@echo "=== Ansible Syntax ===" && ansible-playbook --syntax-check ansible/playbooks/site.yml
 
 deploy-dev:    ## Baseline-Deploy auf DEV (nach Workflow 02 Bootstrap)
 	@echo "Trigger GH Actions Deploy (target=dev)…"

@@ -1,3 +1,4 @@
+---
 name: "00 – SSH-Key-Paar generieren"
 
 on:
@@ -75,8 +76,10 @@ jobs:
 
       - name: Änderungen committen
         if: steps.check.outputs.exists == 'false' || github.event.inputs.force == 'true'
+        env:
+          GIT_BOT_EMAIL: ${{ secrets.GIT_BOT_EMAIL }}
         run: |
-          git config user.email "harald.kiessling@web.de"
+          git config user.email "${GIT_BOT_EMAIL}"
           git config user.name "IaC4 SSH-Key Bot"
           git add cloud-config.yaml
           git commit -m "chore(ssh): rotate SSH key - $KEY_COMMENT"

@@ -1,4 +1,14 @@
 ---
+- name: Fail-Fast – Code-Server-Secrets vorhanden (keine Default-Credentials)
+  ansible.builtin.assert:
+    that:
+      - code_server_password is string and code_server_password | length > 0 and code_server_password != 'changeme'
+      - code_server_sudo_password is string and code_server_sudo_password | length > 0 and code_server_sudo_password != 'changeme'
+    fail_msg: >-
+      ❌ CODE_SERVER_PASSWORD / CODE_SERVER_SUDO_PASSWORD nicht gesetzt oder Platzhalter
+      ('changeme'). Abbruch – kein Deploy mit Default-Credentials. GH-Secrets setzen
+      und Workflow erneut starten.
+
 - name: Code-Server-Verzeichnis anlegen
   ansible.builtin.file:
     path: /opt/code-server

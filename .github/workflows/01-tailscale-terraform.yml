@@ -1,3 +1,4 @@
+---
 name: "01 – Tailscale Terraform (OAuth + ACLs)"
 
 on:
@@ -30,7 +31,6 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
 
 env:
   TF_VERSION: "1.11.0"
@@ -93,7 +93,7 @@ jobs:
             rm -f terraform.tfstate terraform.tfstate.backup
           fi
           terraform plan -no-color -input=false -out=plan_output 2>&1 | tee plan_stdout.txt
-          echo "exitcode=$?" >> $GITHUB_OUTPUT
+          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
       - name: PR Kommentar (Plan)
         if: github.event_name == 'pull_request'

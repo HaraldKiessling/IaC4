@@ -52,8 +52,8 @@
 graph TD
     W00["00-generate-ssh-key.yml<br/>SSH_KEY + SSH_KEY_PUB (Secrets)"]
     W01["01-tailscale-terraform.yml<br/>OAuth Client + ACLs (Terraform)"]
-    W02["02-baseline-deploy.yml<br/>Phase 1 Baseline (Public-IP SSH)"]
-    W03["03-tailscale-bootstrap.yml<br/>Phase 2a+2b Tailscale + SSH-Restrict"]
+    W02["03-baseline-deploy.yml<br/>Phase 1 Baseline (Public-IP SSH)"]
+    W03["02-tailscale-bootstrap.yml<br/>Phase 2a+2b Tailscale + SSH-Restrict"]
     CI["ci.yml<br/>Lint + arc42-Existenz-Check"]
     W00 --> W01
     W00 --> W02
@@ -75,7 +75,7 @@ Kritisch: Die **einzige** autoritative Dependency-Darstellung ist `docs/arc42/08
 - **Kein** Abgleich Workflow-Dateien ↔ Doku. `[P]`
 
 ### L2. Secrets-SSoT-Drift (PR #28: „.env.example-SSoT-Lücke“)
-- `.env.example` definiert `TAILSCALE_OAUTH_SECRET`, Workflows nutzen `TAILSCALE_OAUTH_CLIENT_SECRET` (`01-tailscale-terraform.yml`, `03-tailscale-bootstrap.yml`). `[P]`
+- `.env.example` definiert `TAILSCALE_OAUTH_SECRET`, Workflows nutzen `TAILSCALE_OAUTH_CLIENT_SECRET` (`01-tailscale-terraform.yml`, `02-tailscale-bootstrap.yml`). `[P]`
 - Fehlend in `.env.example`, aber von Workflows gelesen: `VPS_DEV_PUBLIC_IP`, `VPS_PROD_PUBLIC_IP`, `TAILSCALE_TAILNET`, `TAILSCALE_API_KEY`, `TAILSCALE_OAUTH_CLIENT_ID`. `[P]`
 - `arc42/08` Secret-Tabelle ist die einzige konsistente Quelle – aber nicht maschinell prüfbar. `[P]`
 - `ansible/group_vars/all.yml` nutzt Fallbacks `default('changeme', true)` für Code-Server-Passwörter und `admin@example.com` – **bekannte Default-Credentials statt Fail-Fast** bei fehlenden Secrets. `[P]`
@@ -85,8 +85,8 @@ Kritisch: Die **einzige** autoritative Dependency-Darstellung ist `docs/arc42/08
 - PR #30 dokumentiert realen **OAuth-Token-Leak in `debug-oauth.yml`**; die Datei wurde entfernt, aber es existiert **kein Regelwerk/Guard**, der einen erneuten Leak verhindert (keine Regel „keine Secrets/Token in Logs/Output“, kein Masking-Check). `[S]`
 
 ### L4. Fehlender/präzisierbarer `permissions:`-Block (PR #30)
-- `02-baseline-deploy.yml` hat **gar keinen** `permissions:`-Block (Default: `write`). `[P]`
-- `00-generate-ssh-key.yml` und `03-tailscale-bootstrap.yml` nutzen breites `contents: write`. `[P]`
+- `03-baseline-deploy.yml` hat **gar keinen** `permissions:`-Block (Default: `write`). `[P]`
+- `00-generate-ssh-key.yml` und `02-tailscale-bootstrap.yml` nutzen breites `contents: write`. `[P]`
 - Kein CI-Check (z. B. `actionlint`/custom), der fehlende `permissions:`-Blöcke ablehnt. `[P]`
 
 ### L5. Terraform-State ohne Backend → Ghost-Clients (P-003, bestätigt)
@@ -97,7 +97,7 @@ Kritisch: Die **einzige** autoritative Dependency-Darstellung ist `docs/arc42/08
 ### L6. Tailscale-Tag-Drift (SSoT-Verstoss)
 - Regel `tailscale-acl.mdc`: OAuth-Client `tag:ci`. `[P]`
 - `terraform/oauth-client.tf`: `tags = ["tag:ci", "tag:ia3"]`. `[P]`
-- `03-tailscale-bootstrap.yml`: `"tags": ["tag:ia3"]` – **weder `tag:ci` noch konsistent mit der Regel**. `[P]`
+- `02-tailscale-bootstrap.yml`: `"tags": ["tag:ia3"]` – **weder `tag:ci` noch konsistent mit der Regel**. `[P]`
 - `docs/plans/iac4-migration.md` bestätigt `tag:ia3` als Absicht. `[P]`
 
 ### L7. Keine BDD-/Post-Deploy-Verifikation
@@ -122,7 +122,7 @@ Kritisch: Die **einzige** autoritative Dependency-Darstellung ist `docs/arc42/08
 
 ### L11. Keine Workflow-Recovery-/Rollback-/Eskalationsregeln (PR #30 „Fehlerpfad-Härtung“)
 - Kein Rollback-Konzept für fehlgeschlagene Deploys, keine Eskalationskette, kein Notfall-Recovery (IaC3 hatte `recovery.bdd.ps1`). `[P]`
-- `02-baseline-deploy.yml`/`03-tailscale-bootstrap.yml` enden mit „Post-Deploy Check“, ohne Fehlerpfad nach SSH-Close (nach Phase 2b ist der VPS ohne Tailscale unerreichbar). `[P]`
+- `03-baseline-deploy.yml`/`02-tailscale-bootstrap.yml` enden mit „Post-Deploy Check“, ohne Fehlerpfad nach SSH-Close (nach Phase 2b ist der VPS ohne Tailscale unerreichbar). `[P]`
 
 ### L12. Keine OpenClaw-Governance
 - Keine Budget-/Spawn-/Modell-Kostenregeln (IaC3 §9.3/§9.6). `[P]`
@@ -146,7 +146,7 @@ Kritisch: Die **einzige** autoritative Dependency-Darstellung ist `docs/arc42/08
 | R1 | **Workflow-Vorbedingungen & Reihenfolge-Gate** | Verhindert Deploys in falscher Reihenfolge/ohne Secrets (PR #28) | CI/CD | **P1** | niedrig | Jeder Deploy-Workflow (02/03) prüft im ersten Step explizit: existieren `SSH_KEY`, `VPS_*_PUBLIC_IP`, `TAILSCALE_OAUTH_CLIENT_ID/SECRET`? Fehlt eine Abhängigkeit → `exit 1` mit klarer Meldung „Workflow X zuerst ausführen“. Dependency-Kette 00→01→02→03 in `ci.yml` als Job/Step verifizieren (Datei-Existenz + Secret-Nutzung). |
 | R2 | **Secrets-SSoT-Sync-Check (CI)** | Beseitigt `.env.example`-Drift (PR #28) | CI/CD/Config | **P1** | mittel | CI-Skript: extrahiert alle `${{ secrets.* }}` aus `.github/workflows/*.yml` + `lookup('env', …)` aus `group_vars` und prüft, dass jede Variable in `.env.example` dokumentiert ist (und umgekehrt, dass kein `***`/Platzhalter-Wert als realer Default dient). |
 | R3 | **Fail-Fast statt Default-Credentials** | Verhindert Deployment mit `changeme` | Security | **P1** | niedrig | `ansible/group_vars/all.yml`: `default('changeme', true)` → `assert`-Task in den Rollen (code-server, openclaw), der bei `changeme`/leer `fail:` mit „Secret nicht injiziert“. |
-| R4 | **Workflow-Security-Hardening (permissions + Leak-Guard)** | Least-Privilege + kein Token-Leak (PR #30) | Security/CI | **P1** | niedrig | Regel: JEDER Workflow MUSS expliziten `permissions:`-Block mit minimalen Rechten haben; `id-token` nur bei OIDC. CI-Check (`actionlint` oder Grep-Gate) blockt Workflows ohne `permissions:`. Leak-Guard: keine `echo`/Debug-Steps mit `*_TOKEN`/`*_SECRET`-Variablen; `::add-mask::` Pflicht bei generierten Token (Vorbild: `03-tailscale-bootstrap.yml`); OAuth-Client-Secret nie in Logs/PR-Kommentare. |
+| R4 | **Workflow-Security-Hardening (permissions + Leak-Guard)** | Least-Privilege + kein Token-Leak (PR #30) | Security/CI | **P1** | niedrig | Regel: JEDER Workflow MUSS expliziten `permissions:`-Block mit minimalen Rechten haben; `id-token` nur bei OIDC. CI-Check (`actionlint` oder Grep-Gate) blockt Workflows ohne `permissions:`. Leak-Guard: keine `echo`/Debug-Steps mit `*_TOKEN`/`*_SECRET`-Variablen; `::add-mask::` Pflicht bei generierten Token (Vorbild: `02-tailscale-bootstrap.yml`); OAuth-Client-Secret nie in Logs/PR-Kommentare. |
 | R5 | **Terraform-State-Backend-Pflicht** | Behebt Ghost-Client-Problem (P-003) | Infrastruktur | **P1** | mittel | Regel: Terraform-State NIE in `actions/cache`; Backend zwingend (GH-Actions-Artifact-Versionierung oder Remote-Backend); `force=true` nur mit dokumentierter Client-Revocation; Ghost-Client-Audit vor jedem `apply`. |
 | R6 | **Tailscale-Tag-Single-Source** | Behebt `tag:ci`/`tag:ia3`-Drift | Infrastruktur/Security | **P1** | niedrig | Ein Ort für die Tags (z. B. `terraform/variables.tf` oder `group_vars`), alle Quellen (`oauth-client.tf`, `03-Workflow`, `tailscale-acl.mdc`, `iac4-migration.md`) lesen daraus; Konsistenz-Check im CI. |
 | R7 | **Post-Deploy-Verifikation Pflicht (BDD-light)** | Macht Quality-Gates maschinell | QA/Deployment | **P1** | mittel | `scripts/verify-deployment.sh` wird als finaler Step in 02/03 eingebunden (nach Phase 2b via Tailscale, sonst vor SSH-Close); Health-Gates (Traefik/Qdrant/OpenClaw) als `until/retries` in Ansible-Rollen (Vorbild `openclaw-gateway`); jeder Service bekommt ≥1 automatisierter Test. |
@@ -168,8 +168,8 @@ Kritisch: Die **einzige** autoritative Dependency-Darstellung ist `docs/arc42/08
 | Artefakt | Befund | Empfehlung | Evidenz |
 |---|---|---|---|
 | `ci.yml` | arc42-Check exit 0, yamllint nur warnings | `--fail-on-error`/harter Abbruch; `actionlint` ergänzen; `terraform fmt -check` + `terraform validate` nach CI ziehen; `ansible-lint`/`ansible-playbook --syntax-check` einbinden | `[P]` |
-| `Makefile` | `yamllint . --strict \|\| true` schluckt Fehler; `deploy-dev/prod` rufen nicht existentes `deploy.yml` auf | `\|\| true` entfernen (Lint muss brechen); Workflow-Namen korrigieren auf `02-baseline-deploy.yml`/`03-tailscale-bootstrap.yml` oder ein `deploy.yml`-Wrapper anlegen | `[P]` |
-| `02-baseline-deploy.yml` | kein `permissions:`-Block | Minimalen Block ergänzen (`contents: read`, ggf. `id-token: none`) + `concurrency:`-Gruppe gegen parallele Deploys | `[P]` |
+| `Makefile` | `yamllint . --strict \|\| true` schluckt Fehler; `deploy-dev/prod` rufen nicht existentes `deploy.yml` auf | `\|\| true` entfernen (Lint muss brechen); Workflow-Namen korrigieren auf `03-baseline-deploy.yml`/`02-tailscale-bootstrap.yml` oder ein `deploy.yml`-Wrapper anlegen | `[P]` |
+| `03-baseline-deploy.yml` | kein `permissions:`-Block | Minimalen Block ergänzen (`contents: read`, ggf. `id-token: none`) + `concurrency:`-Gruppe gegen parallele Deploys | `[P]` |
 | `tailscale-acl.mdc` | Regel `tag:ci` widerspricht Realität (`tag:ia3`) | Regel an Realität angleichen ODER Realität fixen – dann R6-Konsistenzcheck | `[P]` |
 | `arc42/08` | „Kernregel: 03 muss VOR 02“ widerspricht eigener Tabelle | Abhängigkeitskette auf 00→01→02→03 korrigieren (PR-#28-Thema) | `[P]` |
 | `.openclaw/agents/reviewer/AGENTS.md` | Gute Liste, aber keine Tool-Restriktion | Reviewer-Allowlist ergänzen (read-only exec: `yamllint`, `git diff`, `ansible-lint`), keine Schreib-Tools | `[P]` |
@@ -194,7 +194,7 @@ Kritisch: Die **einzige** autoritative Dependency-Darstellung ist `docs/arc42/08
 | PR #28: Reihenfolge-Verifikation | Nicht vorhanden | R1 |
 | PR #30: OAuth-Token-Leak | `debug-oauth.yml` entfernt, aber kein Leak-Guard/Scan | R4 |
 | PR #30: Fehlerpfad-Härtung | Teilweise (Masking in 03), kein systematisches Recovery | R9 |
-| PR #30: fehlender `permissions:`-Block | `02-baseline-deploy.yml` weiterhin ohne Block | R4 |
+| PR #30: fehlender `permissions:`-Block | `03-baseline-deploy.yml` weiterhin ohne Block | R4 |
 | PR #30: fehlender Leak-Guard | Nicht vorhanden | R4 |
 
 ---
@@ -202,7 +202,7 @@ Kritisch: Die **einzige** autoritative Dependency-Darstellung ist `docs/arc42/08
 ## 5. Top-5-Empfehlung für OpenClaw in IaC4
 
 1. **R1 – Workflow-Vorbedingungen & Reihenfolge-Gate** (P1): Die Dependency-Kette 00→01→02→03 ist heute nur als widersprüchliche Doku vorhanden (`arc42/08`). PR #28 zeigt, dass genau hier Fehler entstehen. Ein Vorbedingungs-Gate + CI-Reihenfolge-Check ist der höchste Hebel mit minimalem Aufwand.
-2. **R4 – Workflow-Security-Hardening (permissions + Leak-Guard)** (P1): PR #30 (OAuth-Token-Leak, fehlender `permissions:`-Block in `02-baseline-deploy.yml`) beweist reale Security-Vorfälle. Explizite `permissions:`-Blöcke + Masking-Pflicht + CI-Gate sind billig und verhindern die nächste Klasse von Leaks.
+2. **R4 – Workflow-Security-Hardening (permissions + Leak-Guard)** (P1): PR #30 (OAuth-Token-Leak, fehlender `permissions:`-Block in `03-baseline-deploy.yml`) beweist reale Security-Vorfälle. Explizite `permissions:`-Blöcke + Masking-Pflicht + CI-Gate sind billig und verhindern die nächste Klasse von Leaks.
 3. **R2 + R3 – Secrets-SSoT-Sync + Fail-Fast** (P1): `.env.example`-Drift (PR #28) und `changeme`-Fallbacks in `ansible/group_vars/all.yml` sind die gefährlichste Kombination: fehlende Secrets werden **stillschweigend durch bekannte Defaults ersetzt**. Sync-Check + Assert-Fail-Fast schließt diese Lücke.
 4. **R5 – Terraform-State-Backend-Pflicht** (P1): ~30 Ghost-Clients (`arc42/08` P-003) sind dokumentierter, realer Schaden durch `actions/cache`-State. Eine Regel, die State-Persistenz verlangt, verhindert Wiederholung – ist zugleich aber eine Infrastruktur-Entscheidung (Alternativen: GH-Artifacts-Versionierung vs. Remote-Backend).
 5. **R8 – Living-Docs-Konsistenz-Gate** (P2): 4 Dokumente mit 4 verschiedenen falschen Workflow-Listen (README, deploy-stages, arc42/05, iac4-migration) trotz existierender P4-Regel – die Regel wird nicht durchgesetzt. Ein CI-Konsistenzcheck macht P4 messbar und verhindert, dass OpenClaw veraltete Doku als SSoT nutzt.

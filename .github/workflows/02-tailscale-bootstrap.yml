@@ -46,7 +46,27 @@ jobs:
             echo "❌ Unbekanntes Target: ${{ inputs.target }}"
             exit 1
           fi
+          echo "::add-mask::$VPS_PUBLIC_IP"
           echo "Target: ${{ inputs.target }} → IP: $VPS_PUBLIC_IP"
+
+      - name: Vorbedingungen prüfen (Reihenfolge-Gate)
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          FAIL=0
+          [ -n "$SSH_KEY" ] || { echo "❌ Secret SSH_KEY fehlt – Workflow 00 (SSH-Key generieren) zuerst ausführen"; FAIL=1; }
+          TARGET_UC=$(echo "${{ inputs.target }}" | tr '[:lower:]' '[:upper:]')
+          IP_SECRET="VPS_${TARGET_UC}_PUBLIC_IP"
+          [ -n "$VPS_PUBLIC_IP" ] && [ "$VPS_PUBLIC_IP" != "1.2.3.4" ] || { echo "❌ Secret ${IP_SECRET} fehlt oder ist Platzhalter (target: ${{ inputs.target }})"; FAIL=1; }
+          [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
+          [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
+          [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
+          [ -n "$TS_API_KEY" ] || { echo "❌ Secret TAILSCALE_API_KEY fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
+          [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
+          echo "✅ Vorbedingungen ok (SSH_KEY, Public-IP, OAuth, Tailnet, API-Key)"
 
       - name: SSH-Key vorbereiten
         run: |
@@ -64,8 +84,8 @@ jobs:
           TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
         run: |
-          TOKEN_RESP=$(curl -s --max-time 30 -d "client_id=$TS_CLIENT_ID" \
-            -d "client_secret=$TS_CLIENT_SECRET" \
+          TOKEN_RESP=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
             "https://api.tailscale.com/api/v2/oauth/token")
           ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r '.access_token')
           KEY_RESP=$(curl -s --max-time 30 -X POST \
@@ -200,6 +220,7 @@ jobs:
           else
             echo "SSH_OK=false" >> $GITHUB_ENV
             echo "❌ SSH via Tailscale fehlgeschlagen"
+            exit 1
           fi
 
       - name: "Verwaiste vps-<target>-old-* Nodes löschen (SSH-Erfolg = Beweis)"
