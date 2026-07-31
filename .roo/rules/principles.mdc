@@ -1,25 +1,42 @@
-# IaC4 Leitprinzipien (P1-P7)
+# IaC4 Leitprinzipien (P1-P10)
 
 Diese Regeln gelten für ALLE Änderungen in diesem Repository.
+**AGENTS.md ist die vollständige Referenz** – diese Datei ist die kompakte Spiegelung (P4: Regel-Spiegelung, gilt auch für Roo/Zoo Code).
 
 ## P1 – Evidenz
-Jede Behauptung braucht einen Beleg (web_search, web_fetch, Vendor-Docs).
+Jede Behauptung braucht einen Beleg (web_search, web_fetch, Vendor-Docs, IST-Zustand).
 Nicht: "Ich glaube", "Meiner Erfahrung nach" ohne Quelle.
+Referenzierte Ressourcen (ACL-Tags, Secrets, Hosts) vor Nutzung im IST-Zustand verifizieren.
+Funktions-Behauptungen mit Test-Kontext: von wo, mit welchem Key/User, gegen welche Quelle.
 
 ## P2 – Konzepte vor Code
 Jede Änderung beginnt mit Issue oder Kurzkonzept in docs/decisions/.
 
 ## P3 – Review mit 5W
 Jeder PR muss beantworten: Was, Warum, Welche Alternativen, Priorisierung, Fehlschlags-Folgen.
+Fehlschlag = Worst-Case konkret + Rollback-Weg (Pflicht bei Netzwerk-/SSH-/ACL-/Firewall-Änderungen).
+Kein "könnte" – Entscheidung oder mindestens Empfehlung mit Begründung.
 
 ## P4 – Living Docs
 Nach Code-Änderungen arc42-Doku und AGENTS.md prüfen/aktualisieren.
+Regel-Änderungen IMMER in AGENTS.md UND .roo/rules/ spiegeln (gilt auch für Roo/Zoo Code).
 
 ## P5 – Gap-Analysen
 Regelmäßig IST vs. SOLL in docs/arc42/.
 
 ## P6 – Nachhaltigkeit
 Keine Workarounds. Tech-Debt in docs/arc42/11 dokumentieren.
+Geteilte Ressourcen (ACL/Configs) integrativ ändern, nie ersetzen.
 
 ## P7 – Autonome Entwicklung
 Feature/BugFix → DEV-Deploy = autonom. MAIN/PROD = Harald.
+Nachweis (grüne CI + Tests) vor Genehmigungs-Anfrage. Approval = Auftrag: handeln, nicht erneut rückfragen.
+
+## P8 – Wiederholungsfehler-Stopp
+2× gleicher Fehler → STOPP: Ursache analysieren, Regel prüfen, Plan B aus Quelle/Referenz.
+
+## P9 – Kein Overclaiming
+"garantiert korrekt", "verifiziert", "fertig", "funktioniert" nur mit tatsächlichem Validierungsnachweis.
+
+## P10 – Regel-Loop
+Jede Korrektur / jeder Review-Befund (K1/K2) / jeder Vorfall → Regel-Lücke prüfen und im selben Sprint ergänzen.
