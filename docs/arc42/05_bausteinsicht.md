@@ -7,7 +7,7 @@ IaC4
 │   ├── vps-baseline      → SSH, Pakete, Swap
 │   ├── tailscale          → Tailscale-Join
 │   ├── docker             → Docker-Engine + Compose
-│   ├── traefik            → Reverse Proxy + LetsEncrypt
+│   ├── traefik            → Reverse Proxy (HTTP-only, Port 80, Tailscale-only)
 │   ├── qdrant             → Vektordatenbank (3072d, Cosine)
 │   ├── code-server        → Web-IDE
 │   └── openclaw-gateway   → OpenClaw-Install
