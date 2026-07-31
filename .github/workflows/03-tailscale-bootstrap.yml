@@ -139,6 +139,9 @@ jobs:
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
             -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
           echo "SSH-Verifikation via Tailscale-IP: ${TS_IP}"
+          sleep 15
+          echo "--- Peer-Status:"
+          tailscale status 2>&1 | grep -i "vps" || echo "(keine vps-Peers sichtbar)"
           echo "--- Tailscale-Ping (Netzwerk-Test):"
           tailscale ping -c 2 "${TS_IP}" 2>&1 || echo "❌ Tailscale-Ping fehlgeschlagen (ACL/Netz?)"
           echo "--- SSH-Test:"
