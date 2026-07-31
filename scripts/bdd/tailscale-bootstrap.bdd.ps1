@@ -11,6 +11,8 @@ param(
     [Parameter(Mandatory)][string]$ExpectedHostname # z.B. vps-dev
 )
 
+. "$PSScriptRoot/bdd-lib.ps1"
+
 Write-Host "Feature: Tailscale-Bootstrap (Workflow 02) – Target: $ExpectedHostname" -ForegroundColor Cyan
 
 # ── Szenario 1: SSH via Tailscale erreichbar ──
