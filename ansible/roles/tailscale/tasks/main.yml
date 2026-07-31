@@ -18,3 +18,10 @@
   register: ts_up_result
   changed_when: ts_up_result.rc == 0
   when: tailscale_auth_key is defined and tailscale_auth_key | length > 0
+
+- name: Tailscale-Up-Ergebnis anzeigen (rc/stdout, ohne Auth-Key)
+  ansible.builtin.debug:
+    msg:
+      - "rc: {{ ts_up_result.rc | default('n/a') }}"
+      - "stdout: {{ ts_up_result.stdout | default('') }}"
+  when: tailscale_auth_key is defined and tailscale_auth_key | length > 0
