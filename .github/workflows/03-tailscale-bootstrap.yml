@@ -88,30 +88,26 @@ jobs:
         run: |
           NODE="vps-${{ inputs.target }}"
           # SICHERHEIT: Nur OFFLINE-Nodes mit exakt dem Ziel-Hostnamen löschen.
-          # Online-Nodes (z.B. vps-prod während IaC3-Betrieb) werden NIE gelöscht.
-          DELETED=0
+          # Online-Nodes (z.B. vps-prod während IaC3-Betrieb) werden NIE gelöscht,
+          # sondern nur auf tag:ia3 re-tagged (ACL: tag:ci → tag:ia3).
           for DEVICE_ID in $(curl -s \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,online" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n and .online != true) | .id'); do
-            curl -s -X DELETE "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
-              -H "Authorization: Bearer ${TS_API_KEY}" > /dev/null
-            echo "✅ Verwaister Node ${NODE} (${DEVICE_ID}, offline) entfernt"
-            DELETED=1
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .id'); do
+            ONLINE=$(curl -s "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
+              -H "Authorization: Bearer ${TS_API_KEY}" | jq -r '.device.online // false')
+            if [ "$ONLINE" = "true" ]; then
+              curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
+                -H "Authorization: Bearer ${TS_API_KEY}" \
+                -H "Content-Type: application/json" \
+                -d '{"tags": ["tag:ia3"]}' > /dev/null
+              echo "✅ Online-Node ${NODE} (${DEVICE_ID}) auf tag:ia3 gesetzt (nicht gelöscht)"
+            else
+              curl -s -X DELETE "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
+                -H "Authorization: Bearer ${TS_API_KEY}" > /dev/null
+              echo "✅ Verwaister (offline) Node ${NODE} (${DEVICE_ID}) entfernt"
+            fi
           done
-          if [ "$DELETED" = "0" ]; then
-            echo "Keine verwaisten (offline) ${NODE}-Nodes vorhanden — weiter"
-          fi
-          # Online-Node: Tag auf tag:ia3 sicherstellen (ACL: tag:ci → tag:ia3)
-          ONLINE_ID=$(curl -s \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,online" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n and .online == true) | .id' | head -1)
-          if [ -n "$ONLINE_ID" ] && [ "$ONLINE_ID" != "null" ]; then
-            curl -s -X POST "https://api.tailscale.com/api/v2/device/${ONLINE_ID}/tags" \
-              -H "Authorization: Bearer ${TS_API_KEY}" \
-              -H "Content-Type: application/json" \
-              -d '{"tags": ["tag:ia3"]}' > /dev/null
-            echo "✅ Online-Node ${NODE} (${ONLINE_ID}) auf tag:ia3 gesetzt"
-          fi
+          echo "Cleanup ${NODE} abgeschlossen"
 
       - name: Inventory-Datei erstellen
         run: |
