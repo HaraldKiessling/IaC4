@@ -145,6 +145,11 @@ jobs:
           TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
+          echo "--- Node-Liste (Diagnose):"
+          curl -s \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,addresses" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | \
+            jq -c '.devices[] | {hostname, id, addresses}'
           DEVICE_ID=$(curl -s \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id" \
             -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .id' | head -1)
