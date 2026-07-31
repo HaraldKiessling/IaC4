@@ -185,6 +185,7 @@ jobs:
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
             -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
           echo "SSH-Verifikation via Tailscale-IP: ${TS_IP}"
+          echo "TS_IP=${TS_IP}" >> $GITHUB_ENV
           sleep 15
           echo "--- Peer-Status:"
           tailscale status 2>&1 | grep -i "vps" || echo "(keine vps-Peers sichtbar)"
@@ -211,10 +212,13 @@ jobs:
           # Alle verwaisten -old- Nodes (Anzeigename startet mit vps-<target>-old-)
           # sind damit sicher löschbar. NUR dieser Präfix, nie andere Maschinen!
           DELETED=0
+          # SICHERHEIT: Der Node, gegen den SSH gerade erfolgreich war (TS_IP),
+          # wird NIE gelöscht — auch wenn sein Anzeigename -old- enthält
+          # (früherer Rename-Bug konnte den aktiven Node so benennen!).
           for DEVICE_ID in $(curl -s \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,name" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg p "${NODE}-old-" \
-            '.devices[] | select(.name | startswith($p)) | .id'); do
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,name,addresses" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg p "${NODE}-old-" --arg ip "${TS_IP}" \
+            '.devices[] | select((.name | startswith($p)) and ((.addresses // []) | index($ip) == null)) | .id'); do
             curl -s -X DELETE "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
               -H "Authorization: Bearer ${TS_API_KEY}" > /dev/null
             echo "✅ Verwaister Node ${DEVICE_ID} (${NODE}-old-*) gelöscht"
