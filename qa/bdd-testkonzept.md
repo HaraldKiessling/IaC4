@@ -28,7 +28,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 
 | Phase | Workflow | Auf dem VPS deployt? | BDD-Feature |
 |---|---|---|---|
-| 2a+2b | `02-tailscale-bootstrap.yml` | ✅ ja (Tailscale-Join, tag:ia3, SSH-Restrict) | `tailscale-bootstrap.bdd.ps1` |
+| 2a+2b | `02-tailscale-bootstrap.yml` | ✅ ja (Tailscale-Join, tag:ia4, SSH-Restrict) | `tailscale-bootstrap.bdd.ps1` |
 | 1 | `03-baseline-deploy.yml` | ✅ ja (System-Baseline) | `system-baseline.bdd.ps1` |
 | 2c | Phase-3-Workflow (geplant) | ❌ nein (Docker/Traefik) | `docker-traefik.bdd.ps1` (geplant) |
 | 2d | Phase-3-Workflow (geplant) | ❌ nein (Qdrant, CodeServer) | `services.bdd.ps1` (geplant) |

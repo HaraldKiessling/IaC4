@@ -179,7 +179,7 @@ Reihenfolge mit Sicherheitsbegründung (Workflow 02, Phase 2a → 2b):
    - `tagOwners` enthält `tag:ia4` mit **tag-basiertem** Owner (`tag:ia4` oder `tag:ci` — nicht nur User/Group-Einträge, sonst schlägt die Key-Erzeugung im Ownership-Mode fehl)
    - `ssh`-Sektion enthält `src: [tag:ci] → dst: [tag:ia4]` für deploy-user/root/ubuntu
    - Fehlt etwas → koordinierte ACL-Ergänzung (Konsole, ia3+ia4+ha zusammen) — **kein Re-Tag ohne ACL-Nachweis** (Lockout-Klasse: SSH via Tailscale würde brechen).
-   - **Zwischenzustand:** Zwischen PR-Merge und Schritt 3 ist BDD-T3 **erwartungsgemäß rot** (vps-dev trägt noch tag:ia3) — erst nach dem Re-Tag wird T3 grün.
+   - **Zwischenzustand (2026-07-31 durchgeführt):** BDD-T3 war zwischen PR-Merge und Schritt 3 erwartungsgemäß rot (vps-dev noch tag:ia3); nach dem Re-Tag: BDD-Lauf 4 komplett grün inkl. T3 `tag:ia4`.
 2. **Client neu erzeugen:** Workflow 01 (force=true) mit dem temporären API-Key → Client mit `["tag:ci", "tag:ia4"]`, Secrets werden aktualisiert.
 3. **Bestands-VPS re-taggen:** `vps-dev` von tag:ia3 auf tag:ia4 (via API mit temporärem Key oder nach 01 via OAuth-Token) — erst NACH Schritt 1.
 4. **Verifikation:** BDD-Lauf 4 → T1 (SSH via TS bleibt), T2 (Public dicht bleibt), T3 (tag:ia4), T4 unverändert.
