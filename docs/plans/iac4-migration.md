@@ -79,7 +79,8 @@
 - [ ] Workflow 02 (Tailscale Bootstrap) auf `target=prod` ausführen
 - [ ] SSH-Zugriff via Tailscale auf PROD bestätigen
 - [ ] Baseline + Services + OpenClaw auf PROD deployen (Workflows 03, 04, 05)
-- [ ] Post-Deploy-Verifikation + Gap-Analyse PROD
+- [ ] Post-Deploy-Verifikation + Gap-Analyse PROD (inkl. BDD-Lauf 04 auf `target=prod`)
+- [ ] `VPS_PROD_PUBLIC_IP`-Secret setzen (vor Workflow 02 auf prod)
 - [ ] IaC3-Deployments auf PROD stoppen (IaC3 → Backup-Modus)
 
 ## ✅ Phase 9: IaC3 in den Backup-Modus
@@ -95,3 +96,15 @@
 - [ ] Ollama (niedrige Prio)
 - [ ] Monitoring/Alerting
 - [ ] Fehlende API-Secrets (Gemini, OpenRouter)
+
+## 🔲 Offene Punkte (Stand 2026-07-31)
+
+> Erfasst nach Abschluss der Regel-Härtung, BDD-Einführung, UFW-Fix, OAuth-only-Umbau und Option A (Tag-Design tag:ia4). Bewusst offen gelassen — kein Blocker für den laufenden Betrieb.
+
+- [ ] **arc42/11-Risiko-Einträge übernehmen:** R-001 (Lockout durch SSH-Restrict-Fehler, Schwere hoch/W'keit niedrig) und R-002 (Tag-Umbruch bricht TS-SSH) aus `docs/plans/iac4-firewall-konzept.md` §6/§9.5 in `docs/arc42/11_risiken_und_technische_schulden.md` übernehmen — R-001 mit der bestehenden K11-Zeile „SSH-Lockout bei Tailscale-Ausfall" **harmonisieren, nicht duplizieren**; nach Übernahme im Firewall-Konzept §8.3 abhaken
+- [ ] **Neuer Tailscale-API-Key für 01-/ACL-Runs:** Der temporäre Key ist ungültig (401 seit 2026-07-31 15:36). Workflow 01 (Terraform-Provider) und `ensure-acl-ia4.py` brauchen für echte Änderungen einen gültigen Key (Konsole → Generate API Key). Tagesbetrieb 02/03/04 ist davon unabhängig (OAuth-only).
+- [ ] **Fresh-Node-Join-Verifikation:** Der Exact-Match-Auth-Key `[tag:ci, tag:ia4]` (Option A) ist erst bei der nächsten Neuprovisionierung eines VPS empirisch testbar (Join direkt mit tag:ia4, kein Re-Tag nötig) — 02-Re-Run auf dem Bestands-VPS ist nach dem SSH-Restrict nicht mehr möglich (Re-Run-Design, Firewall-Konzept §5)
+- [ ] **PROD-Migration** (Migrationsplan Phase 8): weiterhin offen — VPS prod ist noch IaC3; nach erfolgreichem IaC4-dev-Betrieb migrieren (Details in Phase-8-Checkboxen unten)
+- [ ] **Firewall-Konzept-Verifikationsreste** (`docs/plans/iac4-firewall-konzept.md` §8, dort geführt und abzuhaken): §8.2 Lockout-Vorfall-Rekonstruktion (Logs 2026-07-31 früh), §8.4 Vendor-Empfehlung vs. CGNAT-Allow (Entscheidung dokumentieren), §8.5 Tailscale-Version + ts-input-41641-Regel verifizieren
+
+> **Abgrenzung:** Weitere Konzept-Reste (netfilter-mode) sind durch BDD-T4 beantwortet; die übrigen offenen Punkte des Firewall-Konzepts werden ausschließlich dort geführt — diese Liste ist der Sammelpunkt auf Migrationsplan-Ebene.
