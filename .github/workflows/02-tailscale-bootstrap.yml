@@ -145,6 +145,9 @@ jobs:
           TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
+          echo "--- tagOwners (ACL-Diagnose):"
+          curl -s "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/acl" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -c '.tagOwners // "KEINE tagOwners in ACL"'
           echo "--- Node-Liste (Diagnose):"
           curl -s \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,addresses" \
