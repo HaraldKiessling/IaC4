@@ -29,6 +29,8 @@
         proto: tcp
         direction: in
         delete: true
+      register: ufw_delete_generic
+      failed_when: ufw_delete_generic.failed and 'Could not delete rule' not in ufw_delete_generic.msg
 
     - name: SSH auf öffentlicher IP blockieren (nur public Interface)
       ansible.builtin.ufw:
