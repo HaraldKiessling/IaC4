@@ -56,11 +56,11 @@ jobs:
           TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
         run: |
-          TOKEN_RESP=$(curl -s -d "client_id=$TS_CLIENT_ID" \
+          TOKEN_RESP=$(curl -s --max-time 30 -d "client_id=$TS_CLIENT_ID" \
             -d "client_secret=$TS_CLIENT_SECRET" \
             "https://api.tailscale.com/api/v2/oauth/token")
           ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r '.access_token')
-          KEY_RESP=$(curl -s -X POST \
+          KEY_RESP=$(curl -s --max-time 30 -X POST \
             "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/keys" \
             -u "$ACCESS_TOKEN:" \
             -H "Content-Type: application/json" \
