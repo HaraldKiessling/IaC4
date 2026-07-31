@@ -154,6 +154,10 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{"tags": ["tag:ia3"]}')
             echo "Re-Tag ${NODE} (${DEVICE_ID}): $(echo "$RESP" | jq -c '{keys: keys, error: .error, message: .message}' 2>/dev/null || echo "$RESP")"
+            echo "--- Verifikation (GET /device):"
+            curl -s "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
+              -H "Authorization: Bearer ${TS_API_KEY}" | \
+              jq -c '{hostname: .device.hostname, tags: .device.tags, online: .device.online, addresses: .device.addresses}'
           else
             echo "❌ Kein Node ${NODE} nach Join gefunden"
             exit 1
