@@ -2,6 +2,8 @@
 
 > Alle Entscheidungen fachlich begründet (P1: Evidenz).
 > Sortiert nach Abhängigkeit (Grundlage → detail).
+>
+> **Neue Entscheidungen ab 2026-07-31** werden als Einzel-ADRs in `docs/adr/` geführt (ADR-0001..0010: Docker/Traefik/Ollama-Architektur). Diese Tabelle bleibt für Bestands-Entscheidungen ADR-001..014; Status-Übersicht: `docs/adr/README.md`.
 
 | # | Entscheidung | Abhängig von | Begründung | Datum |
 |---|-------------|-------------|------------|-------|

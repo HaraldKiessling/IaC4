@@ -2,7 +2,7 @@
 
 > **Übergeordnetes Ziel:** IaC3-Inhalte nach IaC4 migrieren, VPS DEV via Tailscale bereitstellen.
 > **Stand:** 2026-07-31 | **Methodik:** docs/workflows/methodology.md
-> **Aktuell:** Phase 3 (Ansible-Rollen befüllen) — Phase 2 abgeschlossen 2026-07-31 (Workflow 02+03 grün, SSH via Tailscale bestätigt).
+> **Aktuell:** Phase 3 (Ansible-Rollen befüllen) — Phase 2 abgeschlossen 2026-07-31 (Workflow 02+03 grün, SSH via Tailscale bestätigt). Design-Basis: ADR-0001..0010 (`docs/adr/`, 2026-07-31; Ollama-Priorisierung durch Harald).
 > **Workflow-Nummern = Ausführungsreihenfolge:** 02 (Bootstrap) → 03 (Baseline) → Services (docs/workflows/deploy-stages.md)
 
 ## ✅ Phase 0: Grundstruktur (erledigt)
@@ -41,6 +41,7 @@
 - [x] vps-baseline: Tasks implementiert (Baseline-Deploy grün, 2026-07-31)
 - [ ] docker: Tasks implementieren
 - [ ] traefik: Tasks implementieren
+- [ ] ollama: Tasks implementieren (Rolle NEU; Design: ADR-0007..0009)
 - [ ] qdrant: Collection-Setup (3072d/Cosine)
 - [ ] code-server: Tasks implementieren
 - [ ] openclaw-gateway: Tasks implementieren
@@ -48,6 +49,7 @@
 ## ⬜ Phase 4: Services deployen
 
 - [ ] Docker + Traefik auf DEV deployen
+- [ ] Ollama auf DEV deployen (erster Service, ADR-0007..0009)
 - [ ] Qdrant auf DEV deployen
 - [ ] Code-Server auf DEV deployen
 
@@ -93,7 +95,7 @@
 
 - [ ] Idempotenz-Kosmetik: Swap/Zeitzone-Tasks in vps-baseline ohne `changed_when` → Ansible meldet „changed“ trotz no-op (2026-07-31, LOW)
 - [ ] Qdrant-Volume-Backup
-- [ ] Ollama (niedrige Prio)
+- [x] ~~Ollama (niedrige Prio)~~ → **erledigt 2026-07-31:** Ollama wird migriert (erster Service, ADR-0007..0009)
 - [ ] Monitoring/Alerting
 - [ ] Fehlende API-Secrets (Gemini, OpenRouter)
 
