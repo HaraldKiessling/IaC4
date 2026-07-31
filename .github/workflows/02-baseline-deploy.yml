@@ -24,33 +24,47 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: VPS-IP basierend auf Target setzen
+      - name: Connect Runner to Tailnet (MagicDNS)
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
+
+      - name: Netmap-Sync abwarten
+        run: sleep 15
+
+      - name: VPS Tailscale-IP ermitteln (Tailscale-API)
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
-          if [ "${{ inputs.target }}" = "dev" ]; then
-            echo "VPS_PUBLIC_IP=${{ secrets.VPS_DEV_PUBLIC_IP }}" >> $GITHUB_ENV
-          elif [ "${{ inputs.target }}" = "prod" ]; then
-            echo "VPS_PUBLIC_IP=${{ secrets.VPS_PROD_PUBLIC_IP }}" >> $GITHUB_ENV
-          else
-            echo "❌ Unbekanntes Target: ${{ inputs.target }}"
+          NODE="vps-${{ inputs.target }}"
+          TS_IP=$(curl -s \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+          if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
+            echo "❌ Keine Tailscale-IP für Node ${NODE} gefunden"
             exit 1
           fi
-          echo "Target: ${{ inputs.target }} → IP: $VPS_PUBLIC_IP"
+          echo "VPS_TS_IP=${TS_IP}" >> $GITHUB_ENV
+          echo "✅ Node ${NODE} → ${TS_IP}"
 
       - name: SSH-Key vorbereiten
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$VPS_PUBLIC_IP" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "$VPS_TS_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Ansible installieren
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
 
 
-      - name: Inventory-Datei erstellen
+      - name: Inventory-Datei erstellen (MagicDNS)
         run: |
           echo "[vps]" > /tmp/inventory
-          echo "vps-${{ inputs.target }} ansible_host=$VPS_PUBLIC_IP ansible_user=$VPS_USER" >> /tmp/inventory
+          echo "vps-${{ inputs.target }} ansible_host=$VPS_TS_IP ansible_user=$VPS_USER" >> /tmp/inventory
           cat /tmp/inventory
 
       - name: Phase 1 – Ansible Baseline ausführen
@@ -59,7 +73,10 @@ jobs:
           ansible-playbook playbooks/01-baseline.yml \
             -i /tmp/inventory
 
-      - name: Post-Deploy Check
+      - name: Post-Deploy Check (SSH via Tailscale)
         run: |
           echo "✅ Phase 1 abgeschlossen"
-          echo "Nächster Schritt: 03-tailscale-bootstrap.yml ausführen"
+          echo "SSH-Verifikation via MagicDNS:"
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+              "$VPS_USER@$VPS_TS_IP" \
+              "hostname; tailscale ip -4" || echo "❌ SSH via Tailscale fehlgeschlagen"

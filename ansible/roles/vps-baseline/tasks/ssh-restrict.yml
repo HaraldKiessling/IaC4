@@ -7,6 +7,14 @@
   ansible.builtin.set_fact:
     public_iface: "{{ ansible_default_ipv4.interface }}"
 
+    - name: SSH aus Tailscale-Netz erlauben (CGNAT 100.64.0.0/10)
+      ansible.builtin.ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+        direction: in
+        from_ip: 100.64.0.0/10
+
 - name: SSH auf öffentlicher IP blockieren (nur public Interface)
   ansible.builtin.ufw:
     rule: deny
