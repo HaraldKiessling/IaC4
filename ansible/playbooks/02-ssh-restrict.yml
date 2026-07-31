@@ -23,14 +23,13 @@
         from_ip: 100.64.0.0/10
 
     - name: Generische SSH-Allow-Regel aus cloud-config entfernen (Bootstrap-Zugang)
+      # Idempotent: ufw-CLI deletet non-existent mit rc=0 (verifiziert gegen ufw 0.36.2-Quellcode)
       ansible.builtin.ufw:
         rule: allow
         port: '22'
         proto: tcp
         direction: in
         delete: true
-      register: ufw_delete_generic
-      failed_when: ufw_delete_generic.failed and 'Could not delete rule' not in ufw_delete_generic.msg
 
     - name: SSH auf öffentlicher IP blockieren (nur public Interface)
       ansible.builtin.ufw:

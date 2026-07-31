@@ -47,9 +47,9 @@ Then-True "Tailscale-IPv4 gemeldet (100.x)" ($r3.Output -match '^100\.\d+\.\d+\.
 # ── Szenario 4: Tailscale-Infrastruktur (netfilter + Tunnel) ──
 Write-Host "`nScenario: Tailscale-Infrastruktur – netfilter on, WireGuard-Tunnel, tailscale0" -ForegroundColor Yellow
 Given "Tailscale läuft auf dem VPS (02 Phase 2a)"
-$r4 = Invoke-SSH "tailscale debug prefs 2>/dev/null | grep -i netfiltermode; ss -lun 2>/dev/null | grep ':41641 '; ip link show tailscale0 >/dev/null 2>&1 && echo TS0_OK" $VpsUser $VpsIp $SshKeyPath
+$r4 = Invoke-SSH "sudo -n tailscale debug prefs 2>/dev/null | grep -i netfiltermode; ss -lun 2>/dev/null | grep ':41641 '; ip link show tailscale0 >/dev/null 2>&1 && echo TS0_OK" $VpsUser $VpsIp $SshKeyPath
 When "netfilter-mode, WireGuard-Port und tailscale0-Interface abgefragt werden"
-Then-True "netfilter-mode ist on (ts-input aktiv, TS-SSH vor UFW akzeptiert)" ($r4.Output -match 'netfiltermode[^}]*"on"') $r4.Output
+Then-True "netfilter-mode ist on (NetfilterMode=2, ts-input aktiv)" ($r4.Output -match 'netfiltermode[^}]*: 2') $r4.Output
 Then-True "WireGuard lauscht auf UDP 41641 (Tunnel-Ebene)" ($r4.Output -match '41641') $r4.Output
 Then-True "tailscale0-Interface existiert (Entkapselungs-Ebene)" ($r4.Output -match 'TS0_OK') $r4.Output
 
