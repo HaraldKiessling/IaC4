@@ -28,12 +28,27 @@ URL = f"{API}/{TAILNET}/acl"
 
 
 def api(method, data=None):
-    req = urllib.request.Request(URL, method=method, headers=HEADERS, data=data)
+    headers = dict(HEADERS)
+    if data is not None:
+        headers["Content-Type"] = "application/hujson"
+    req = urllib.request.Request(URL, method=method, headers=headers, data=data)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return resp.status, resp.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", errors="replace")
+    except urllib.error.URLError as e:
+        return -1, f"Transportfehler: {e.reason}"
+
+
+def rollback():
+    with open("/tmp/acl-backup.json", encoding="utf-8") as f:
+        backup = f.read()
+    code, resp = api("POST", backup.encode("utf-8"))
+    if code == 200:
+        print("✅ Rollback ok (HTTP 200)")
+    else:
+        print(f"❌ Rollback fehlgeschlagen (HTTP {code}): {resp[:200]}")
 
 
 def insert_once(pol, anchor, addition, label):
@@ -50,9 +65,17 @@ def main():
         print(f"❌ GET /acl: HTTP {code}\n{pol[:300]}")
         sys.exit(1)
 
-    if '"tag:ia4"' in pol:
-        print("✅ IaC4-Regeln (tag:ia4) bereits enthalten – no-op (idempotent)")
+    guard_markers = [
+        '"tag:ia4": ["autogroup:admin"]',
+        '"dst":    ["tag:ia4:*"],',
+        '"src":    ["tag:ia4"],',
+        '"dst":    ["tag:ia4"],',
+    ]
+    if all(m in pol for m in guard_markers):
+        print("✅ IaC4-Regeln (tag:ia4) vollständig enthalten – no-op (idempotent)")
         return 0
+    if any(m in pol for m in guard_markers):
+        print("⚠️ Teilzustand: einige ia4-Marker vorhanden – additive Vervollständigung")
 
     # Backup
     with open("/tmp/acl-backup.json", "w", encoding="utf-8") as f:
@@ -105,15 +128,15 @@ def main():
     code, resp = api("POST", pol.encode("utf-8"))
     if code != 200:
         print(f"❌ POST /acl: HTTP {code}\n{resp[:300]}")
-        print("↩️ Rollback: POST des Backups…")
-        api("POST", open("/tmp/acl-backup.json", encoding="utf-8").read().encode("utf-8"))
+        print("↩️ Rollback…")
+        rollback()
         sys.exit(1)
 
     # Verifikation
     code, verify = api("GET")
     if code != 200:
         print(f"❌ GET (Verify): HTTP {code} – Rollback nötig")
-        api("POST", open("/tmp/acl-backup.json", encoding="utf-8").read().encode("utf-8"))
+        rollback()
         sys.exit(1)
     with open("/tmp/acl-backup.json", encoding="utf-8") as f:
         backup = f.read()
@@ -136,8 +159,8 @@ def main():
     for name, result in checks.items():
         print(("✅" if result else "❌") + f" {name}")
     if not ok:
-        print("↩️ Rollback: POST des Backups…")
-        api("POST", open("/tmp/acl-backup.json", encoding="utf-8").read().encode("utf-8"))
+        print("↩️ Rollback…")
+        rollback()
         sys.exit(1)
     print("🎉 ACL-Erweiterung bestanden (additiv, verifiziert)")
     return 0

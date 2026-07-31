@@ -5,3 +5,4 @@
 - Nie `overwrite_existing_content = true` ohne vollständige ACL mit ia3+ia4+ha
 - OAuth-Client verwendet `tag:ci` + `tag:ia4` (IaC3-Muster: 1 Client, beide Tags – Tag-Ownership)
 - IaC4-VPS-Ziel-Tag ist `tag:ia4` (Original-ACL-Design); Auth-Key joint frische VPS direkt mit tag:ia4 (kein Re-Tag-Workaround); Re-Tag-Step = Korrektur für Bestands-Nodes
+- Additive IaC4-ACL-Erweiterung (tag:ia4) ausschließlich via `scripts/ensure-acl-ia4.py` (Workflow 01, idempotent, Backup+Rollback) – nie manuell/Terraform überschreiben
