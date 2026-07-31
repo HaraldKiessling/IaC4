@@ -95,29 +95,20 @@ jobs:
             -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .id'); do
             ONLINE=$(curl -s "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
               -H "Authorization: Bearer ${TS_API_KEY}" | jq -r '.device.online // false')
-            LAST_SEEN=$(curl -s "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
-              -H "Authorization: Bearer ${TS_API_KEY}" | jq -r '.device.lastSeen // ""')
-            AGE_SEC=0
-            if [ -n "$LAST_SEEN" ] && [ "$LAST_SEEN" != "null" ]; then
-              AGE_SEC=$(( $(date +%s) - $(date -d "$LAST_SEEN" +%s) ))
-            fi
             if [ "$ONLINE" = "true" ]; then
               curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
                 -H "Authorization: Bearer ${TS_API_KEY}" \
                 -H "Content-Type: application/json" \
                 -d '{"tags": ["tag:ia3"]}' > /dev/null
-              echo "✅ Online-Node ${NODE} (${DEVICE_ID}) auf tag:ia3 gesetzt (nicht gelöscht)"
-            elif [ "$AGE_SEC" -lt 86400 ]; then
-              # Node ist nur kurz offline (Reboot/Netz) — NICHT löschen, nur re-taggen
-              curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
+              echo "✅ Online-Node ${NODE} (${DEVICE_ID}) auf tag:ia3 gesetzt (unverändert)"
+            else
+              # SICHERHEIT: NIE löschen — nur umbenennen (Node bleibt im Tailnet erhalten)
+              NEW_NAME="${NODE}-old-$(date +%s)"
+              curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/name" \
                 -H "Authorization: Bearer ${TS_API_KEY}" \
                 -H "Content-Type: application/json" \
-                -d '{"tags": ["tag:ia3"]}' > /dev/null
-              echo "⚠️ Node ${NODE} (${DEVICE_ID}) offline seit ${AGE_SEC}s (<24h) — NICHT gelöscht, auf tag:ia3 gesetzt"
-            else
-              curl -s -X DELETE "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
-                -H "Authorization: Bearer ${TS_API_KEY}" > /dev/null
-              echo "✅ Verwaister Node ${NODE} (${DEVICE_ID}, offline >24h) entfernt"
+                -d "{\"name\": \"${NEW_NAME}\"}" > /dev/null
+              echo "✅ Offline-Node ${NODE} (${DEVICE_ID}) → ${NEW_NAME} umbenannt (nicht gelöscht)"
             fi
           done
           echo "Cleanup ${NODE} abgeschlossen"
