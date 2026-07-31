@@ -189,7 +189,31 @@ Reihenfolge mit Sicherheitsbegründung (Workflow 02, Phase 2a → 2b):
 
 R-002: Tag-Umbruch bricht TS-SSH (wenn ACL ia4 nicht kennt) — Schwere hoch (Lockout-Klasse), W'keit niedrig (Original-ACL hatte ia4; Schritt 1 verifiziert vor dem Umbau). Monitoring: BDD-T1/T3.
 
-## 10. Quellen
+## 10. ACL-Policy-Erweiterung (idempotent, Workflow 01)
+
+### 10.1 Problem
+Die Tailscale-ACL ist **geteilt** (IaC3 `tag:ia3` + IaC4 `tag:ia4` + Home-Assistant `tag:ha`), im HUPL-Format mit Kommentaren, und darf **nie überschrieben** werden (Regel `tailscale-acl.mdc`; historisch: `terraform/acl.tf` mit `overwrite_existing_content = true` wurde deshalb entfernt). IaC4 braucht aber die ia4-Regeln (tagOwners + acls + ssh).
+
+### 10.2 Lösung: `scripts/ensure-acl-ia4.py` (in Workflow 01, nach Terraform Apply)
+Idempotenter, **rein additiver** Ablauf:
+1. `GET /acl` → aktuelle Policy (HUPL)
+2. **Idempotenz-Guard:** enthält die Policy bereits `tag:ia4` → no-op (exit 0)
+3. **Backup** der aktuellen Policy (`/tmp/acl-backup.json`, Log-Hinweis)
+4. **Additive Einfügung** an exakten Ankern (tagOwners-Zeile nach ia3, acl-Blöcke nach dem ci→ia3-Block, ssh-Eintrag nach dem ia3-Eintrag) — Anker müssen exakt 1× existieren, sonst Abbruch OHNE Änderung
+5. `POST /acl` (Content-Type hujson)
+6. **Verifikation:** ia4-Einträge vorhanden (4 Checks) + **ia3/ha-Bestand unverändert** (Zähler) + **Additivitäts-Diff** (keine bestehende Zeile entfernt/geändert — normalisierter Zeilenvergleich)
+7. **Auto-Rollback** bei jedem Fehler: POST des Backups + exit 1
+
+### 10.3 Sicherheits-Nachweise ("100 %")
+- **Rein additiv:** Der normalisierte Diff Backup→Neu enthält nur `>`-Zeilen (bewiesen bei der manuellen Erst-Erweiterung 2026-07-31: POST 200, Verifikation bestanden, Backup `/tmp/acl-backup-20260731.hujson`)
+- **Idempotent:** Wiederholte Läufe sind no-op (Guard); der erste Workflow-Lauf nach der manuellen Erweiterung ist der Idempotenz-Test
+- **Fail-safe:** Mehrdeutige Anker → Abbruch vor Änderung; Verifikationsfehler → Rollback
+- **Koordination:** ia3/ha-Blöcke werden nie angefasst (Zähler-Checks)
+
+### 10.4 Abgrenzung
+Kein Terraform-ACL-Management (kein `overwrite_existing_content`); das Skript ist ein eigenständiger, transparenter Schritt mit dokumentiertem Backup-/Rollback-Pfad.
+
+## 11. Quellen
 
 - Tailscale: [netfilter modes](https://tailscale.com/docs/reference/netfilter-modes) (on/nodivert/off, ts-input-Jumps)
 - Tailscale: [Secure Ubuntu Server with UFW](https://tailscale.com/docs/how-to/secure-ubuntu-server-with-ufw)

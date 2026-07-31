@@ -114,6 +114,14 @@ jobs:
         if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
         run: terraform apply -auto-approve plan_output
 
+      - name: ACL – IaC4-Regeln idempotent sicherstellen (rein additiv, Backup+Rollback)
+        if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          python3 scripts/ensure-acl-ia4.py
+
       - name: OAuth-Secrets in GH speichern
         if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
         env:
