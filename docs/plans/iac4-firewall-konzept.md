@@ -161,20 +161,25 @@ Reihenfolge mit Sicherheitsbegründung (Workflow 02, Phase 2a → 2b):
 1. `tag:ia3` auf dem IaC4-VPS ist ein **Fremd-Tag aus dem IaC3-Projekt** — das designierte IaC4-Tag ist `tag:ia4` (Original-ACL).
 2. Der Re-Tag-Workaround entstand, weil die **Tag-Ownership** (ACL) bestimmt, welche Tags ein Client vergeben darf: Ein tag:ci-Client kann nur tag:ci-Auth-Keys erzeugen → der VPS startet falsch getaggt und muss umgetaggt werden (funktioniert nur, weil die geteilte ACL es implizit erlaubt — empirisch HTTP 200, nicht dokumentiert).
 3. IaC3-Praxis bestätigt: **Ein Client mit beiden Tags** (nicht zwei Clients) — damit kann der Auth-Key das Ziel-Tag direkt setzen, kein Workaround.
+4. **Exact-Match vs. Ownership-Mode (Tailscale-Doku):** Ein Auth-Key, dessen Tags ein **Subset** der Client-Tags sind (z. B. nur `["tag:ia4"]` bei Client `[tag:ci, tag:ia4]`), erfordert **tag-basierte Ownership** in der ACL (`tagOwners: tag:ia4 → [tag:ci]` oder Selbst-Ownership). IaC3 nutzt **Exact-Match** (Key-Tags = alle Client-Tags `["tag:ia3","tag:ci"]`) — das funktioniert ohne Ownership-Abhängigkeit. Option A übernimmt Exact-Match: Key-Tags `["tag:ci", "tag:ia4"]`.
 
 ### 9.3 Ziel-Zustand (dieser PR)
 
 | Element | Vorher | Nachher (Option A) |
 |---|---|---|
 | OAuth-Client-Tags | `["tag:ci"]` | `["tag:ci", "tag:ia4"]` |
-| Auth-Key-Tags (02) | `["tag:ci"]` | `["tag:ia4"]` → VPS joint direkt |
+| Auth-Key-Tags (02) | `["tag:ci"]` | `["tag:ci", "tag:ia4"]` (Exact-Match, IaC3-Muster) → VPS joint direkt mit beiden Tags |
 | Re-Tag-Step (02) | Workaround auf ia3 | Korrektur auf ia4 (frische Nodes: no-op) |
 | VPS-Dauertag | `tag:ia3` | `tag:ia4` |
 | BDD-T3 | erwartet tag:ia3 | erwartet tag:ia4 |
 
 ### 9.4 Schrittfolge ohne Lockout/Breakage (operativ, NACH diesem PR)
 
-1. **ACL-Verifikation VOR allem:** `GET /api/v2/tailnet/{t}/acl` (mit temporärem API-Key) → enthält sie `tag:ia4`-Regeln (tagOwners + ssh ci→ia4)? Fehlt etwas → koordinierte ACL-Ergänzung (Konsole, ia3+ia4+ha zusammen) — **kein Re-Tag ohne ACL-Nachweis** (Lockout-Klasse: SSH via Tailscale würde brechen).
+1. **ACL-Verifikation VOR allem** (Checkliste, `GET /api/v2/tailnet/{t}/acl` mit temporärem API-Key):
+   - `tagOwners` enthält `tag:ia4` mit **tag-basiertem** Owner (`tag:ia4` oder `tag:ci` — nicht nur User/Group-Einträge, sonst schlägt die Key-Erzeugung im Ownership-Mode fehl)
+   - `ssh`-Sektion enthält `src: [tag:ci] → dst: [tag:ia4]` für deploy-user/root/ubuntu
+   - Fehlt etwas → koordinierte ACL-Ergänzung (Konsole, ia3+ia4+ha zusammen) — **kein Re-Tag ohne ACL-Nachweis** (Lockout-Klasse: SSH via Tailscale würde brechen).
+   - **Zwischenzustand:** Zwischen PR-Merge und Schritt 3 ist BDD-T3 **erwartungsgemäß rot** (vps-dev trägt noch tag:ia3) — erst nach dem Re-Tag wird T3 grün.
 2. **Client neu erzeugen:** Workflow 01 (force=true) mit dem temporären API-Key → Client mit `["tag:ci", "tag:ia4"]`, Secrets werden aktualisiert.
 3. **Bestands-VPS re-taggen:** `vps-dev` von tag:ia3 auf tag:ia4 (via API mit temporärem Key oder nach 01 via OAuth-Token) — erst NACH Schritt 1.
 4. **Verifikation:** BDD-Lauf 4 → T1 (SSH via TS bleibt), T2 (Public dicht bleibt), T3 (tag:ia4), T4 unverändert.

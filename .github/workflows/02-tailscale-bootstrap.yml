@@ -99,7 +99,7 @@ jobs:
                     "reusable": false,
                     "ephemeral": false,
                     "preauthorized": true,
-          "tags": ["tag:ia4"]
+          "tags": ["tag:ci", "tag:ia4"]
                   }
                 }
               }
