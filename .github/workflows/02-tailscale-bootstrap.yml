@@ -93,7 +93,7 @@ jobs:
           echo "auth_key=$AUTH_KEY" >> $GITHUB_OUTPUT
           echo "::add-mask::$AUTH_KEY"
 
-      - name: Alten Node mit Ziel-Hostname entfernen (Tailscale-API)
+      - name: Alten Node mit Ziel-Hostname umbenennen (Cleanup, Tailscale-API)
         continue-on-error: true
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}

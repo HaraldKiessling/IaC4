@@ -39,10 +39,13 @@ Aktuell gesetzt:
 
 | Secret | Wert | Nutzung |
 |--------|------|---------|
+| `SSH_KEY` | 🔑 (private Key) | SSH-Zugriff (Workflows 02, 03) |
+| `VPS_USER` | `deploy-user` | SSH-User (Workflows 02, 03) |
 | `VPS_DEV_PUBLIC_IP` | (muss gesetzt werden) | Workflow 02 (Bootstrap) – Phasen 2a/2b |
-| `VPS_DEV_HOST` | `vps-dev.tailcfea8a.ts.net` | ⚠️ nicht mehr genutzt – IP-Resolution via Tailscale-API (Workflow 03) |
-| `SSH_KEY` | 🔑 (private Key) | SSH-Zugriff |
-| `VPS_USER` | `deploy-user` | SSH-User |
+| `VPS_PROD_PUBLIC_IP` | (PROD) | Workflow 02, target=prod |
+| `TAILSCALE_OAUTH_CLIENT_ID` / `TAILSCALE_OAUTH_CLIENT_SECRET` | OAuth-Client (tag:ci) | Runner-Join + Auth-Key-Erzeugung (02, 03) |
+| `TAILSCALE_TAILNET` | z.B. `tailcfea8a.ts.net` | Tailnet (02, 03) |
+| `TAILSCALE_API_KEY` | API-Token | Tailscale-API: IP-Resolution, Cleanup/Rename, Re-Tag (02, 03) |
 
 Nach Phase 2b läuft alles via Tailscale. Workflow 03 löst die VPS-IP per **Tailscale-API**
 aus dem Node-Hostnamen (`vps-dev`) auf – ein `VPS_DEV_HOST`-Secret ist dafür nicht nötig.

@@ -23,7 +23,7 @@
 - [x] OAuth-Client tag:ia3 hinzugefügt (für SSH-ACL-Kompatibilität)
 - [x] Workflow 01 (Tailscale Terraform / rotate OAuth) erstellt (force=false)
 
-## 🟡 Phase 2: VPS DEV via Tailscale (aktuell)
+## ✅ Phase 2: VPS DEV via Tailscale (erledigt)
 
 - [x] Cloud-config korrigiert (NOPASSWD:***)
 - [x] VPS DEV installiert (deploy-user + SSH-Key)
@@ -77,7 +77,7 @@
 - [ ] VPS PROD mit IaC4-Cloud-Config neu installieren (deploy-user + IaC4-SSH-Key)
 - [ ] Workflow 02 (Tailscale Bootstrap) auf `target=prod` ausführen
 - [ ] SSH-Zugriff via Tailscale auf PROD bestätigen
-- [ ] Baseline + Services + OpenClaw auf PROD deployen (Workflows 02, 04, 05)
+- [ ] Baseline + Services + OpenClaw auf PROD deployen (Workflows 03, 04, 05)
 - [ ] Post-Deploy-Verifikation + Gap-Analyse PROD
 - [ ] IaC3-Deployments auf PROD stoppen (IaC3 → Backup-Modus)
 
