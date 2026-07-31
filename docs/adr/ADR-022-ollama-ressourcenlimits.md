@@ -1,6 +1,6 @@
 # ADR-022: Ollama-Ressourcenlimits (RAM/CPU/Keep-Alive)
 
-- **Status:** Vorgeschlagen (Proposed) – **offene Frage an Harald: VPS-Spec!**
+- **Status:** Vorgeschlagen (Proposed) – VPS-Spec **bestätigt** (Harald, 2026-07-31)
 - **Datum:** 2026-07-31
 - **Kontext:** Ollama wird erster Service (Harald-Entscheidung 2026-07-31). IaC3 (RFC 0016 v0.3) setzte Limits 2 CPU / 4G RAM, Reservations 1 CPU / 2G, `OLLAMA_NUM_PARALLEL=2`, `OLLAMA_KEEP_ALIVE=24h` (Zoo-Indexing-Fix: Modell bleibt geladen, erster Embedding-Request <1s statt 15-30s). Die exakte DEV-VPS-Spec ist in IaC3/IaC4 nicht dokumentiert (nur Hinweis: Swap 2G in vps-baseline → kleinerer VPS). Annahme aus RFC 0016: 4-8 GB RAM.
 
@@ -27,7 +27,10 @@ Welche Docker-Ressourcenlimits bekommt Ollama in IaC4?
 - Docker-Doku: `deploy.resources` als Standard-Limit-Mechanismus für Compose
 
 ## Empfehlung
-**Option A** – Werte aus IaC3 übernehmen (2C/4G, 1C/2G, PARALLEL=2, KEEP_ALIVE=24h). **Voraussetzung: Harald bestätigt VPS-Spec (RAM ≥ 4 GB).** Bei 4-GB-VPS: Reservations auf 1G senken.
+**Option A** – Werte aus IaC3 übernehmen (2C/4G, 1C/2G, PARALLEL=2, KEEP_ALIVE=24h).
+
+**VPS-Spec (Harald, 2026-07-31):** VPS 6-8-240 → **6 vCore / 8 GB RAM / 240 GB NVMe SSD**.
+Bewertung: 8 GB RAM sind für 2C/4G-Limits + Reservations 1C/2G komfortabel (Rest ~6 GB für Host, Traefik, Qdrant, spätere Services + OpenClaw nativ). `KEEP_ALIVE=24h` unkritisch (Modell ~274 MB). Spielraum für späteres Chat-Modell (7-8B quantisiert ~4-6 GB): Limit dann auf 6G anheben (ADR-Update).
 
 ## Worst-Case / Rollback
 - **Worst-Case:** VPS-RAM zu knapp → OOM-Kill des Ollama-Containers oder anderer Container (Memory-Pressure).

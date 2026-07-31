@@ -56,7 +56,7 @@
 
 ## ⬜ Phase 5: OpenClaw Minimal
 
-- [ ] OpenClaw Gateway auf DEV deployen
+- [ ] OpenClaw Gateway auf DEV deployen (nativ/systemd, Design: ADR-025)
 - [ ] Memory-Backend (Qdrant) konfigurieren
 - [ ] WebSearch-Tool einrichten
 

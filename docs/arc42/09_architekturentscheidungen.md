@@ -31,6 +31,7 @@
 | ADR-022 | **Ollama-Limits: 2C/4G, KEEP_ALIVE=24h** | ADR-021 | Schutz der anderen Services; *VPS-Spec-Frage offen*. Detail: [docs/adr/ADR-022](adr/ADR-022-ollama-ressourcenlimits.md) | 2026-07-31 |
 | ADR-023 | **Embedding: nomic-embed-text (768d, nur ZooCode)** | ADR-021 | CPU-tauglich, bewährt; Qdrant bleibt 3072d (ADR-011). Detail: [docs/adr/ADR-023](adr/ADR-023-ollama-embedding-modell.md) | 2026-07-31 |
 | ADR-024 | **Ein Service-Deploy-Workflow (Playbook-Selektion)** | ADR-014 | Ein Wartungspunkt; Migration zu Reusable ab 5 Playbooks. Detail: [docs/adr/ADR-024](adr/ADR-024-service-deploy-workflow.md) | 2026-07-31 |
+| ADR-025 | **OpenClaw nativ + systemd (kein Container)** | ADR-004, ADR-015 | OpenClaw-Doku: Gateway host-basiert, Docker nur Sandbox; systemd-Hardening. Detail: [docs/adr/ADR-025](adr/ADR-025-openclaw-deployment.md) | 2026-07-31 |
 
 ## Abhängigkeitsgraph (vereinfacht)
 ```

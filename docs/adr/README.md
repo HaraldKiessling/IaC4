@@ -14,11 +14,12 @@
 | ADR-019 | [019](ADR-019-traefik-dashboard.md) | Traefik-Dashboard | Vorgeschlagen | Sicherer Router auf api@internal + Auth |
 | ADR-020 | [020](ADR-020-traefik-logging.md) | Traefik-Logging | Vorgeschlagen | accessLog JSON→stdout + json-file-Rotation |
 | ADR-021 | [021](ADR-021-ollama-exposition.md) | Ollama-Exposition | Vorgeschlagen | Host-Port 11434 + UFW-CGNAT |
-| ADR-022 | [022](ADR-022-ollama-ressourcenlimits.md) | Ollama-Limits | Vorgeschlagen* | 2C/4G; *VPS-Spec-Frage an Harald offen |
+| ADR-022 | [022](ADR-022-ollama-ressourcenlimits.md) | Ollama-Limits | Vorgeschlagen | 2C/4G; VPS-Spec bestätigt (6 vCore/8 GB/240 GB) |
 | ADR-023 | [023](ADR-023-ollama-embedding-modell.md) | Embedding-Modell | Vorgeschlagen | nomic-embed-text (nur ZooCode; Qdrant bleibt 3072d) |
 | ADR-024 | [024](ADR-024-service-deploy-workflow.md) | Deploy-Workflow | Vorgeschlagen | Ein Workflow + Playbook-Selektion |
+| ADR-025 | [025](ADR-025-openclaw-deployment.md) | OpenClaw-Deployment | Vorgeschlagen | Nativ/systemd (Docker nur Sandbox) |
 
 **Offene Punkte vor Akzeptanz:**
-1. Harald: VPS-Spec bestätigen (ADR-022)
+1. ~~Harald: VPS-Spec bestätigen (ADR-022)~~ → **erledigt 2026-07-31** (6 vCore / 8 GB / 240 GB NVMe)
 2. Harald: HTTPS-Certificates in Tailscale-Admin-Konsole aktivieren (ADR-018, Blocker Phase 4)
 3. Harald: Entscheidung je ADR (Akzeptieren/Ändern)
