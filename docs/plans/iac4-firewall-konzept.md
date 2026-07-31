@@ -108,9 +108,9 @@ Quellen: [netfilter-modes](https://tailscale.com/docs/reference/netfilter-modes)
 | R4 | `ufw allow from 100.64.0.0/10 to any port 22 proto tcp` | TS-SSH: Defense-in-Depth für netfilter nodivert/off; bei `on` redundant | `[V]` netfilter-modes |
 | R5 | **keine** Regel auf UDP 41641 | WireGuard-Tunnel doppelt abgedeckt: conntrack ESTABLISHED (ufw-before-input) **und** Tailscale-eigene ts-input-ACCEPT für 41641 (AddMagicsockPortRule); DERP = ausgehende TCP | `[V]` §2.1/3.2/3.3 |
 | R6 | **keine** Regel auf `tailscale0` | Entkapselter Verkehr (ts-input akzeptiert bei netfilter=on) | `[V]` §3.3 |
-| R7 | `ufw allow from 100.64.0.0/10 to any port 80 proto tcp` | Traefik HTTP (Tailscale-only, ADR-0004) | `[A]` ADR-0004 (Design, Umsetzung Phase 3/4) |
-| R8 | `ufw allow from 100.64.0.0/10 to any port 8080 proto tcp` | Traefik-Dashboard (Tailscale-only, ADR-0005) | `[A]` ADR-0005 (Design, Umsetzung Phase 3/4) |
-| R9 | `ufw allow from 100.64.0.0/10 to any port 11434 proto tcp` | Ollama-API (Tailscale-only, ADR-0007) | `[A]` ADR-0007 (Design, Umsetzung Phase 3/4) |
+| R7 | `ufw allow from 100.64.0.0/10 to any port 80 proto tcp` | Traefik HTTP (Tailscale-only, ADR-018) | `[A]` ADR-018 (Design, Umsetzung Phase 3/4) |
+| R8 | `ufw allow from 100.64.0.0/10 to any port 8080 proto tcp` | Traefik-Dashboard (Tailscale-only, ADR-019) | `[A]` ADR-019 (Design, Umsetzung Phase 3/4) |
+| R9 | `ufw allow from 100.64.0.0/10 to any port 11434 proto tcp` | Ollama-API (Tailscale-only, ADR-021) | `[A]` ADR-021 (Design, Umsetzung Phase 3/4) |
 
 ## 5. Schritte zum Ziel – ohne Lockout
 

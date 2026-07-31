@@ -1,4 +1,4 @@
-# ADR-0001: Docker-Engine-Installation (eigene Tasks vs. Community-Rolle)
+# ADR-015: Docker-Engine-Installation (eigene Tasks vs. Community-Rolle)
 
 - **Status:** Vorgeschlagen (Proposed)
 - **Datum:** 2026-07-31
@@ -27,17 +27,17 @@ Wie installiert IaC4 die Docker Engine (inkl. Compose-Plugin) auf dem VPS?
 - apt_key-Deprecation: Ansible-Doku (ansible.builtin.apt_key deprecated)
 
 ## Empfehlung
-**Option B** – eigene Tasks mit offiziellem Docker-Repo. Passt zu IaC4 (schlank, transparent, reproduzierbar), keine Fremd-Collection, Docker-Doku verbindlich. Bestehende IST-Tasks (apt_key/apt_repository, docker-Gruppen-Task) werden bei Phase-3-Umsetzung ersetzt (siehe ADR-0002).
+**Option B** – eigene Tasks mit offiziellem Docker-Repo. Passt zu IaC4 (schlank, transparent, reproduzierbar), keine Fremd-Collection, Docker-Doku verbindlich. Bestehende IST-Tasks (apt_key/apt_repository, docker-Gruppen-Task) werden bei Phase-3-Umsetzung ersetzt (siehe ADR-016).
 
 ## Worst-Case / Rollback
 - **Worst-Case:** Docker-Repo-Key/URL nicht erreichbar oder Paket-`state: present` schlägt fehl → Playbook bricht ab, VPS bleibt im letzten konsistenten Zustand (Ansible-Idempotenz).
 - **Rollback:** Fehlerhafter Task-Block → alten Stand aus Git wiederherstellen und erneut deployen; Docker-Pakete sind apt-verwaltet, kein Datenverlust (Volumes/Netzwerk unberührt).
-- **Gegenmaßnahme:** Playbook-Lauf in Workflow 04 (ADR-0010) mit sichtbarem Log; BDD-Check `docker --version` nach Deploy.
+- **Gegenmaßnahme:** Playbook-Lauf in Workflow 04 (ADR-024) mit sichtbarem Log; BDD-Check `docker --version` nach Deploy.
 
 ## Konsequenzen
 - Ein Task-Block in `roles/docker/tasks/main.yml` + Variablen in `defaults/main.yml`
 - Kein `ansible-galaxy`-Requirement für Docker
-- Versions-Pinning der Pakete optional über `group_vars` (vgl. ADR-0003)
+- Versions-Pinning der Pakete optional über `group_vars` (vgl. ADR-017)
 
 ## Referenzen
 - https://docs.docker.com/engine/install/ubuntu/

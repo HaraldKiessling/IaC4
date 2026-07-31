@@ -1,4 +1,4 @@
-# ADR-0010: Service-Deployment-Workflow (ein Workflow mit Selektion vs. pro Service)
+# ADR-024: Service-Deployment-Workflow (ein Workflow mit Selektion vs. pro Service)
 
 - **Status:** Vorgeschlagen (Proposed)
 - **Datum:** 2026-07-31
@@ -31,7 +31,7 @@ Wie strukturiert IaC4 den Service-Deploy-Workflow?
 
 ## Worst-Case / Rollback
 - **Worst-Case 1:** Fehlerhafter Playbook-Stand deployed auf DEV (z.B. Traefik-Config kaputt) → Service unerreichbar.
-  - **Rollback:** letzten bekannten guten Commit identifizieren (`git log`), per Hotfix-PR zurücksetzen, Workflow erneut ausführen; Container-Rollback via Image-Tag (ADR-0003).
+  - **Rollback:** letzten bekannten guten Commit identifizieren (`git log`), per Hotfix-PR zurücksetzen, Workflow erneut ausführen; Container-Rollback via Image-Tag (ADR-017).
 - **Worst-Case 2:** Workflow-Selektion deployt falsches Playbook (Operator-Fehler).
   - **Rollback:** betroffenen Service zurücksetzen; Reihenfolge-Abhängigkeiten (docker → traefik → ollama) werden durch BDD-Checks („Voraussetzung erfüllt?") abgesichert.
 - **Gegenmaßnahme:** Post-Deploy-Verifikation (BDD, Phase 7-Skript `scripts/verify-deployment.sh`); Choice-Input statt Freitext (Tippfehler-Schutz); DEV-only-Deploy-Policy (PROD nur mit Freigabe).

@@ -1,4 +1,4 @@
-# ADR-0005: Traefik-Dashboard/API-Exposition
+# ADR-019: Traefik-Dashboard/API-Exposition
 
 - **Status:** Vorgeschlagen (Proposed)
 - **Datum:** 2026-07-31

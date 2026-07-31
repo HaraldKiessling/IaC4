@@ -13,4 +13,4 @@
 ## Security-Ziele
 - Öffentliches SSH maximal 5 Minuten offen (Phasen 0-2a)
 - Alle Secrets in GH Actions (nie im Repo)
-- Keine öffentlichen Ports; Service-Ports (80/8080/11434) nur via Tailscale erreichbar, UFW-restricted auf 100.64.0.0/10 (ADR-0004/0005/0007)
+- Keine öffentlichen Ports; Service-Ports (80/8080/11434) nur via Tailscale erreichbar, UFW-restricted auf 100.64.0.0/10 (ADR-018/019/021)

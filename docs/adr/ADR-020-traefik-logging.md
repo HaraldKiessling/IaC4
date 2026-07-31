@@ -1,4 +1,4 @@
-# ADR-0006: Traefik-Logging (accessLog an/aus + Rotation)
+# ADR-020: Traefik-Logging (accessLog an/aus + Rotation)
 
 - **Status:** Vorgeschlagen (Proposed)
 - **Datum:** 2026-07-31

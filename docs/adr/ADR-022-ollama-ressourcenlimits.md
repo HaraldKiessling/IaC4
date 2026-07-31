@@ -1,4 +1,4 @@
-# ADR-0008: Ollama-Ressourcenlimits (RAM/CPU/Keep-Alive)
+# ADR-022: Ollama-Ressourcenlimits (RAM/CPU/Keep-Alive)
 
 - **Status:** Vorgeschlagen (Proposed) – **offene Frage an Harald: VPS-Spec!**
 - **Datum:** 2026-07-31

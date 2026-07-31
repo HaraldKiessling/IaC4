@@ -1,4 +1,4 @@
-# ADR-0009: Ollama-Embedding-Modell (nomic-embed-text vs. Alternativen)
+# ADR-023: Ollama-Embedding-Modell (nomic-embed-text vs. Alternativen)
 
 - **Status:** Vorgeschlagen (Proposed)
 - **Datum:** 2026-07-31
@@ -39,7 +39,7 @@ Welches Embedding-Modell lädt Ollama initial?
   - **Rollback:** alten Modell-Namen + Dimensionswert in `group_vars` wiederherstellen, Container-Recreate, Index neu aufbauen (Re-Index).
 - **Worst-Case 2:** Pre-Warm/Pull schlägt fehl (Registry/Netz) → erster Embedding-Request langsam (15-30s) statt <1s; Zoo-Indexing-Timeout möglich.
   - **Rollback:** Playbook erneut ausführen (idempotent, `ollama pull` cached); Container `restart: unless-stopped` fährt selbst hoch.
-- **Gegenmaßnahme:** Pre-Warm-Entrypoint (ADR-0008-Kontext), BDD-Test „Embedding-Request < 2s nach Container-Start"; Dimensions-Konfiguration als SSoT in `group_vars` (Modell + Dimension gekoppelt).
+- **Gegenmaßnahme:** Pre-Warm-Entrypoint (ADR-022-Kontext), BDD-Test „Embedding-Request < 2s nach Container-Start"; Dimensions-Konfiguration als SSoT in `group_vars` (Modell + Dimension gekoppelt).
 
 ## Konsequenzen
 - Rollen-Variablen: `ollama_model: nomic-embed-text`, `ollama_model_dimensions: 768`

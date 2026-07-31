@@ -1,4 +1,4 @@
-# ADR-0003: Docker-Image-Versionierung (Pinning vs. `latest`)
+# ADR-017: Docker-Image-Versionierung (Pinning vs. `latest`)
 
 - **Status:** Vorgeschlagen (Proposed)
 - **Datum:** 2026-07-31

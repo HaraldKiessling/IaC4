@@ -8,7 +8,7 @@
 | T-001 | Backup/Disaster-Recovery (Qdrant-Volume) nicht implementiert | Mittel | Nach Phase-2-Stabilisierung |
 | T-002 | OpenClaw-Konfiguration manuell (Phase 3 nicht automatisiert) | Niedrig | Nach Option-B-Migration |
 | T-003 | Kein Monitoring/Alerting | Niedrig | Später |
-| T-004 | ~~Ollama nicht migriert~~ → **SUPERSEDED 2026-07-31:** Ollama wird migriert (erster Service, ADR-0007..0009) | – | – |
+| T-004 | ~~Ollama nicht migriert~~ → **SUPERSEDED 2026-07-31:** Ollama wird migriert (erster Service, ADR-021..023) | – | – |
 | T-005 | Fehlende API-Secrets (Gemini, OpenRouter) in IaC4 | 🔴 Hoch | Manuell von IaC3 kopieren |
 | T-006 | ~~Kein Terraform-Backend~~ ✅ Gefixt: GH-Cache für Terraform-State + 03/04 gemergt | 🔴 Erledigt | Workflow-Restrukturierung (ARC42 K8) |
 | T-007 | ~~Workflow 01 ignoriert target=prod~~ ✅ Gefixt: target-basierte IP-Wahl wie in 03 | ✅ Erledigt | Nächster PR (ARC42 K8) |

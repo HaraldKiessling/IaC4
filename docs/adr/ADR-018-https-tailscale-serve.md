@@ -1,4 +1,4 @@
-# ADR-0004: HTTPS-Strategie (Tailscale Serve vs. HTTP-only)
+# ADR-018: HTTPS-Strategie (Tailscale Serve vs. HTTP-only)
 
 - **Status:** Vorgeschlagen (Proposed)
 - **Datum:** 2026-07-31
@@ -40,7 +40,7 @@ Wie erhalten Browser-Clients im Tailnet HTTPS-Zugriff auf die Web-Services?
 ## Konsequenzen
 - Tailscale-Rolle/Playbook um Serve-Task erweitern (State-Check + `serve --bg`)
 - Traefik bleibt HTTP-only (Port 80) – kein TLS in Traefik selbst
-- **P4-Delta (bei Phase-3/4-Umsetzung):** LE-Blöcke aus `docker-compose.yml.j2` + `traefik_acme_email` aus `group_vars` entfernen; `docker_network: traefik-public` → `traefik-network` (ADR-0001/0002-Konsistenz); `arc42/05` Z.10 + `arc42/07` Z.22 + K10-Formulierung aktualisieren („Service-Ports nur via Tailscale, UFW-restricted")
+- **P4-Delta (bei Phase-3/4-Umsetzung):** LE-Blöcke aus `docker-compose.yml.j2` + `traefik_acme_email` aus `group_vars` entfernen; `docker_network: traefik-public` → `traefik-network` (ADR-015/016-Konsistenz); `arc42/05` Z.10 + `arc42/07` Z.22 + K10-Formulierung aktualisieren („Service-Ports nur via Tailscale, UFW-restricted")
 - Doku: Zugriffs-URLs als `https://<host>.ts.net` ohne Port
 
 ## Referenzen

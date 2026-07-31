@@ -1,4 +1,4 @@
-# ADR-0007: Ollama-Exposition (Port 11434)
+# ADR-021: Ollama-Exposition (Port 11434)
 
 - **Status:** Vorgeschlagen (Proposed)
 - **Datum:** 2026-07-31
