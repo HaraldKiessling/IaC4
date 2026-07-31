@@ -124,10 +124,17 @@ jobs:
           oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           tags: tag:ci
 
-      - name: Post-Bootstrap Check (SSH via Tailscale)
+      - name: Post-Bootstrap Check (SSH via Tailscale-IP)
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: *** secrets.TAILSCALE_API_KEY }}
         run: |
           echo "✅ Workflow abgeschlossen"
-          echo "SSH-Verifikation via MagicDNS:"
+          NODE="vps-${{ inputs.target }}"
+          TS_IP=$(curl -s \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,tailscaleIPs" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .tailscaleIPs[0]' | head -1)
+          echo "SSH-Verifikation via Tailscale-IP: ${TS_IP}"
           ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
-              "$VPS_USER@vps-${{ inputs.target }}.${{ secrets.TAILSCALE_TAILNET }}" \
-              "hostname; tailscale ip -4" || echo "❌ SSH via MagicDNS fehlgeschlagen"
+              "$VPS_USER@${TS_IP}" \
+              "hostname; tailscale ip -4" || echo "❌ SSH via Tailscale fehlgeschlagen"
