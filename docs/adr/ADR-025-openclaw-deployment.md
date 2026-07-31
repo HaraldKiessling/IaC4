@@ -44,6 +44,6 @@ Wie wird das OpenClaw-Gateway auf dem IaC4-VPS betrieben?
 - P4: arc42/07 (Host-Process openclaw) bleibt korrekt; Migrationsplan Phase 5 referenziert diese ADR
 
 ## Referenzen
-- https://docs.openclaw.ai/install/ansible
-- https://docs.openclaw.ai/install/docker
-- https://github.com/openclaw/openclaw-ansible
+- <https://docs.openclaw.ai/install/ansible>
+- <https://docs.openclaw.ai/install/docker>
+- <https://github.com/openclaw/openclaw-ansible>
