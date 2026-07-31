@@ -127,7 +127,7 @@ jobs:
       - name: Post-Bootstrap Check (SSH via Tailscale-IP)
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
-          TS_API_KEY: *** secrets.TAILSCALE_API_KEY }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           echo "✅ Workflow abgeschlossen"
           NODE="vps-${{ inputs.target }}"

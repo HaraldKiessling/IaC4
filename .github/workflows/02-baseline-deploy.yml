@@ -34,7 +34,7 @@ jobs:
       - name: VPS Tailscale-IP ermitteln (Tailscale-API)
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
-          TS_API_KEY: *** secrets.TAILSCALE_API_KEY }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
           TS_IP=$(curl -s \
