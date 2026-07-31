@@ -39,6 +39,6 @@ Welche Docker-Ressourcenlimits bekommt Ollama in IaC4?
 - Offene Frage an Harald: aktuelle DEV-VPS-Spec (RAM/CPU) – danach ADR finalisieren
 
 ## Referenzen
-- https://docs.ollama.com/faq (KEEP_ALIVE, NUM_PARALLEL)
+- <https://docs.ollama.com/faq> (KEEP_ALIVE, NUM_PARALLEL)
 - <https://docs.docker.com/compose/compose-file/deploy/>
 - IaC3 RFC 0016 (Betriebserfahrung Pre-Warm)
