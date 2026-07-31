@@ -39,7 +39,7 @@ jobs:
           NODE="vps-${{ inputs.target }}"
           TS_IP=$(curl -s \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .addresses[0]' | head -1)
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" [.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty | head -1)
           if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
             echo "❌ Keine Tailscale-IP für Node ${NODE} gefunden"
             exit 1
