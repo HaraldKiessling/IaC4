@@ -100,28 +100,27 @@ jobs:
           TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
-          # SICHERHEIT: Nur OFFLINE-Nodes mit exakt dem Ziel-Hostnamen löschen.
-          # Online-Nodes (z.B. vps-prod während IaC3-Betrieb) werden NIE gelöscht,
-          # sondern nur auf tag:ia3 re-tagged (ACL: tag:ci → tag:ia3).
-          for DEVICE_ID in $(curl -s \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n or .hostname == ($n + "-1")) | .id'); do
-            ONLINE=$(curl -s "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
-              -H "Authorization: Bearer ${TS_API_KEY}" | jq -r '.device.online // false')
-            if [ "$ONLINE" = "true" ]; then
-              curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
-                -H "Authorization: Bearer ${TS_API_KEY}" \
-                -H "Content-Type: application/json" \
-                -d '{"tags": ["tag:ia3"]}' > /dev/null
-              echo "✅ Online-Node ${NODE} (${DEVICE_ID}) auf tag:ia3 gesetzt (unverändert)"
-            else
-              # SICHERHEIT: NIE löschen — nur umbenennen (Node bleibt im Tailnet erhalten)
+          # SICHERHEIT: NIE löschen. Umbenennen nur Nodes mit lastSeen > 24h
+          # (aktive/frische Nodes bleiben unangetastet). GET /device/{id} liefert
+          # für den CI-Key keine Daten (online=null) — daher lastSeen aus der Liste.
+          LISTE=$(curl -s \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,lastSeen" \
+            -H "Authorization: Bearer ${TS_API_KEY}")
+          for DEVICE_ID in $(echo "$LISTE" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n or .hostname == ($n + "-1")) | .id'); do
+            LAST=$(echo "$LISTE" | jq -r --arg id "$DEVICE_ID" '.devices[] | select(.id == $id) | .lastSeen // ""')
+            AGE_SEC=0
+            if [ -n "$LAST" ] && [ "$LAST" != "null" ]; then
+              AGE_SEC=$(( $(date +%s) - $(date -d "$LAST" +%s) ))
+            fi
+            if [ "$AGE_SEC" -gt 86400 ]; then
               NEW_NAME="${NODE}-old-$(date +%s)"
               curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/name" \
                 -H "Authorization: Bearer ${TS_API_KEY}" \
                 -H "Content-Type: application/json" \
                 -d "{\"name\": \"${NEW_NAME}\"}" > /dev/null
-              echo "✅ Offline-Node ${NODE} (${DEVICE_ID}) → ${NEW_NAME} umbenannt (nicht gelöscht)"
+              echo "✅ Alter Node ${NODE} (${DEVICE_ID}, lastSeen vor ${AGE_SEC}s) umbenannt → ${NEW_NAME}"
+            else
+              echo "Node ${NODE} (${DEVICE_ID}) ist aktiv (lastSeen vor ${AGE_SEC}s) — NICHT umbenannt"
             fi
           done
           echo "Cleanup ${NODE} abgeschlossen"
@@ -139,32 +138,26 @@ jobs:
             -i /tmp/inventory \
             -e "tailscale_auth_key=${{ steps.authkey.outputs.auth_key }}"
 
-      - name: "Node auf tag:ia3 re-taggen (Node-ID via SSH, ACL: tag:ci → tag:ia3)"
+      - name: "Node auf tag:ia3 re-taggen (frischester Node aus API-Liste)"
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
           TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
-          # Node-ID direkt vom VPS holen (tailscale status --json → Self.ID).
-          # Die API-Node-Liste ist für den CI-Key unvollständig (ACL tagOwners),
-          # der VPS kennt seine eigene ID aber zuverlässig.
-          echo "--- Self-Felder (Diagnose):"
-          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
-            "$VPS_USER@$VPS_PUBLIC_IP" "tailscale status --json | jq -c '.Self | {ID: .ID, MachineID: .MachineID, StableID: .StableID, DNSName: .DNSName, TailscaleIPs: .TailscaleIPs}'" 2>/dev/null || echo "SSH-Fehler"
-          DEVICE_ID=$(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
-            "$VPS_USER@$VPS_PUBLIC_IP" "tailscale status --json | jq -r '.Self.MachineID // .Self.ID'" 2>/dev/null)
+          # Frischesten vps-<target>[-1]-Node aus der Liste nehmen (lastSeen desc).
+          # GET /device/{id} liefert für den CI-Key keine Daten — daher Liste nutzen.
+          DEVICE_ID=$(curl -s \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,lastSeen" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" \
+            '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].id // empty' | head -1)
           if [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ]; then
             RESP=$(curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
               -H "Authorization: Bearer ${TS_API_KEY}" \
               -H "Content-Type: application/json" \
               -d '{"tags": ["tag:ia3"]}')
             echo "Re-Tag ${NODE} (${DEVICE_ID}): $(echo "$RESP" | jq -c '{keys: keys, error: .error, message: .message}' 2>/dev/null || echo "$RESP")"
-            echo "--- Verifikation (GET /device):"
-            curl -s "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
-              -H "Authorization: Bearer ${TS_API_KEY}" | \
-              jq -c '{hostname: .device.hostname, tags: .device.tags, online: .device.online}'
           else
-            echo "❌ Node-ID vom VPS nicht ermittelbar (DEVICE_ID=${DEVICE_ID})"
+            echo "❌ Kein Node ${NODE} nach Join in der API-Liste gefunden"
             exit 1
           fi
 
