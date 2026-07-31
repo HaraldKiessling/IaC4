@@ -89,6 +89,7 @@
 
 ## 🔴 Tech-Debt (dokumentiert in arc42 K11)
 
+- [ ] Idempotenz-Kosmetik: Swap/Zeitzone-Tasks in vps-baseline ohne `changed_when` → Ansible meldet „changed“ trotz no-op (2026-07-31, LOW)
 - [ ] Qdrant-Volume-Backup
 - [ ] Ollama (niedrige Prio)
 - [ ] Monitoring/Alerting
