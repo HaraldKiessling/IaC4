@@ -99,7 +99,17 @@ jobs:
           ansible-playbook playbooks/02-ssh-restrict.yml \
             -i /tmp/inventory
 
-      - name: Post-Bootstrap Check
+      - name: Connect Runner to Tailnet (MagicDNS)
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
+
+      - name: Post-Bootstrap Check (SSH via Tailscale)
         run: |
           echo "✅ Workflow abgeschlossen"
-          echo "Prüfe Tailscale: ssh $VPS_USER@vps-${{ inputs.target }}.${{ secrets.TAILSCALE_TAILNET }}"
+          echo "SSH-Verifikation via MagicDNS:"
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+              "$VPS_USER@vps-${{ inputs.target }}.${{ secrets.TAILSCALE_TAILNET }}" \
+              "hostname; tailscale ip -4" || echo "❌ SSH via MagicDNS fehlgeschlagen"
