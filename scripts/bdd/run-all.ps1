@@ -9,21 +9,22 @@ param(
     [Parameter(Mandatory)][string]$SshKeyPath,
     [Parameter(Mandatory)][string]$PublicIp,
     [string]$Tailnet = $env:TS_TAILNET,
-    [string]$ApiKey = $env:TS_API_KEY,
+    [string]$OAuthClientId = $env:TS_CLIENT_ID,
+    [string]$OAuthClientSecret = $env:TS_CLIENT_SECRET,
     [Parameter(Mandatory)][string]$ExpectedHostname,
     [string]$ExpectedTz = "Europe/Berlin"
 )
 
 $ErrorActionPreference = "Stop"
 
-if ([string]::IsNullOrEmpty($ApiKey)) { Write-Host "❌ TS_API_KEY fehlt (env) – Abbruch"; exit 1 }
+if ([string]::IsNullOrEmpty($OAuthClientId) -or [string]::IsNullOrEmpty($OAuthClientSecret)) { Write-Host "❌ TAILSCALE_OAUTH_CLIENT_ID/SECRET fehlen (env) – Abbruch"; exit 1 }
 if ([string]::IsNullOrEmpty($Tailnet)) { Write-Host "❌ TS_TAILNET fehlt (env) – Abbruch"; exit 1 }
 
 Write-Host "═══ IaC4 BDD-Tests – Target: $ExpectedHostname ($VpsIp) ═══" -ForegroundColor Cyan
 Write-Host "Start: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')`n"
 
 & "$PSScriptRoot/tailscale-bootstrap.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath `
-    -PublicIp $PublicIp -Tailnet $Tailnet -ApiKey $ApiKey -ExpectedHostname $ExpectedHostname
+    -PublicIp $PublicIp -Tailnet $Tailnet -OAuthClientId $OAuthClientId -OAuthClientSecret $OAuthClientSecret -ExpectedHostname $ExpectedHostname
 & "$PSScriptRoot/system-baseline.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -ExpectedTz $ExpectedTz
 
 Write-Host "`n═══ Zusammenfassung ═══" -ForegroundColor Cyan

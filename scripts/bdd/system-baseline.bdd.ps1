@@ -51,5 +51,5 @@ When "ufw status verbose abgefragt wird"
 Then-True "UFW ist aktiv (Status: active)" ($r.Output -match 'Status: active') $r.Output
 Then-True "Keine generische Allow-Regel für Port 22 mehr (cloud-config-Regel gelöscht)" ($r.Output -notmatch '22/tcp\s+ALLOW IN\s+Anywhere') $r.Output
 Then-True "Keine generische Allow-Regel für Port 22 (v6) mehr" ($r.Output -notmatch '22/tcp \(v6\)\s+ALLOW IN') $r.Output
-Then-True "Deny-Regel auf öffentlichem Interface vorhanden" ($r.Output -match '22/tcp\s+DENY IN on ') $r.Output
+Then-True "Deny-Regel auf öffentlichem Interface vorhanden" ($r.Output -match '22/tcp(?: \(v6\))? on \S+\s+DENY IN') $r.Output
 Then-True "CGNAT-Allow für Tailscale (100.64.0.0/10) vorhanden (Defense-in-Depth)" ($r.Output -match '22/tcp\s+ALLOW IN\s+100\.64\.0\.0/10') $r.Output

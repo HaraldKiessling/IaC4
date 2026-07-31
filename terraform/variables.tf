@@ -1,5 +1,5 @@
 variable "tailscale_api_key" {
-  description = "Tailscale API Access Token (Bootstrap)"
+  description = "Tailscale API Access Token – NUR Workflow 01 (Terraform-Provider; OAuth-Client-Token kann OAuth-Clients nicht verwalten, Review PR #44)"
   type        = string
   sensitive   = true
 }

@@ -45,7 +45,7 @@ Aktuell gesetzt:
 | `VPS_PROD_PUBLIC_IP` | (PROD) | Workflow 02, target=prod |
 | `TAILSCALE_OAUTH_CLIENT_ID` / `TAILSCALE_OAUTH_CLIENT_SECRET` | OAuth-Client (tag:ci) | Runner-Join + Auth-Key-Erzeugung (02, 03) |
 | `TAILSCALE_TAILNET` | z.B. `<tailnet>.ts.net` | Tailnet (02, 03) |
-| `TAILSCALE_API_KEY` | API-Token | Tailscale-API: IP-Resolution, Cleanup/Rename, Re-Tag (02, 03) |
+| `TAILSCALE_API_KEY` | API-Token | NUR Workflow 01 (Terraform-Provider); 02/03/04 nutzen OAuth-Client-Token |
 
 Nach Phase 2b läuft alles via Tailscale. Workflow 03 löst die VPS-IP per **Tailscale-API**
 aus dem Node-Hostnamen (`vps-dev`) auf – ein `VPS_DEV_HOST`-Secret ist dafür nicht nötig.

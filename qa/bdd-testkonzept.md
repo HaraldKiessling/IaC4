@@ -51,7 +51,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | B2 | Zeitzone korrekt | `timedatectl` → `Europe/Berlin` |
 | B3 | Swap aktiv | `swapon --show` enthält `/swapfile` |
 | B4 | deploy-user-Sudo funktioniert | `sudo -n true` → Exit 0 |
-| B5 | UFW aktiv, öffentliches SSH blockiert | `ufw status verbose`: Status active, keine generische `22/tcp ALLOW IN Anywhere`-Regel (v4 **und** v6), `DENY IN on <public_iface>` vorhanden, CGNAT-Allow `100.64.0.0/10` vorhanden (Defense-in-Depth) |
+| B5 | UFW aktiv, öffentliches SSH blockiert | `ufw status verbose`: Status active, keine generische `22/tcp ALLOW IN Anywhere`-Regel (v4 **und** v6), `22/tcp on <public_iface> DENY IN` vorhanden (echtes ufw-Format, v4+v6), CGNAT-Allow `100.64.0.0/10` vorhanden (Defense-in-Depth) |
 
 ### Geplant (Phase 3, sobald Services deployt sind)
 - **Docker/Traefik:** `docker info`, Traefik-Container running, ACME-E-Mail gesetzt
@@ -66,7 +66,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 - **Skripte:** `scripts/bdd/` – `bdd-lib.ps1` (Helfer), `*.bdd.ps1` (Features), `run-all.ps1` (Aggregator)
 - **Exit-Codes:** 0 = alle Szenarien grün; 1 = mind. ein Szenario rot (Workflow failt sichtbar)
 - **Timeout:** Job 15 min (SSH-ConnectTimeout 10 s, Public-Port-Test 5 s)
-- **Voraussetzungen (Secrets):** `SSH_KEY`, `VPS_USER`, `TAILSCALE_OAUTH_CLIENT_ID/SECRET`, `TAILSCALE_TAILNET`, `TAILSCALE_API_KEY`, `VPS_DEV_PUBLIC_IP` (dev) / `VPS_PROD_PUBLIC_IP` (prod)
+- **Voraussetzungen (Secrets):** `SSH_KEY`, `VPS_USER`, `TAILSCALE_OAUTH_CLIENT_ID/SECRET` (OAuth-only – Access-Token wird aus dem Client-Paar erzeugt, kein API-Key), `TAILSCALE_TAILNET`, `VPS_DEV_PUBLIC_IP` (dev) / `VPS_PROD_PUBLIC_IP` (prod)
 
 ## 6. Konventionen
 

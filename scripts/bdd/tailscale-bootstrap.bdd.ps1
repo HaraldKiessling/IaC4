@@ -7,7 +7,8 @@ param(
     [Parameter(Mandatory)][string]$SshKeyPath,   # Pfad zum privaten SSH-Key
     [Parameter(Mandatory)][string]$PublicIp,     # Public-IP des VPS
     [Parameter(Mandatory)][string]$Tailnet,      # z.B. tailcfea8a.ts.net
-    [Parameter(Mandatory)][string]$ApiKey,       # Tailscale-API-Key
+    [Parameter(Mandatory=$false)][string]$OAuthClientId = $env:TS_CLIENT_ID,
+    [Parameter(Mandatory=$false)][string]$OAuthClientSecret = $env:TS_CLIENT_SECRET,
     [Parameter(Mandatory)][string]$ExpectedHostname # z.B. vps-dev
 )
 
@@ -62,11 +63,20 @@ Then-True "Verbindung fehlgeschlagen (Port 22 dicht)" (Test-SshPortClosed $VpsUs
 
 # ── Szenario 3: Node online und korrekt getaggt ──
 Write-Host "`nScenario: VPS-Node ist online und mit tag:ia3 getaggt" -ForegroundColor Yellow
-Given "Tailscale-API-Key ist verfügbar"
+Given "OAuth-Client-Credentials sind verfügbar (IaC3-Verfahren)"
 $devices = $null
 try {
+    if ($env:TS_TOKEN) {
+        $apiHeaders = @{ Authorization = "Bearer $($env:TS_TOKEN)" }
+    }
+    else {
+        $tokenResp = Invoke-RestMethod -Method Post -Uri "https://api.tailscale.com/api/v2/oauth/token" `
+            -Body @{ client_id = $OAuthClientId; client_secret = $OAuthClientSecret } `
+            -ContentType "application/x-www-form-urlencoded" -TimeoutSec 20
+        $apiHeaders = @{ Authorization = "Bearer $($tokenResp.access_token)" }
+    }
     $devices = Invoke-RestMethod -Uri "https://api.tailscale.com/api/v2/tailnet/$Tailnet/devices?fields=hostname,tags,lastSeen" `
-        -Headers @{ Authorization = "Bearer $ApiKey" } -TimeoutSec 20
+        -Headers $apiHeaders -TimeoutSec 20
 }
 catch {
     Write-Host "  ❌ Tailscale-API nicht erreichbar: $($_.Exception.Message)" -ForegroundColor Red
