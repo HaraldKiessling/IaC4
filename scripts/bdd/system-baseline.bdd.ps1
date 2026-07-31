@@ -8,6 +8,8 @@ param(
     [Parameter(Mandatory)][string]$ExpectedTz = "Europe/Berlin"
 )
 
+. "$PSScriptRoot/bdd-lib.ps1"
+
 Write-Host "Feature: System-Baseline (Workflow 03, Phase 1) – Target: $VpsIp" -ForegroundColor Cyan
 
 # ── Szenario 1: Baseline-Pakete installiert ──
