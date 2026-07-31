@@ -1,5 +1,10 @@
 # IaC4 Testplan
 
+## Workflow-Reihenfolge (verbindlich, docs/workflows/deploy-stages.md)
+- [ ] Workflow 02 (Tailscale-Bootstrap) läuft VOR Workflow 03 (Baseline-Deploy)
+- [ ] Workflow 03 ohne vorheriges 02: Abbruch mit Vorbedingungs-Meldung („Workflow 02 zuerst!“)
+- [ ] Nach Workflow 02: SSH via Public-IP geschlossen (UFW), via Tailscale offen
+
 ## Deployment-Tests (manuell via GH Actions Dispatch)
 - [ ] Phase 1: Baseline (SSH, Pakete, Swap)
 - [ ] Phase 2a: Tailscale-Join

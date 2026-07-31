@@ -11,13 +11,12 @@ IaC4
 │   ├── qdrant             → Vektordatenbank (3072d, Cosine)
 │   ├── code-server        → Web-IDE
 │   └── openclaw-gateway   → OpenClaw-Install
-├── GitHub Actions (CI/CD, 6 Workflows)
+├── GitHub Actions (CI/CD, 5 Workflows)
 │   ├── ci.yml                               → Lint + Quality Gate
 │   ├── 00-generate-ssh-key.yml              → SSH-Key-Paar generieren
-│   ├── 01-baseline-deploy.yml               → Phase 1 (via Public-IP)
+│   ├── 01-tailscale-terraform.yml           → Tailscale OAuth + ACLs (Terraform Plan/Apply)
 │   ├── 02-tailscale-bootstrap.yml           → Phase 2a+2b (via Public-IP, schliesst SSH)
-│   ├── 03-rotate-tailscale-oauth.yml        → Tailscale OAuth-Client (erzeugen/prüfen)
-│   └── 04-tailscale-terraform.yml           → Terraform OAuth + ACLs (Plan/Apply)
+│   └── 03-baseline-deploy.yml               → Phase 1 (via Tailscale-IP)
 ├── Terraform (Tailscale OAuth-Client)
 │   └── oauth-client.tf                      → Erzeugt Client (tag:ci)
 ├── Docker Compose (Services)

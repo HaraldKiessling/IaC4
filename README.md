@@ -40,19 +40,22 @@ cd IaC4
 # 3. VPS provisionieren (cloud-config.yaml.template anpassen)
 # Siehe docs/workflows/deploy-stages.md
 
-# 4. Basis-Deploy
-make deploy target=dev
+# 4. Basis-Deploy (nach Workflow 02: Tailscale-Bootstrap)
+make deploy-dev
 ```
 
 ## Workflows
 
 | Workflow | Trigger | Beschreibung |
 |----------|---------|-------------|
-| `01-baseline-deploy.yml` | Dispatch | Phase 1: System-Baseline |
-| `02-service-deploy.yml` | Dispatch | Phase 2a/b: Docker, Traefik, Services |
-| `03-openclaw-install.yml` | Dispatch | Phase 2c: OpenClaw-Gateway |
-| `04-tailscale-terraform.yml` | Dispatch | Tailscale-OAuth + ACLs |
+| `00-generate-ssh-key.yml` | Dispatch | SSH-Key-Paar generieren + Secrets (einmalig) |
+| `01-tailscale-terraform.yml` | Dispatch | Tailscale-OAuth + ACLs (Terraform Plan/Apply) |
+| `02-tailscale-bootstrap.yml` | Dispatch | Phase 2a+2b: Tailscale install + join + SSH-Restrict (via Public-IP) |
+| `03-baseline-deploy.yml` | Dispatch | Phase 1: System-Baseline (via Tailscale-IP) |
 | `ci.yml` | Push + PR | Lint + YAML + LivingDocs-Check |
+
+> **Ausführungsreihenfolge:** `00` → `01` → `02` (Bootstrap) → `03` (Baseline).
+> Workflow 02 **MUSS vor** Workflow 03 laufen – die Baseline verbindet sich via Tailscale-IP.
 
 ## Deployment-Stufen
 

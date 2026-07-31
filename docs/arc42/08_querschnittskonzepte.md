@@ -98,3 +98,4 @@ Terraform State wird nicht persistiert (kein S3, GCS oder alternatives Backend).
 
 #### P-004: Workflow-Nummern inkonsistent
 Die Nummerierung `00 → 01 → 02 → 03 → 04` suggeriert eine lineare Reihenfolge. Die tatsächliche Dependency-Kette ist `00 → 03 → 01 → 02`. Siehe Dependency-Graph oben.
+✅ **Gelöst (PR #28):** Workflows 02/03 getauscht — Nummerierung = Ausführungsreihenfolge: `00 (SSH-Key) → 01 (Tailscale OAuth) → 02 (Bootstrap, via Public-IP) → 03 (Baseline, via Tailscale-IP)`.

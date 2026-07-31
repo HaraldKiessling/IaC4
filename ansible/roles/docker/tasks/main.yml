@@ -23,7 +23,7 @@
   ansible.builtin.user:
     name: "deploy-user"
     groups: docker
-    append: yes
+    append: true
 
 - name: Docker-Netzwerk anlegen
   community.docker.docker_network:
