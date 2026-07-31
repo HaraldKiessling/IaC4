@@ -75,7 +75,9 @@ jobs:
                 }
               }
             }')
+          echo "DEBUG: KEY_RESP=$KEY_RESP"
           AUTH_KEY=$(echo "$KEY_RESP" | jq -r '.key')
+          echo "DEBUG: AUTH_KEY length=${#AUTH_KEY}"
           echo "auth_key=$AUTH_KEY" >> $GITHUB_OUTPUT
           echo "::add-mask::$AUTH_KEY"
 
