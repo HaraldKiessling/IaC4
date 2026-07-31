@@ -105,7 +105,7 @@ jobs:
           # sondern nur auf tag:ia3 re-tagged (ACL: tag:ci → tag:ia3).
           for DEVICE_ID in $(curl -s \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .id'); do
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n or .hostname == ($n + "-1")) | .id'); do
             ONLINE=$(curl -s "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
               -H "Authorization: Bearer ${TS_API_KEY}" | jq -r '.device.online // false')
             if [ "$ONLINE" = "true" ]; then
@@ -152,7 +152,7 @@ jobs:
             jq -c '.devices[] | {hostname, id, addresses}'
           DEVICE_ID=$(curl -s \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .id' | head -1)
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n or .hostname == ($n + "-1")) | .id' | head -1)
           if [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ]; then
             RESP=$(curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
               -H "Authorization: Bearer ${TS_API_KEY}" \
