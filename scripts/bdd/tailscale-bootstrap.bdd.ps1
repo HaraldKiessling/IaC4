@@ -93,7 +93,7 @@ if ($devices) {
             catch { $fresh = $false }
         }
         Then-True "Node ist online (Proxy: lastSeen < 10 min)" $fresh "lastSeen=$($node.lastSeen)"
-        Then-True "Node trägt tag:ia3" (($node.tags -join ",") -match 'tag:ia3') ($node.tags -join ",")
+        Then-True "Node trägt tag:ia4" (($node.tags -join ",") -match 'tag:ia4') ($node.tags -join ",")
     }
 }
 else {

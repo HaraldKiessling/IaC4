@@ -3,5 +3,5 @@
 - `terraform/acl.tf` existiert NICHT in IaC4 (wurde entfernt)
 - ACL-Änderungen brauchen KOORDINIERTEN Prozess (alle Projekte)
 - Nie `overwrite_existing_content = true` ohne vollständige ACL mit ia3+ia4+ha
-- OAuth-Client verwendet `tag:ci` (nicht `tag:ia4`)
-- IaC4-VPS wird via `tag:ci` authentifiziert (nicht tag:ia4)
+- OAuth-Client verwendet `tag:ci` + `tag:ia4` (IaC3-Muster: 1 Client, beide Tags – Tag-Ownership)
+- IaC4-VPS-Ziel-Tag ist `tag:ia4` (Original-ACL-Design); Auth-Key joint frische VPS direkt mit tag:ia4 (kein Re-Tag-Workaround); Re-Tag-Step = Korrektur für Bestands-Nodes

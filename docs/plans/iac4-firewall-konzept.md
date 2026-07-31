@@ -148,7 +148,43 @@ Reihenfolge mit Sicherheitsbegründung (Workflow 02, Phase 2a → 2b):
 4. **Vendor-Empfehlung vs. eigene Regel:** `allow in on tailscale0` (interface-basiert) vs. CGNAT-Allow (quellenbasiert, RFC-6598-Raum) — Entscheidung dokumentieren, aktuell: CGNAT-Allow (funktional äquivalent; nicht Tailscale-exklusiv, praktisch aber nur via TS erreichbar)
 5. **Tailscale-Version auf dem VPS + Vorhandensein der ts-input-41641-Regel (AddMagicsockPortRule) verifizieren** — stützt R5-Evidenzlage
 
-## 9. Quellen
+## 9. Tag-Design & Provisionierung (Option A – IaC3-Muster mit tag:ia4)
+
+### 9.1 Evidenzlage
+
+- **Original-ACL (Commit `0d3d1de`):** IaC4-Port sah **`tag:ia4`** für VPS-Nodes vor — `tagOwners: { tag:ia4: [admin], tag:ci: [admin] }`, `ssh: src [tag:ci] → dst [tag:ia4]` (deploy-user/root/ubuntu). Die ACL wurde später aus Terraform entfernt (geteilte Konsole-ACL, `tailscale-acl.mdc`: nie überschreiben, ia3+ia4+ha koordiniert). `[I]` Git-Historie
+- **IaC3-Referenz:** `terraform/oauth-client.tf` = `tags ["tag:ci", "tag:ia3"]`; Auth-Keys mit `["tag:ia3","tag:ci"]`; Runner-Joins mit `tag:ci,tag:ia3` → **ein Client mit beiden Tags**, VPS joint direkt mit Ziel-Tag. `[I]` IaC3-Repo
+- **IaC4-Ist (vor diesem PR):** Client nur `["tag:ci"]`, Auth-Key nur `tag:ci` → frischer VPS startet als tag:ci → **Re-Tag-Workaround auf tag:ia3** (Migration-Kompromiss „SSH-ACL-Kompatibilität"). `[I]` Migrationsplan + Workflows
+
+### 9.2 Diagnose
+
+1. `tag:ia3` auf dem IaC4-VPS ist ein **Fremd-Tag aus dem IaC3-Projekt** — das designierte IaC4-Tag ist `tag:ia4` (Original-ACL).
+2. Der Re-Tag-Workaround entstand, weil die **Tag-Ownership** (ACL) bestimmt, welche Tags ein Client vergeben darf: Ein tag:ci-Client kann nur tag:ci-Auth-Keys erzeugen → der VPS startet falsch getaggt und muss umgetaggt werden (funktioniert nur, weil die geteilte ACL es implizit erlaubt — empirisch HTTP 200, nicht dokumentiert).
+3. IaC3-Praxis bestätigt: **Ein Client mit beiden Tags** (nicht zwei Clients) — damit kann der Auth-Key das Ziel-Tag direkt setzen, kein Workaround.
+
+### 9.3 Ziel-Zustand (dieser PR)
+
+| Element | Vorher | Nachher (Option A) |
+|---|---|---|
+| OAuth-Client-Tags | `["tag:ci"]` | `["tag:ci", "tag:ia4"]` |
+| Auth-Key-Tags (02) | `["tag:ci"]` | `["tag:ia4"]` → VPS joint direkt |
+| Re-Tag-Step (02) | Workaround auf ia3 | Korrektur auf ia4 (frische Nodes: no-op) |
+| VPS-Dauertag | `tag:ia3` | `tag:ia4` |
+| BDD-T3 | erwartet tag:ia3 | erwartet tag:ia4 |
+
+### 9.4 Schrittfolge ohne Lockout/Breakage (operativ, NACH diesem PR)
+
+1. **ACL-Verifikation VOR allem:** `GET /api/v2/tailnet/{t}/acl` (mit temporärem API-Key) → enthält sie `tag:ia4`-Regeln (tagOwners + ssh ci→ia4)? Fehlt etwas → koordinierte ACL-Ergänzung (Konsole, ia3+ia4+ha zusammen) — **kein Re-Tag ohne ACL-Nachweis** (Lockout-Klasse: SSH via Tailscale würde brechen).
+2. **Client neu erzeugen:** Workflow 01 (force=true) mit dem temporären API-Key → Client mit `["tag:ci", "tag:ia4"]`, Secrets werden aktualisiert.
+3. **Bestands-VPS re-taggen:** `vps-dev` von tag:ia3 auf tag:ia4 (via API mit temporärem Key oder nach 01 via OAuth-Token) — erst NACH Schritt 1.
+4. **Verifikation:** BDD-Lauf 4 → T1 (SSH via TS bleibt), T2 (Public dicht bleibt), T3 (tag:ia4), T4 unverändert.
+5. **Rollback:** Re-Tag zurück auf ia3 (falls Schritt-1-Nachweis doch fehlerhaft war).
+
+### 9.5 Risiko
+
+R-002: Tag-Umbruch bricht TS-SSH (wenn ACL ia4 nicht kennt) — Schwere hoch (Lockout-Klasse), W'keit niedrig (Original-ACL hatte ia4; Schritt 1 verifiziert vor dem Umbau). Monitoring: BDD-T1/T3.
+
+## 10. Quellen
 
 - Tailscale: [netfilter modes](https://tailscale.com/docs/reference/netfilter-modes) (on/nodivert/off, ts-input-Jumps)
 - Tailscale: [Secure Ubuntu Server with UFW](https://tailscale.com/docs/how-to/secure-ubuntu-server-with-ufw)

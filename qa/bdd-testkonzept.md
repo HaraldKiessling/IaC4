@@ -41,7 +41,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 |---|---|---|
 | T1 | SSH via Tailscale erreichbar | Exit 0, Tailscale-Node-Name (`Self.DNSName`) = `vps-<target>` (OS-Hostname ist `ubuntu` – nicht Soll-Quelle), `tailscale ip -4` = `100.x` |
 | T2 | Public-SSH geschlossen (SSH-Restrict) | SSH auf Public-IP:22 schlägt fehl |
-| T3 | Node online + korrekt getaggt | Tailscale-API: Node existiert, online via `lastSeen`-Frische (< 10 min, Proxy – `online` ist kein gültiges Listen-Feld), Tags enthalten `tag:ia3` |
+| T3 | Node online + korrekt getaggt | Tailscale-API: Node existiert, online via `lastSeen`-Frische (< 10 min, Proxy – `online` ist kein gültiges Listen-Feld), Tags enthalten `tag:ia4` (Option A, IaC3-Muster) |
 | T4 | Tailscale-Infrastruktur | `NetfilterMode` = 2 (= on, ts-input aktiv), WireGuard lauscht auf UDP 41641, `tailscale0`-Interface existiert |
 
 ### Feature: System-Baseline (`system-baseline.bdd.ps1`)
