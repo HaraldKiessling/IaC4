@@ -126,10 +126,13 @@ jobs:
         working-directory: ansible
         run: ansible-galaxy collection install -r requirements.yml
 
-      - name: Inventory-Datei erstellen (MagicDNS)
+      - name: Inventory-Datei erstellen (MagicDNS) + group_vars bereitstellen
         run: |
           echo "[vps]" > /tmp/inventory
           echo "vps-${{ inputs.target }} ansible_host=$VPS_TS_IP ansible_user=$VPS_USER" >> /tmp/inventory
+          # group_vars werden von Ansible NUR inventory-adjacent geladen -> /tmp/group_vars spiegeln
+          mkdir -p /tmp/group_vars
+          cp ansible/group_vars/all.yml /tmp/group_vars/all.yml
           cat /tmp/inventory
 
       - name: Service-Playbook ausführen ({{ inputs.playbook }})
