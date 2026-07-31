@@ -3,6 +3,8 @@ name: "DEBUG – OAuth Client Test"
 on:
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,9 +23,10 @@ jobs:
           ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r '.access_token' 2>/dev/null)
           echo "::add-mask::$ACCESS_TOKEN"
           echo "Access token length: ${#ACCESS_TOKEN}"
+          echo "::add-mask::$TOKEN_RESP"
           if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" = "null" ]; then
-            echo "❌ Kein Access Token erhalten. Vollständige Response:"
-            echo "$TOKEN_RESP"
+            echo "❌ Kein Access Token erhalten. Fehlerfelder:"
+            echo "$TOKEN_RESP" | jq -c '{error, error_description, message}' 2>/dev/null || echo "(keine JSON-Fehlerfelder)"
             exit 1
           fi
           echo "✅ Access Token OK"
@@ -48,9 +51,10 @@ jobs:
             }')
           AUTH_KEY=$(echo "$KEY_RESP" | jq -r '.key' 2>/dev/null)
           echo "::add-mask::$AUTH_KEY"
+          echo "::add-mask::$KEY_RESP"
           if [ -z "$AUTH_KEY" ] || [ "$AUTH_KEY" = "null" ]; then
-            echo "❌ Kein Auth-Key. Fehler:"
-            echo "$KEY_RESP"
+            echo "❌ Kein Auth-Key. Fehlerfelder:"
+            echo "$KEY_RESP" | jq -c '{error, error_description, message}' 2>/dev/null || echo "(keine JSON-Fehlerfelder)"
             exit 1
           fi
           echo "✅ Auth-Key erstellt (Länge: ${#AUTH_KEY})"
