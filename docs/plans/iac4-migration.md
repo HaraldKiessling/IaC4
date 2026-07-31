@@ -95,3 +95,12 @@
 - [ ] Ollama (niedrige Prio)
 - [ ] Monitoring/Alerting
 - [ ] Fehlende API-Secrets (Gemini, OpenRouter)
+
+## 🔲 Offene Punkte (Stand 2026-07-31)
+
+> Erfasst nach Abschluss der Regel-Härtung, BDD-Einführung, UFW-Fix, OAuth-only-Umbau und Option A (Tag-Design tag:ia4). Bewusst offen gelassen — kein Blocker für den laufenden Betrieb.
+
+- [ ] **arc42/11-Risiko-Einträge übernehmen:** R-001 (Lockout durch SSH-Restrict-Fehler, Schwere hoch/W'keit niedrig) und R-002 (Tag-Umbruch bricht TS-SSH) aus `docs/plans/iac4-firewall-konzept.md` §6/§9.5 in `docs/arc42/11_risiken_und_technische_schulden.md` übernehmen
+- [ ] **Neuer Tailscale-API-Key für 01-/ACL-Runs:** Der 24h-Key (2026-07-31) ist abgelaufen (401). Workflow 01 (Terraform-Provider) und `ensure-acl-ia4.py` brauchen für echte Änderungen einen gültigen Key (Konsole → Generate API Key). Tagesbetrieb 02/03/04 ist davon unabhängig (OAuth-only).
+- [ ] **Fresh-Node-Join-Verifikation:** Der Exact-Match-Auth-Key `[tag:ci, tag:ia4]` (Option A) ist erst bei der nächsten Neuprovisionierung eines VPS empirisch testbar (Join direkt mit tag:ia4, kein Re-Tag nötig) — 02-Re-Run auf dem Bestands-VPS ist nach dem SSH-Restrict nicht mehr möglich (Re-Run-Design-Befund, Issue #42)
+- [ ] **PROD-Migration** (Migrationsplan Phase 8): weiterhin offen — VPS prod ist noch IaC3; nach erfolgreichem IaC4-dev-Betrieb migrieren (inkl. BDD-Lauf auf prod, VPS_PROD_PUBLIC_IP-Secret setzen)
