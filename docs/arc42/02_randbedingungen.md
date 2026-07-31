@@ -16,7 +16,7 @@
 - **IaC3-Abgrenzung:** Kein Petrus, keine RFCs, arc42-light
 
 ## Konventions-Übersicht
-- **Branching:** Feature/BugFix → PR → DEV → PR → MAIN
+- **Branching:** Feature/BugFix → PR → DEV → PR → MAIN; Worktree-Sessions: `session-*/<topic>` → PR (Issue #29)
 - **Commits:** Conventional Commits
 - **Dokumentation:** arc42-light in docs/arc42/ (Deutsch)
 - **Repo:** Monorepo für IaC4; separate Repos für home-assistant und openclaw-config

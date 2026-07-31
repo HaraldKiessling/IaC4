@@ -24,7 +24,7 @@
 | **Pre-Flight Validation vor Push** – yamllint + markdownlint lokal prüfen | Alle |
 | **Nie `sed`/Regex-Editing auf YAML/JSON/Templates** – gezielt editieren + Parser-Validierung (P4b) | Alle |
 | **Kein Overclaiming** – „garantiert korrekt"/„verifiziert" nur mit Validierungsnachweis (P9) | Alle |
-| **Force-Push nicht auf PR-Branches** – nur auf ungeteilte Feature-/`session-*`-Branches (1 Branch = 1 Worktree) | Alle |
+| **Force-Push nicht auf PR-Branches** – nur auf ungeteilte Feature- und `session-*`-Branches (1 Branch = 1 Worktree) | Alle |
 | **PR-Checkliste vor Fertig-Meldung** – CI grün, Doku aktuell, Secrets-Check, Branch rebased | Orchestrator |
 
 ## ✅ Autonom (kein Approval nötig)

@@ -52,7 +52,7 @@
 **Wer:** 🔧 Engineer (Sub-Agent)
 **Was:** Code nach Spezifikation
 **Regeln:**
-- 1 Task = 1 Branch
+- 1 Task = 1 Branch (Worktree-Sessions: `session-*/<topic>`, Issue #29)
 - Evidenz via web_search vor Annahmen
 - Quellen in Commit-Nachricht
 **Output:** Code + Doku + Tests
