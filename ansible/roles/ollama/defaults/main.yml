@@ -6,3 +6,5 @@ ollama_cpu_limit: "2"
 ollama_mem_limit: 4G
 ollama_cpu_reserve: "1"
 ollama_mem_reserve: 2G
+ollama_num_parallel: 2
+ollama_keep_alive: "24h"

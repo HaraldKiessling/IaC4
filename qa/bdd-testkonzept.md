@@ -65,11 +65,12 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | D4 | Traefik-Container läuft (ADR-017/018) | `docker ps` → `Up`, Image `traefik:` |
 | D5 | HTTP-only: kein 443-Listener (ADR-018) | `ss -tln` zeigt kein `:443` |
 | D6 | Dashboard-Auth greift (ADR-019) | `curl :8080/dashboard/` ohne Auth → HTTP 401 |
-| D7 | Firewall Service-Ports: UFW-CGNAT (R7-R9) + DOCKER-USER (R10/R11) | `ufw status verbose` → `ALLOW FROM 100.64.0.0/10` je Port; `iptables -S DOCKER-USER` → CGNAT-ACCEPT + DROP für 80,8080,11434 |
+| D7 | Firewall Service-Ports: UFW-CGNAT (R7-R9) + DOCKER-USER (R10/R11) | `ufw status verbose` → `ALLOW FROM 100.64.0.0/10` je Port; `iptables -S DOCKER-USER` → CGNAT-ACCEPT + interface-gebundener DROP für 80,8080,11434,6333,6334 |
 | D8 | Tailscale Serve aktiv (ADR-018) | `tailscale serve status` → `localhost:80` |
 | O1 | Ollama-API erreichbar (ADR-021) | Container `Up`, `GET /api/tags` → 200 |
 | O2 | Modell pre-warmed (ADR-023) | `ollama list` enthält `nomic-embed-text` |
 | O3 | Embedding schnell (ADR-023) | `POST /api/embeddings` < 2s (Pre-Warm-Wirkung) |
+| D9 | Service-Ports von außen NICHT erreichbar (Wirkungs-Check, K1-1) | Runner → `http://<Public-IP>:80/11434/6333` → kein HTTP-Response (Timeout/Filtered) |
 
 ### Geplant (sobald Services deployt sind)
 - **Qdrant:** `GET :6333/health` → `{"status":"ok"}`

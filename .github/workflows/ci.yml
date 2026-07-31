@@ -21,6 +21,18 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@v16
         with:
           globs: 'docs/**/*.md'
+      - name: Ansible Playbook Syntax-Check (P4b, K3-5)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ansible
+          cd ansible
+          FAIL=0
+          for pb in playbooks/*.yml; do
+            echo "▶️  $pb"
+            ansible-playbook --syntax-check "$pb" >/dev/null 2>&1 || { echo "❌ $pb"; FAIL=1; }
+          done
+          if [ "$FAIL" -ne 0 ]; then echo "❌ Ansible-Syntax-Check fehlgeschlagen"; exit 1; fi
+          echo "✅ Alle Playbooks syntaktisch valide"
+
       - name: Check arc42 Living Docs (hart)
         run: |
           echo "Prüfe ob docs/arc42/ alle 12 Kapitel enthält…"

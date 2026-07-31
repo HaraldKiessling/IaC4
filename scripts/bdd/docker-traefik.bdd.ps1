@@ -8,6 +8,7 @@ param(
     [Parameter(Mandatory)][string]$VpsIp,
     [Parameter(Mandatory)][string]$VpsUser,
     [Parameter(Mandatory)][string]$SshKeyPath,
+    [Parameter(Mandatory)][string]$PublicIp,
     [string]$DockerNetwork = "traefik-network",
     [string]$OllamaModel = "nomic-embed-text"
 )
@@ -71,8 +72,8 @@ Then-True "Port 8080 CGNAT-Allow" ($r.Output -match '8080/tcp\s+ALLOW\s+FROM\s+1
 Then-True "Port 11434 CGNAT-Allow" ($r.Output -match '11434/tcp\s+ALLOW\s+FROM\s+100\.64\.0\.0/10') $r.Output
 $r = Invoke-SSH "sudo iptables -S DOCKER-USER" $VpsUser $VpsIp $SshKeyPath
 When "iptables -S DOCKER-USER abgefragt wird"
-Then-True "DOCKER-USER: CGNAT-ACCEPT für 80/8080/11434" ($r.Output -match '100\.64\.0\.0/10.*80,8080,11434.*ACCEPT') $r.Output
-Then-True "DOCKER-USER: DROP für Rest" ($r.Output -match '80,8080,11434.*DROP') $r.Output
+Then-True "DOCKER-USER: CGNAT-ACCEPT für 80/8080/11434/6333/6334" ($r.Output -match '100\.64\.0\.0/10.*80,8080,11434,6333,6334.*ACCEPT') $r.Output
+Then-True "DOCKER-USER: DROP interface-gebunden (nicht global)" ($r.Output -match '\-i\s+\S+.*80,8080,11434,6333,6334.*DROP') $r.Output
 
 # ── D8: Tailscale Serve aktiv (ADR-018) ──
 Write-Host "`nScenario: Tailscale Serve leitet HTTPS 443 → localhost:80 (ADR-018)" -ForegroundColor Yellow
@@ -112,3 +113,15 @@ $secs = 99.0
 if ($parts.Count -ge 2 -and $parts[1] -match '^\d+\.\d+') { $secs = [double]$parts[1] }
 Then-True "HTTP 200 (war: $http)" ($http -eq '200') $r.Output
 Then-True "Antwortzeit < 2s (war: ${secs}s)" ($secs -lt 2.0) $r.Output
+
+# ── D9: Service-Ports vom Internet NICHT erreichbar (Wirkungs-Check, K1-1-Fix) ──
+Write-Host "`nScenario: Service-Ports sind von außen (Public-IP) nicht erreichbar" -ForegroundColor Yellow
+Given "DOCKER-USER-Regeln R10/R11 (interface-gebunden) sind aktiv"
+$ext = @()
+foreach ($port in @('80', '11434', '6333')) {
+    $code = & curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "http://$PublicIp:$port/" 2>&1
+    $ext += "$port=$($code.Trim())"
+}
+$extJoined = $ext -join ', '
+When "die Public-IP-Ports vom Runner (Internet) abgerufen werden"
+Then-True "Kein HTTP-Response von außen (Timeout/Filtered): $extJoined" ($extJoined -notmatch '=(200|4\d\d|5\d\d)') $extJoined

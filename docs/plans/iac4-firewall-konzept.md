@@ -111,10 +111,10 @@ Quellen: [netfilter-modes](https://tailscale.com/docs/reference/netfilter-modes)
 | R7 | `ufw allow from 100.64.0.0/10 to any port 80 proto tcp` | Traefik HTTP (Tailscale-only, ADR-018) | `[A]` ADR-018 (Design, Umsetzung Phase 3/4) |
 | R8 | `ufw allow from 100.64.0.0/10 to any port 8080 proto tcp` | Traefik-Dashboard (Tailscale-only, ADR-019) | `[A]` ADR-019 (Design, Umsetzung Phase 3/4) |
 | R9 | `ufw allow from 100.64.0.0/10 to any port 11434 proto tcp` | Ollama-API (Tailscale-only, ADR-021) | `[A]` ADR-021 (Design, Umsetzung Phase 3/4) |
-| R10 | `iptables -I DOCKER-USER 1 -s 100.64.0.0/10 -p tcp -m multiport --dports 80,8080,11434 -j ACCEPT` | Docker-published Ports: nur CGNAT (UFW/INPUT greift bei FORWARD nicht!) | `[V]` Docker-Doku DOCKER-USER + Reviewer-Verifikation 2026-07-31 |
-| R11 | `iptables -I DOCKER-USER 2 -p tcp -m multiport --dports 80,8080,11434 -j DROP` | Docker-published Ports: Rest droppen (Worst-Case-Schutz ADR-021) | `[V]` s.o. |
+| R10 | `iptables -I DOCKER-USER 1 -s 100.64.0.0/10 -p tcp -m multiport --dports 80,8080,11434,6333,6334 -j ACCEPT` | Docker-published Ports: CGNAT-Allow (Defense-in-Depth; Tailscale-Pfad kommt auf tailscale0 an) | `[V]` Docker-Doku DOCKER-USER + Harald-Review K1-1/K2-1 2026-07-31 |
+| R11 | `iptables -I DOCKER-USER 2 -i <public_iface> -p tcp -m multiport --dports 80,8080,11434,6333,6334 -j DROP` | Docker-published Ports: Internet-Ingress droppen; **interface-gebunden** (K1-1-Fix: localhost/docker-proxy/Container bleiben erreichbar) | `[V]` s.o. |
 
-> **Docker-Abschnitt (R10/R11):** Docker published Ports werden in der FORWARD-Kette (DOCKER-USER) verarbeitet — UFW-Regeln (INPUT) greifen dort **nicht**. Die Regeln werden von der docker-Rolle gesetzt und via systemd-Unit `docker-user-cgnat.service` (After=docker.service) persistiert (2026-07-31, Reviewer-Befund).
+> **Docker-Abschnitt (R10/R11):** Docker-published Ports werden in der FORWARD-Kette (DOCKER-USER) verarbeitet — UFW-Regeln (INPUT) greifen dort **nicht**. Der DROP ist bewusst **interface-gebunden** (`-i <public_iface>`, per Default-Route ermittelt, auf dem VPS `eth0`): Ein globaler DROP würde Host-Loopback (docker-proxy, Quelle 172.17.0.1) und Container-zu-Container-Zugriffe mit droppen (Harald-Review K1-1, 2026-07-31). Persistenz: systemd-Drop-in `docker.service.d/docker-user-cgnat.conf` (ExecStartPost) setzt die Regeln bei **jedem** Docker-Daemon-Start neu (K2-3-Fix). Abgedeckte Ports: Traefik 80/8080, Ollama 11434, Qdrant 6333/6334 (K2-1).
 
 ## 5. Schritte zum Ziel – ohne Lockout
 

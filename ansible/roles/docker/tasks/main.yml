@@ -43,18 +43,16 @@
     dest: /usr/local/sbin/docker-user-cgnat.sh
     mode: '0755'
 
-- name: DOCKER-USER-CGNAT-Systemd-Unit deployen
+- name: DOCKER-USER-Drop-in deployen (Regeln bei jedem Daemon-Start, K2-3)
   ansible.builtin.copy:
-    src: docker-user-cgnat.service
-    dest: /etc/systemd/system/docker-user-cgnat.service
+    src: docker-user-cgnat-dropin.conf
+    dest: /etc/systemd/system/docker.service.d/docker-user-cgnat.conf
     mode: '0644'
 
-- name: DOCKER-USER-Regeln aktivieren (R10/R11)
-  ansible.builtin.systemd_service:
-    name: docker-user-cgnat
-    enabled: true
-    state: started
-    daemon_reload: true
+- name: DOCKER-USER-Regeln sofort setzen (R10/R11, idempotent)
+  ansible.builtin.command: /usr/local/sbin/docker-user-cgnat.sh
+  register: docker_user_rules
+  changed_when: docker_user_rules.rc == 0
 
 # ADR-016: deploy-user wird BEWUSST nicht in die docker-Gruppe aufgenommen
 # (docker-Gruppe = root-Äquivalent; Wartung via sudo, auditierbar).

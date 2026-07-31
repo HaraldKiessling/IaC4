@@ -39,6 +39,8 @@ jobs:
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
       TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
+      CODE_SERVER_PASSWORD: ${{ secrets.CODE_SERVER_PASSWORD }}
+      CODE_SERVER_SUDO_PASSWORD: ${{ secrets.CODE_SERVER_SUDO_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +60,10 @@ jobs:
           if [ "${{ inputs.playbook }}" = "docker-traefik" ] && [ -z "$TRAEFIK_DASHBOARD_AUTH" ]; then
             echo "❌ Secret TRAEFIK_DASHBOARD_AUTH fehlt (Pflicht für Traefik, ADR-019)"
             echo "   Generierung: htpasswd -nbB <user> <passwort>  (Format: user:<bcrypt-hash>)"
+            FAIL=1
+          fi
+          if [ "${{ inputs.playbook }}" = "services" ] && { [ -z "$CODE_SERVER_PASSWORD" ] || [ -z "$CODE_SERVER_SUDO_PASSWORD" ]; }; then
+            echo "❌ Secrets CODE_SERVER_PASSWORD/CODE_SERVER_SUDO_PASSWORD fehlen (Pflicht für services-Lauf, K2-2)"
             FAIL=1
           fi
           [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
@@ -115,6 +121,10 @@ jobs:
 
       - name: Ansible installieren
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
+
+      - name: Ansible-Collections installieren (requirements.yml, K3-4)
+        working-directory: ansible
+        run: ansible-galaxy collection install -r requirements.yml
 
       - name: Inventory-Datei erstellen (MagicDNS)
         run: |

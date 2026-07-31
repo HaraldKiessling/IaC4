@@ -17,6 +17,8 @@ ollama_cpu_limit: "2"
 ollama_mem_limit: 4G
 ollama_cpu_reserve: "1"
 ollama_mem_reserve: 2G
+ollama_num_parallel: 2        # ADR-022: parallele Embedding-Requests
+ollama_keep_alive: "24h"      # ADR-022: Modell bleibt geladen (Zoo-Indexing-Fix)
 
 # Code-Server – Zugangsdaten (MÜSSEN via Extra-Vars oder GH Secrets gesetzt werden)
 code_server_password: "{{ lookup('env', 'CODE_SERVER_PASSWORD') }}"
