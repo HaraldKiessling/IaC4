@@ -51,4 +51,4 @@
   loop:
     - { regexp: '^PermitRootLogin', line: 'PermitRootLogin prohibit-password' }
     - { regexp: '^PasswordAuthentication', line: 'PasswordAuthentication no' }
-  notify: sshd restart
+  notify: ssh restart
