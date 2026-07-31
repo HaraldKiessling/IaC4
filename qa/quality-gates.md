@@ -12,6 +12,7 @@
 ✅ CI-Pipeline (YAML-Lint, Markdown-Lint, arc42-Check)
 ✅ Deployment auf DEV erfolgreich (nachweisbar via Log)
 ✅ arc42-Dokumentation aktualisiert (P4)
+✅ Unabhängiger Review dokumentiert (Autor ≠ Reviewer, Issue #37)
 
 ### Für MAIN → PROD
 ✅ Alle DEV-Gates

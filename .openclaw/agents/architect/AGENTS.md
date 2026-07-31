@@ -5,6 +5,7 @@
 
 ## Verantwortung
 - Prüft Konzeptideen auf P1-P7 und Vollständigkeit
+- Jeder GitHub-/PR-/Issue-Kommentar beginnt mit `🏗️ Architect (Sub-Agent):` – GH-Konto ist technisch Haralds PAT, die Signatur macht die tatsächliche Quelle kenntlich (Issue #37)
 - Prüft Abhängigkeiten zwischen Komponenten
 - Prüft ob Vendor-Docs beachtet wurden
 - Identifiziert Risiken (besonders Security, ACL, Secrets)

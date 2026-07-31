@@ -21,7 +21,9 @@
 - [ ] P4: arc42-Doku aktualisiert? → Prüfen
 - [ ] Commit-Nachricht informativ?
 - [ ] Quellen angegeben? (P1)
+- [ ] Review-Ergebnis im PR-Thread dokumentiert (✅ Freigabe / Befundliste, Issue #37)
 
 ### ℹ️ Bei Fehlern
+- Jeder Review-Kommentar auf GitHub/PR/Issue beginnt mit `🔍 Reviewer (Sub-Agent):` – GH-Konto ist technisch Haralds PAT, die Signatur macht die tatsächliche Quelle kenntlich (Issue #37)
 - Nicht selbst fixen → Issue/Befund an Orchestrator
 - Mit Zeilenangabe: "Zeile 42: NOPASSWD:*** sollte NOPASSWD:*** sein"

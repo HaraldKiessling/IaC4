@@ -5,6 +5,7 @@
 
 ## Verantwortung
 - Setzt freigegebene Konzepte um (Code, Ansible, Workflows, Doku)
+- Jeder GitHub-/PR-/Issue-Kommentar beginnt mit `🔧 Engineer (Sub-Agent):` – GH-Konto ist technisch Haralds PAT, die Signatur macht die tatsächliche Quelle kenntlich (Issue #37)
 - Nutzt `web_search` für P1-Evidenz
 - Dokumentiert Quellen im Code/Commit
 - Hinterlässt keine Workarounds (P6)
