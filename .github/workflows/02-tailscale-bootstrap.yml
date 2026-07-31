@@ -139,23 +139,17 @@ jobs:
             -i /tmp/inventory \
             -e "tailscale_auth_key=${{ steps.authkey.outputs.auth_key }}"
 
-      - name: "Node auf tag:ia3 re-taggen (ACL: Runner tag:ci → tag:ia3)"
+      - name: "Node auf tag:ia3 re-taggen (Node-ID via SSH, ACL: tag:ci → tag:ia3)"
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
           TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
-          echo "--- tagOwners (ACL-Diagnose, HuJSON):"
-          curl -s "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/acl" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | grep -A8 "tagOwners" | head -12 || echo "KEINE tagOwners in ACL"
-          echo "--- Node-Liste (Diagnose):"
-          curl -s \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,addresses" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | \
-            jq -c '.devices[] | {hostname, id, addresses}'
-          DEVICE_ID=$(curl -s \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n or .hostname == ($n + "-1")) | .id' | head -1)
+          # Node-ID direkt vom VPS holen (tailscale status --json → Self.ID).
+          # Die API-Node-Liste ist für den CI-Key unvollständig (ACL tagOwners),
+          # der VPS kennt seine eigene ID aber zuverlässig.
+          DEVICE_ID=$(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+            "$VPS_USER@$VPS_PUBLIC_IP" "tailscale status --json | jq -r .Self.ID" 2>/dev/null)
           if [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ]; then
             RESP=$(curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
               -H "Authorization: Bearer ${TS_API_KEY}" \
@@ -165,9 +159,9 @@ jobs:
             echo "--- Verifikation (GET /device):"
             curl -s "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
               -H "Authorization: Bearer ${TS_API_KEY}" | \
-              jq -c '{hostname: .device.hostname, tags: .device.tags, online: .device.online, addresses: .device.addresses}'
+              jq -c '{hostname: .device.hostname, tags: .device.tags, online: .device.online}'
           else
-            echo "❌ Kein Node ${NODE} nach Join gefunden"
+            echo "❌ Node-ID vom VPS nicht ermittelbar (DEVICE_ID=${DEVICE_ID})"
             exit 1
           fi
 
