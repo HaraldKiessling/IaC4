@@ -1,14 +1,19 @@
 ---
 # SSH-Restriction nach Tailscale-Join
 # Phase 2: Public-SSH schließen, nur Tailscale-SSH erlauben
-# Referenz: RFC 0022 (IaC3)
+# Fix 2026-07-31: Interface-basiert, damit Tailscale-Interface offen bleibt
 
-- name: SSH auf öffentlicher IP blockieren
+- name: Öffentliches Interface ermitteln
+  ansible.builtin.set_fact:
+    public_iface: "{{ ansible_default_ipv4.interface }}"
+
+- name: SSH auf öffentlicher IP blockieren (nur public Interface)
   ansible.builtin.ufw:
     rule: deny
     port: '22'
     proto: tcp
-  notify: sshd restrict confirmed
+    direction: in
+    interface: "{{ public_iface }}"
 
 - name: Prüfen ob SSH nur noch via Tailscale erreichbar
   ansible.builtin.wait_for:

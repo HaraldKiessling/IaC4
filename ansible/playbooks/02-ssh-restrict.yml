@@ -4,12 +4,24 @@
   become: yes
   vars:
     tailscale_connected: true
+  handlers:
+    - name: sshd restart
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
   tasks:
-    - name: SSH auf öffentlicher IP blockieren
+    - name: Öffentliches Interface ermitteln
+      ansible.builtin.set_fact:
+        public_iface: "{{ ansible_default_ipv4.interface }}"
+
+    - name: SSH auf öffentlicher IP blockieren (nur public Interface)
       ansible.builtin.ufw:
         rule: deny
         port: '22'
         proto: tcp
+        direction: in
+        interface: "{{ public_iface }}"
+
     - name: Bestätigung
       ansible.builtin.debug:
-        msg: "✅ Öffentlicher SSH-Zugriff blockiert. VPS nur noch via Tailscale erreichbar."
+        msg: "✅ SSH auf {{ public_iface }} blockiert. Tailscale-Interface bleibt offen."
