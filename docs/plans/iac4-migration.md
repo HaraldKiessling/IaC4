@@ -1,7 +1,8 @@
 # IaC4 Migration – Gesamtplan
 
 > **Übergeordnetes Ziel:** IaC3-Inhalte nach IaC4 migrieren, VPS DEV via Tailscale bereitstellen.
-> **Stand:** 2026-07-30 | **Methodik:** docs/workflows/methodology.md
+> **Stand:** 2026-07-31 | **Methodik:** docs/workflows/methodology.md
+> **Aktuell:** Phase 2 (VPS DEV via Tailscale) — VPS DEV frisch installiert, Workflow 03 läuft. Nach DEV-Erfolg: PROD-Migration (Phase 8), dann IaC3 = Backup (Phase 9).
 
 ## ✅ Phase 0: Grundstruktur (erledigt)
 
@@ -67,6 +68,23 @@
 - [ ] arc42 living docs updaten (P4)
 - [ ] Gap-Analyse (P5)
 - [ ] Tech-Debt in K11 aktualisieren
+
+## ⬜ Phase 8: VPS PROD nach IaC4 migrieren (nach erfolgreichem DEV-Betrieb)
+
+> **Voraussetzung:** Phase 2-7 auf DEV vollständig grün (Tailscale, Baseline, Services, OpenClaw, CI/CD).
+
+- [ ] VPS PROD mit IaC4-Cloud-Config neu installieren (deploy-user + IaC4-SSH-Key)
+- [ ] Workflow 03 (Tailscale Bootstrap) auf `target=prod` ausführen
+- [ ] SSH-Zugriff via Tailscale auf PROD bestätigen
+- [ ] Baseline + Services + OpenClaw auf PROD deployen (Workflows 01-03)
+- [ ] Post-Deploy-Verifikation + Gap-Analyse PROD
+- [ ] IaC3-Deployments auf PROD stoppen (IaC3 → Backup-Modus)
+
+## ✅ Phase 9: IaC3 in den Backup-Modus
+
+- [ ] IaC3-Workflows deaktivieren (keine Deploys auf dev/prod)
+- [ ] IaC3-Repo als Backup-Referenz markieren (README-Hinweis)
+- [ ] Finale Dokumentation: IaC4 = Single Source of Truth
 
 ## 🔴 Tech-Debt (dokumentiert in arc42 K11)
 
