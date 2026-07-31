@@ -56,7 +56,7 @@ Write-Host "`nScenario: VPS-Node ist online und mit tag:ia3 getaggt" -Foreground
 Given "Tailscale-API-Key ist verfügbar"
 $devices = $null
 try {
-    $devices = Invoke-RestMethod -Uri "https://api.tailscale.com/api/v2/tailnet/$Tailnet/devices?fields=hostname,tags,online,lastSeen" `
+    $devices = Invoke-RestMethod -Uri "https://api.tailscale.com/api/v2/tailnet/$Tailnet/devices?fields=hostname,tags,lastSeen" `
         -Headers @{ Authorization = "Bearer $ApiKey" } -TimeoutSec 20
 }
 catch {

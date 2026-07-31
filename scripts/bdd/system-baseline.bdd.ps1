@@ -36,6 +36,15 @@ $r = Invoke-SSH "swapon --show" $VpsUser $VpsIp $SshKeyPath
 When "swapon --show ausgeführt wird"
 Then-True "/swapfile ist aktiv" ($r.Output -match '/swapfile') $r.Output
 
+# ── Szenario 5: UFW aktiv, öffentliches SSH blockiert (Regelreihenfolge) ──
+Write-Host "`nScenario: UFW aktiv – öffentliches SSH blockiert, keine generische Allow-Regel" -ForegroundColor Yellow
+Given "cloud-config aktiviert UFW und setzt generisches allow ssh (Bootstrap-Zugang)"
+$r = Invoke-SSH "sudo ufw status verbose" $VpsUser $VpsIp $SshKeyPath
+When "ufw status verbose abgefragt wird"
+Then-True "UFW ist aktiv (Status: active)" ($r.Output -match 'Status: active') $r.Output
+Then-True "Keine generische Allow-Regel für Port 22 mehr (cloud-config-Regel gelöscht)" ($r.Output -notmatch '22/tcp\s+ALLOW IN\s+Anywhere') $r.Output
+Then-True "Deny-Regel auf öffentlichem Interface vorhanden" ($r.Output -match '22/tcp\s+DENY IN on ') $r.Output
+
 # ── Szenario 4: deploy-user mit sudo ──
 Write-Host "`nScenario: deploy-user hat funktionierendes sudo" -ForegroundColor Yellow
 Given "deploy-user ist in der sudoers (Ansible become)"

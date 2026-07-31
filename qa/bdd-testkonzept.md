@@ -41,7 +41,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 |---|---|---|
 | T1 | SSH via Tailscale erreichbar | Exit 0, Tailscale-Node-Name (`Self.DNSName`) = `vps-<target>` (OS-Hostname ist `ubuntu` – nicht Soll-Quelle), `tailscale ip -4` = `100.x` |
 | T2 | Public-SSH geschlossen (SSH-Restrict) | SSH auf Public-IP:22 schlägt fehl |
-| T3 | Node online + korrekt getaggt | Tailscale-API: Node existiert, `online=true`, Tags enthalten `tag:ia3` |
+| T3 | Node online + korrekt getaggt | Tailscale-API: Node existiert, online via `lastSeen`-Frische (< 10 min, Proxy – `online` ist kein gültiges Listen-Feld), Tags enthalten `tag:ia3` |
 
 ### Feature: System-Baseline (`system-baseline.bdd.ps1`)
 | # | Szenario | Then-Assertion |
@@ -50,6 +50,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | B2 | Zeitzone korrekt | `timedatectl` → `Europe/Berlin` |
 | B3 | Swap aktiv | `swapon --show` enthält `/swapfile` |
 | B4 | deploy-user-Sudo funktioniert | `sudo -n true` → Exit 0 |
+| B5 | UFW aktiv, öffentliches SSH blockiert | `ufw status verbose`: Status active, keine generische `22/tcp ALLOW IN Anywhere`-Regel (cloud-config-Regel gelöscht), `DENY IN on <public_iface>` vorhanden |
 
 ### Geplant (Phase 3, sobald Services deployt sind)
 - **Docker/Traefik:** `docker info`, Traefik-Container running, ACME-E-Mail gesetzt
