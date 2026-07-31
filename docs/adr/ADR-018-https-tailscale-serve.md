@@ -13,6 +13,7 @@ Wie erhalten Browser-Clients im Tailnet HTTPS-Zugriff auf die Web-Services?
 ### A: Tailscale Serve (443 → localhost:80) — EMPFEHLUNG (IaC3-Muster)
 - **Fachliche Auswirkungen:** Tailscale stellt automatisch gültige Let's-Encrypt-Zertifikate für `*.ts.net`-Namen aus (kein eigenes ACME-Management, keine Rate-Limits); Browser bekommen **Secure Context** (Voraussetzung für Clipboard/Service-Worker/WebRTC in code-server); Serve ist standardmäßig **tailnet-intern** (kein öffentlicher Zugriff, anders als Funnel). Voraussetzung: HTTPS-Certificates einmalig in der Tailscale-Admin-Konsole aktivieren (**Blocker**). Betrieb: `tailscale serve --bg https / http://localhost:80`, in Ansible idempotent (Status prüfen, sonst setzen).
 - **Zukunft:** Jeder neue Web-Service profitiert ohne Zusatzaufwand; falls je öffentlicher Zugriff gewünscht: Funnel (bewusst NICHT jetzt).
+- **Kommando-Syntax (>= Tailscale 1.52, Umsetzung 2026-07-31):** `tailscale serve --bg http://localhost:80` — HTTPS:443 + Mount `/` sind Defaults (die Legacy-Form `serve --bg https / http://localhost:80` wird von aktuellem CLI abgelehnt).
 
 ### B: HTTP-only via MagicDNS (`http://vps-dev…ts.net:80`)
 - **Fachliche Auswirkungen:** Minimal (kein Serve-Konfigurationspunkt), aber Browser behandeln den Host als insecure → eingeschränkte Features (Clipboard-API, PWA, einige WebRTC-Fälle); URLs mit Port wirken unprofessionell; keine einheitliche HTTPS-Basis für spätere Services.
@@ -28,7 +29,7 @@ Wie erhalten Browser-Clients im Tailnet HTTPS-Zugriff auf die Web-Services?
 - code-server (VS Code Web) benötigt Secure Context für mehrere Features (dokumentierte Anforderung)
 
 ## Empfehlung
-**Option A** – Tailscale Serve (HTTPS 443 → localhost:80), konfiguriert in der Tailscale-Rolle (idempotent). **Blocker/Voraussetzung:** HTTPS-Certificates in Tailscale-Admin-Konsole aktivieren (einmalig, Harald) — vor Phase-4-Deploy prüfen.
+**Option A** – Tailscale Serve (HTTPS 443 → localhost:80), konfiguriert in der Traefik-Rolle (idempotent, nach Traefik-Start). **Voraussetzung (erledigt 2026-07-31):** HTTPS-Certificates im Tailnet sind bereits aktiviert (IaC3-Betrieb, Bestätigung Harald) — kein Blocker mehr.
 
 ## Worst-Case / Rollback (Pflicht: Netzwerk-/Expositions-Entscheidung)
 - **Worst-Case 1:** HTTPS-Certificates-Flag im Tailnet nicht aktivierbar → Serve kann kein Zertifikat beziehen, Web-Services nur per HTTP erreichbar (kein Secure Context).

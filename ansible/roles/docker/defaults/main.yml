@@ -1,0 +1,3 @@
+---
+# Docker-Rolle – Defaults (ADR-015/017)
+docker_arch: "amd64"   # VPS-Architektur (deb822-Architectures-Feld)

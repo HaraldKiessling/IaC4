@@ -1,0 +1,41 @@
+#!/bin/bash
+# Ollama Pre-Warm (ADR-023): Modell pullen + warmhalten, bevor der Container "ready" ist.
+# Behebt das Zoo-Indexing-Timeout (erster Embedding-Request <1s statt 15-30s).
+set -uo pipefail
+
+MODEL="{{ ollama_model }}"
+
+# curl fehlt im offiziellen ollama-Image (v0.32.5) – Readiness/Warmup brauchen es (ADR-023)
+if ! command -v curl >/dev/null 2>&1; then
+  echo "Installiere curl (fehlt im Basis-Image) ..."
+  apt-get update -qq >/dev/null 2>&1 || true
+  apt-get install -y -qq curl >/dev/null 2>&1 || true
+fi
+
+ollama serve &
+OLLAMA_PID=$!
+
+# 1. Auf Server warten (max 30s)
+READY=0
+for _ in $(seq 1 30); do
+  if curl -fsS http://localhost:11434/api/tags >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+  sleep 1
+done
+[ "$READY" -eq 1 ] || echo "WARN: Ollama-Server nicht rechtzeitig bereit – fahre fort"
+
+# 2. Modell pullen (idempotent – gecached im Volume ollama_models)
+ollama pull "$MODEL" || echo "WARN: Modell-Pull fehlgeschlagen – laedt bei erstem Request"
+
+# 3. Pre-Warm: erstes Embedding triggert Modell-Load in RAM
+curl -fsS -X POST http://localhost:11434/api/embeddings \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"$MODEL\",\"prompt\":\"warmup\"}" >/dev/null 2>&1 \
+  || echo "WARN: Pre-Warm fehlgeschlagen – erster Request wird langsamer sein"
+
+echo "Ollama ready: $MODEL pre-warmed"
+
+# 4. Server-Prozess im Vordergrund halten (Container lebt, solange serve lebt)
+wait "$OLLAMA_PID"

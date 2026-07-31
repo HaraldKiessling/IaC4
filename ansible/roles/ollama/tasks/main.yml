@@ -1,0 +1,41 @@
+---
+# Ollama-Rolle (ADR-021: Host-Port 0.0.0.0:11434 + UFW-CGNAT; ADR-022: Limits 2C/4G, KEEP_ALIVE=24h; ADR-023: Pre-Warm nomic-embed-text)
+
+- name: Ollama-Verzeichnis anlegen
+  ansible.builtin.file:
+    path: /opt/ollama
+    state: directory
+    mode: '0755'
+
+- name: Ollama-docker-compose.yml deployen (gepinnt, Limits, traefik-network)
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /opt/ollama/docker-compose.yml
+    mode: '0644'
+
+- name: "Pre-Warm-Entrypoint deployen (ADR-023: Pull + Warmup vor Ready)"
+  ansible.builtin.template:
+    src: entrypoint.sh.j2
+    dest: /opt/ollama/entrypoint.sh
+    mode: '0755'
+
+- name: UFW – Port 11434 aus CGNAT erlauben (Firewall-Konzept R9, ADR-021)
+  community.general.ufw:
+    rule: allow
+    from: 100.64.0.0/10
+    port: 11434
+    proto: tcp
+
+- name: Ollama-Container starten
+  community.docker.docker_compose_v2:
+    project_src: /opt/ollama
+    state: present
+
+- name: Auf Ollama-API warten (serve bereit; Modell-Pull/Pre-Warm laeuft im Entrypoint parallel)
+  ansible.builtin.uri:
+    url: http://localhost:11434/api/tags
+    status_code: 200
+  register: ollama_wait
+  until: ollama_wait.status == 200
+  retries: 20
+  delay: 5

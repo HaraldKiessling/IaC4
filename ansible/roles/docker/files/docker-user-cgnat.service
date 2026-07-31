@@ -1,0 +1,12 @@
+[Unit]
+Description=IaC4 DOCKER-USER CGNAT-Regeln (Firewall-Konzept R10/R11)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/docker-user-cgnat.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

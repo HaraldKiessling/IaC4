@@ -21,5 +21,5 @@
 
 **Offene Punkte vor Akzeptanz:**
 1. ~~Harald: VPS-Spec bestätigen (ADR-022)~~ → **erledigt 2026-07-31** (6 vCore / 8 GB / 240 GB NVMe)
-2. Harald: HTTPS-Certificates in Tailscale-Admin-Konsole aktivieren (ADR-018, Blocker Phase 4)
+2. ~~Harald: HTTPS-Certificates in Tailscale-Admin-Konsole aktivieren (ADR-018)~~ → **erledigt 2026-07-31** (bereits bei IaC3 aktiviert)
 3. Harald: Entscheidung je ADR (Akzeptieren/Ändern)

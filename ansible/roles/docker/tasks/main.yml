@@ -1,15 +1,26 @@
 ---
-- name: Docker-GPG-Key hinzufügen
-  ansible.builtin.apt_key:
+# Docker-Rolle (ADR-015: eigene Tasks + offizielles Docker-Repo; ADR-016: keine docker-Gruppe)
+# Quellen: https://docs.docker.com/engine/install/ubuntu/ (deb822-Format, Stand 2026-07)
+
+- name: Docker-Keyring-Verzeichnis anlegen
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Docker-GPG-Key herunterladen (docker.asc)
+  ansible.builtin.get_url:
     url: https://download.docker.com/linux/ubuntu/gpg
-    state: present
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
 
-- name: Docker-Repository hinzufügen
-  ansible.builtin.apt_repository:
-    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
-    state: present
+- name: Docker-APT-Repository deployen (deb822-Format)
+  ansible.builtin.template:
+    src: docker.sources.j2
+    dest: /etc/apt/sources.list.d/docker.sources
+    mode: '0644'
 
-- name: Docker installieren
+- name: Docker-Engine + Compose-Plugin installieren
   ansible.builtin.apt:
     name:
       - docker-ce
@@ -18,14 +29,40 @@
       - docker-buildx-plugin
       - docker-compose-plugin
     state: present
+    update_cache: true
 
-- name: 'deploy-user-User zur Docker-Gruppe hinzufügen'
-  ansible.builtin.user:
-    name: "deploy-user"
-    groups: docker
-    append: true
+- name: Docker-Daemon aktivieren und starten
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
 
-- name: Docker-Netzwerk anlegen
+- name: DOCKER-USER-CGNAT-Skript deployen (Firewall-Konzept R10/R11)
+  ansible.builtin.copy:
+    src: docker-user-cgnat.sh
+    dest: /usr/local/sbin/docker-user-cgnat.sh
+    mode: '0755'
+
+- name: DOCKER-USER-CGNAT-Systemd-Unit deployen
+  ansible.builtin.copy:
+    src: docker-user-cgnat.service
+    dest: /etc/systemd/system/docker-user-cgnat.service
+    mode: '0644'
+
+- name: DOCKER-USER-Regeln aktivieren (R10/R11)
+  ansible.builtin.systemd_service:
+    name: docker-user-cgnat
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# ADR-016: deploy-user wird BEWUSST nicht in die docker-Gruppe aufgenommen
+# (docker-Gruppe = root-Äquivalent; Wartung via sudo, auditierbar).
+# BDD-Check in scripts/bdd/docker-traefik.bdd.ps1 (Szenario D2).
+
+- name: Shared Docker-Network erstellen ({{ docker_network }})
   community.docker.docker_network:
     name: "{{ docker_network }}"
+    driver: bridge
+    attachable: true
     state: present

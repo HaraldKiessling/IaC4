@@ -11,11 +11,11 @@ services:
     volumes:
       - qdrant-data:/qdrant/storage
     networks:
-      - traefik-public
+      - {{ docker_network }}
 
 volumes:
   qdrant-data:
 
 networks:
-  traefik-public:
+  {{ docker_network }}:
     external: true
