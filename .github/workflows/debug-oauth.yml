@@ -11,7 +11,7 @@ jobs:
       - name: OAuth Token + Auth Key Test
         env:
           TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-          TS_CLIENT_SECRET: *** secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
         run: |
           set -x
