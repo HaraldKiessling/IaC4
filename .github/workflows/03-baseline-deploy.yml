@@ -106,4 +106,4 @@ jobs:
           echo "SSH-Verifikation via MagicDNS:"
           ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
               "$VPS_USER@$VPS_TS_IP" \
-              "hostname; tailscale ip -4" || echo "❌ SSH via Tailscale fehlgeschlagen"
+              "hostname; tailscale ip -4" || { echo "❌ SSH via Tailscale fehlgeschlagen"; exit 1; }

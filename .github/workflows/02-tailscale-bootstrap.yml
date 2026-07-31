@@ -46,6 +46,7 @@ jobs:
             echo "❌ Unbekanntes Target: ${{ inputs.target }}"
             exit 1
           fi
+          echo "::add-mask::$VPS_PUBLIC_IP"
           echo "Target: ${{ inputs.target }} → IP: $VPS_PUBLIC_IP"
 
       - name: Vorbedingungen prüfen (Reihenfolge-Gate)
@@ -83,8 +84,8 @@ jobs:
           TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
         run: |
-          TOKEN_RESP=$(curl -s --max-time 30 -d "client_id=$TS_CLIENT_ID" \
-            -d "client_secret=$TS_CLIENT_SECRET" \
+          TOKEN_RESP=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
             "https://api.tailscale.com/api/v2/oauth/token")
           ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r '.access_token')
           KEY_RESP=$(curl -s --max-time 30 -X POST \
