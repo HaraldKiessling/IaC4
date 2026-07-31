@@ -1,0 +1,62 @@
+name: "DEBUG – OAuth Client Test"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: OAuth Token + Auth Key Test
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: *** secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          set -x
+          echo "=== Step 1: OAuth Token holen ==="
+          TOKEN_RESP=$(curl -s -d "client_id=$TS_CLIENT_ID" \
+            -d "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token")
+          echo "Token response:"
+          echo "$TOKEN_RESP" | head -c 300
+          echo ""
+          ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r '.access_token' 2>/dev/null)
+          echo "Access token length: ${#ACCESS_TOKEN}"
+          if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" = "null" ]; then
+            echo "❌ Kein Access Token erhalten. Vollständige Response:"
+            echo "$TOKEN_RESP"
+            exit 1
+          fi
+          echo "✅ Access Token OK"
+
+          echo ""
+          echo "=== Step 2: Auth-Key erstellen ==="
+          KEY_RESP=$(curl -s -X POST \
+            "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/keys" \
+            -u "$ACCESS_TOKEN:" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "capabilities": {
+                "devices": {
+                  "create": {
+                    "reusable": false,
+                    "ephemeral": false,
+                    "preauthorized": true,
+                    "tags": ["tag:ia3"]
+                  }
+                }
+              }
+            }')
+          echo "Key response:"
+          echo "$KEY_RESP" | head -c 300
+          echo ""
+          AUTH_KEY=$(echo "$KEY_RESP" | jq -r '.key' 2>/dev/null)
+          if [ -z "$AUTH_KEY" ] || [ "$AUTH_KEY" = "null" ]; then
+            echo "❌ Kein Auth-Key. Fehler:"
+            echo "$KEY_RESP"
+            exit 1
+          fi
+          echo "✅ Auth-Key erstellt (Länge: ${#AUTH_KEY})"
+          echo "Auth-Key prefix: ${AUTH_KEY:0:20}..."
