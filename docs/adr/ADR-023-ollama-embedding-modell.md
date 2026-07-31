@@ -48,7 +48,7 @@ Welches Embedding-Modell lädt Ollama initial?
 - ADR-Review-Kriterium: Upgrade erst bei belegtem Bedarf (Evidence-based Engineering)
 
 ## Referenzen
-- https://ollama.com/blog/embedding-models
-- https://ollama.com/library/nomic-embed-text
+- <https://ollama.com/blog/embedding-models>
+- <https://ollama.com/library/nomic-embed-text>
 - https://www.tigerdata.com/blog/finding-the-best-open-source-embedding-model-for-rag (Stand Dez 2024)
 - https://localaimaster.com/blog/best-ollama-models (2026)

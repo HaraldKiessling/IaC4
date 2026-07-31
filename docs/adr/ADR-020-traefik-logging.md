@@ -40,6 +40,6 @@ Wie werden Traefik-Zugriffs- und Systemlogs in IaC4 gehandhabt?
 - Kein logrotate-Paket nötig
 
 ## Referenzen
-- https://doc.traefik.io/traefik/observability/access-logs/
-- https://doc.traefik.io/traefik/observe/logs-and-access-logs/
-- https://community.traefik.io/t/traefik-logs-how-best-to-manage/9381
+- <https://doc.traefik.io/traefik/observability/access-logs/>
+- <https://doc.traefik.io/traefik/observe/logs-and-access-logs/>
+- <https://community.traefik.io/t/traefik-logs-how-best-to-manage/9381>

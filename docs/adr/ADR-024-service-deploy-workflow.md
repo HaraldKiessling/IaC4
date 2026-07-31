@@ -42,6 +42,6 @@ Wie strukturiert IaC4 den Service-Deploy-Workflow?
 - Migrationsschwelle in den Workflow-Kommentar schreiben
 
 ## Referenzen
-- https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions
-- https://docs.github.com/actions/sharing-automations/reusing-workflows
-- https://github.com/orgs/community/discussions/8774
+- <https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions>
+- <https://docs.github.com/actions/sharing-automations/reusing-workflows>
+- <https://github.com/orgs/community/discussions/8774>

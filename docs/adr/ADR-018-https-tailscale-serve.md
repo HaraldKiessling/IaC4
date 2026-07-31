@@ -44,6 +44,6 @@ Wie erhalten Browser-Clients im Tailnet HTTPS-Zugriff auf die Web-Services?
 - Doku: Zugriffs-URLs als `https://<host>.ts.net` ohne Port
 
 ## Referenzen
-- https://tailscale.com/docs/how-to/set-up-https-certificates
-- https://tailscale.com/docs/features/tailscale-serve
-- https://tailscale.com/docs/reference/tailscale-cli
+- <https://tailscale.com/docs/how-to/set-up-https-certificates>
+- <https://tailscale.com/docs/features/tailscale-serve>
+- <https://tailscale.com/docs/reference/tailscale-cli>

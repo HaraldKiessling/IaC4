@@ -41,6 +41,6 @@ Wie werden Image-Versionen in IaC4 referenziert (Compose-Templates)?
 - Upgrade-Log in Commit-Message (z.B. „chore: traefik 3.5.0 → 3.5.1, Quelle: Release-Notes")
 
 ## Referenzen
-- https://www.docker.com/blog/docker-best-practices-using-tags-and-labels-to-manage-docker-image-sprawl/
-- https://docs.docker.com/build/building/best-practices/
-- https://nickjanetakis.com/blog/docker-tip-18-please-pin-your-docker-image-versions
+- <https://www.docker.com/blog/docker-best-practices-using-tags-and-labels-to-manage-docker-image-sprawl/>
+- <https://docs.docker.com/build/building/best-practices/>
+- <https://nickjanetakis.com/blog/docker-tip-18-please-pin-your-docker-image-versions>

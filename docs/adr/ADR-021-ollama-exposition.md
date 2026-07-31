@@ -41,6 +41,6 @@ Wie wird die Ollama-API auf dem VPS exponiert?
 - Kein Auth-Mechanismus (bewusst: Tailscale-Isolation); dokumentiert als akzeptiertes Restrisiko
 
 ## Referenzen
-- https://docs.ollama.com/faq
-- https://stackoverflow.com/questions/78689283/exposing-11434-port-in-docker-container-to-access-ollama-local-model
-- https://github.com/ollama/ollama/issues/6398
+- <https://docs.ollama.com/faq>
+- <https://stackoverflow.com/questions/78689283/exposing-11434-port-in-docker-container-to-access-ollama-local-model>
+- <https://github.com/ollama/ollama/issues/6398>

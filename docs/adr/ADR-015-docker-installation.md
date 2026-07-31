@@ -40,5 +40,5 @@ Wie installiert IaC4 die Docker Engine (inkl. Compose-Plugin) auf dem VPS?
 - Versions-Pinning der Pakete optional über `group_vars` (vgl. ADR-017)
 
 ## Referenzen
-- https://docs.docker.com/engine/install/ubuntu/
-- https://docs.docker.com/engine/install/
+- <https://docs.docker.com/engine/install/ubuntu/>
+- <https://docs.docker.com/engine/install/>

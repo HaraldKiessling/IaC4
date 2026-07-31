@@ -42,6 +42,6 @@ Wie wird das Traefik-Dashboard/API in IaC4 exponiert?
 - Metrics-Entrypoint erst bei Monitoring-Bedarf (Phase 6), nicht jetzt
 
 ## Referenzen
-- https://doc.traefik.io/traefik/operations/dashboard/
-- https://doc.traefik.io/traefik/reference/install-configuration/api-dashboard/
-- https://doc.traefik.io/traefik/observability/access-logs/
+- <https://doc.traefik.io/traefik/operations/dashboard/>
+- <https://doc.traefik.io/traefik/reference/install-configuration/api-dashboard/>
+- <https://doc.traefik.io/traefik/observability/access-logs/>

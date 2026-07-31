@@ -40,6 +40,6 @@ Braucht `deploy-user` Mitgliedschaft in der docker-Gruppe, oder läuft Docker-Ad
 - Operative Anweisung: Docker-Wartung via `sudo docker …`; sudoers-Verschärfung als eigenes Task (vps-baseline)
 
 ## Referenzen
-- https://docs.docker.com/engine/install/linux-postinstall/
-- https://www.securitum.com/privilege_escalation_through_docker_group_membership_and_sudo_backdoor.html
-- https://unix.stackexchange.com/questions/743501/is-installing-docker-itself-risky-the-possibility-of-creating-docker-groups
+- <https://docs.docker.com/engine/install/linux-postinstall/>
+- <https://www.securitum.com/privilege_escalation_through_docker_group_membership_and_sudo_backdoor.html>
+- <https://unix.stackexchange.com/questions/743501/is-installing-docker-itself-risky-the-possibility-of-creating-docker-groups>

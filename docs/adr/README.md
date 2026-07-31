@@ -6,7 +6,7 @@
 > **Review:** 5W-Prüfung (AGENTS.md P3) + Konsistenz-Check durch 🏗️ Architect (2026-07-31) — Befunde vollständig eingearbeitet (Worst-Case/Rollback, Supersedes, Quellen).
 
 | ADR (arc42/09) | Detail | Thema | Status | Empfehlung |
-|-----|--------|-------|--------|------------|
+| --- | --- | --- | --- | --- |
 | ADR-015 | [015](ADR-015-docker-installation.md) | Docker-Installation | Vorgeschlagen | Eigene Tasks + offizielles Docker-Repo |
 | ADR-016 | [016](ADR-016-docker-zugriff-deploy-user.md) | Docker-Zugriff deploy-user | Vorgeschlagen | Keine docker-Gruppe; sudo |
 | ADR-017 | [017](ADR-017-image-pinning.md) | Image-Versionierung | Vorgeschlagen | SemVer-Pinning in group_vars |
