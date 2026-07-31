@@ -25,14 +25,22 @@
     validate: 'visudo -cf %s'
 
 - name: Swap einrichten
-  community.general.swapfile:
-    path: /swapfile
-    size_mb: 2048
-    state: present
+  ansible.builtin.shell: |
+    if [ ! -f /swapfile ]; then
+      fallocate -l 2G /swapfile
+      chmod 600 /swapfile
+      mkswap /swapfile
+      swapon /swapfile
+      echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    fi
+  args:
+    executable: /bin/bash
 
 - name: Zeitzone einstellen
-  community.general.timezone:
-    name: Europe/Berlin
+  ansible.builtin.shell: |
+    timedatectl set-timezone Europe/Berlin
+  args:
+    executable: /bin/bash
 
 - name: SSH-Konfiguration härten
   ansible.builtin.lineinfile:

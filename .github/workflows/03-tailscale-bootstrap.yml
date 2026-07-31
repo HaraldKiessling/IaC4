@@ -50,9 +50,9 @@ jobs:
       - name: Ansible installieren
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
 
+
       - name: Tailscale Auth-Key via OAuth generieren
         id: authkey
-        env:
           TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
@@ -72,7 +72,7 @@ jobs:
                     "reusable": false,
                     "ephemeral": false,
                     "preauthorized": true,
-                    "tags": ["tag:ia4"]
+                    "tags": ["tag:ia3"]
                   }
                 }
               }

@@ -46,6 +46,7 @@ jobs:
       - name: Ansible installieren
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
 
+
       - name: Inventory-Datei erstellen
         run: |
           echo "[vps]" > /tmp/inventory

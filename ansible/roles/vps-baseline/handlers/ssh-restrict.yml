@@ -1,4 +1,4 @@
 ---
-- name: sshd restrict confirmed
+- name: ssh restrict confirmed
   ansible.builtin.debug:
     msg: "⚠️  Öffentlicher SSH-Zugriff wurde blockiert. Nur noch via Tailscale."
