@@ -67,18 +67,13 @@ if ($devices) {
     $node = $devices.devices | Where-Object { $_.hostname -eq $ExpectedHostname -or $_.hostname -eq "$ExpectedHostname-1" } | Select-Object -First 1
     Then-True "Node $ExpectedHostname existiert" ($null -ne $node)
     if ($node) {
-        if ($null -eq $node.online) {
-            # CI-Key liefert online ggf. nicht (Workflow-02-Kommentar) → lastSeen-Frische als Proxy
-            $fresh = $false
-            if ($node.lastSeen) {
-                try { $fresh = ((Get-Date).ToUniversalTime() - [DateTime]$node.lastSeen).TotalMinutes -lt 10 }
-                catch { $fresh = $false }
-            }
-            Then-True "Node ist online (Proxy: lastSeen < 10 min)" $fresh "lastSeen=$($node.lastSeen)"
+        # online ist kein gültiges Listen-Feld (400) → lastSeen-Frische als Online-Proxy
+        $fresh = $false
+        if ($node.lastSeen) {
+            try { $fresh = ((Get-Date).ToUniversalTime() - [DateTime]$node.lastSeen).TotalMinutes -lt 10 }
+            catch { $fresh = $false }
         }
-        else {
-            Then-True "Node ist online" ($node.online -eq $true) "online=$($node.online)"
-        }
+        Then-True "Node ist online (Proxy: lastSeen < 10 min)" $fresh "lastSeen=$($node.lastSeen)"
         Then-True "Node trägt tag:ia3" (($node.tags -join ",") -match 'tag:ia3') ($node.tags -join ",")
     }
 }
