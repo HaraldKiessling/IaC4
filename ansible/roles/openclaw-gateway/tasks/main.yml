@@ -37,7 +37,7 @@
   ansible.builtin.systemd:
     name: openclaw-gateway
     state: started
-    enabled: yes
+    enabled: true
 
 - name: Gateway-Health prüfen
   ansible.builtin.uri:
