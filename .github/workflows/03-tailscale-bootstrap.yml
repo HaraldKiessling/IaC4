@@ -132,8 +132,8 @@ jobs:
           echo "✅ Workflow abgeschlossen"
           NODE="vps-${{ inputs.target }}"
           TS_IP=$(curl -s \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,tailscaleIPs" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .tailscaleIPs[0]' | head -1)
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .addresses[0]' | head -1)
           echo "SSH-Verifikation via Tailscale-IP: ${TS_IP}"
           ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
               "$VPS_USER@${TS_IP}" \
