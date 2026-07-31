@@ -48,6 +48,8 @@ Jede Behauptung braucht einen Beleg. Nutze `web_search` oder `web_fetch` für:
 Zusätzlich:
 - **Referenzierte Ressourcen im IST-Zustand verifizieren** (ACL-Tags, Secrets, Hosts, Collections): vor Nutzung prüfen (`gh secret list`, ACL/State lesen, `ansible-galaxy collection list`) – nie aus dem Gedächtnis oder IaC3-Wissen übernehmen.
 - **Funktions-Behauptungen mit Test-Kontext:** "funktioniert", "erreichbar", "grün" nur mit Angabe: von wo getestet, mit welchem Key/User, gegen welche Quelle (z.B. "SSH-Check via Tailscale von vps-dev mit deploy-user").
+- **Evidenz-Typologie:** Quellen in PRs/Kommentaren kennzeichnen – `[V]` Vendor-/Primärdoku · `[I]` IST-Zustand (verifiziert) · `[A]` Annahme (nicht verifiziert, explizit als solche markieren).
+- **Hypothese vor Analyse:** Bei Fehler-/Gap-Analysen zuerst Hypothese formulieren, dann gegen IST/Logs prüfen (statt blind zu probieren).
 
 ### P2 – Konzepte vor Code
 Jede Änderung beginnt mit einem Konzept:
@@ -179,6 +181,14 @@ IaC4/
 | `cloud-config.yaml` | VPS-Bootstrap |
 | `.env.example` | Alle benötigten GH Secrets |
 | `.roo/rules/*.mdc` | Regelwerk – auch für Roo/Zoo Code (P4) |
+| `.roo/rules/vendor-docs-mandatory.mdc` | Vendor-Docs-Pflicht (neue APIs, Fehler, Entscheidungen) |
+| `.roo/rules/ssh-restriction.mdc` | SSH-Transition (Phasen 0-2c) |
+
+## 🔒 SSH-Restriktion
+- Phase 0-2a: SSH via Public-IP (Bootstrap, nötig)
+- Phase 2b: SSH über öffentliche IP blocken (UFW)
+- Ab Phase 2c: SSH NUR via Tailscale
+- **Details + aktuelle Umsetzung:** `.roo/rules/ssh-restriction.mdc` (Regel-Korrektur Interface-basiert folgt separat, siehe Issue #11)
 
 ## 🚫 Was ich NICHT mache
 - ❌ IaC3-RFCs lesen (sind Legacy)

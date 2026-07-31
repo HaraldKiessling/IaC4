@@ -8,6 +8,8 @@ Jede Behauptung braucht einen Beleg (web_search, web_fetch, Vendor-Docs, IST-Zus
 Nicht: "Ich glaube", "Meiner Erfahrung nach" ohne Quelle.
 Referenzierte Ressourcen (ACL-Tags, Secrets, Hosts) vor Nutzung im IST-Zustand verifizieren.
 Funktions-Behauptungen mit Test-Kontext: von wo, mit welchem Key/User, gegen welche Quelle.
+Evidenz-Typologie: [V] Vendor-/Primärdoku · [I] IST-Zustand (verifiziert) · [A] Annahme (markieren).
+Hypothese vor Analyse formulieren, dann gegen IST/Logs prüfen.
 
 ## P2 – Konzepte vor Code
 Jede Änderung beginnt mit Issue oder Kurzkonzept in docs/decisions/.
