@@ -6,6 +6,7 @@
 - Ansible-Playbook erfolgreich durchgelaufen
 - Health-Check bestanden (Traefik, Qdrant, OpenClaw)
 - Keine Errors in GH Actions Log
+- BDD-Tests grün (Workflow `04-bdd-tests.yml`, target=dev, siehe qa/bdd-testkonzept.md)
 
 ### Für PR von DEV → MAIN
 ✅ Alle DEV-Gates

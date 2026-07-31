@@ -1,0 +1,89 @@
+---
+# =============================================================================
+# 04 – BDD-Tests (Post-Deploy-Verifikation)
+#   Führt die BDD-Feature-Skripte (scripts/bdd/*.bdd.ps1) gegen einen Ziel-VPS
+#   aus. Läuft über Tailscale (Runner joint das Tailnet mit tag:ci).
+#   Testkatalog: qa/bdd-testkonzept.md
+#   Fehlschlag ist erwünscht als Evidenz (rot = Lücke im Deploy oder im Test).
+# =============================================================================
+name: "04 – BDD-Tests (Post-Deploy-Verifikation)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Ziel-VPS'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+permissions:
+  contents: read
+
+jobs:
+  bdd:
+    name: "BDD-Tests (target: ${{ inputs.target }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+      TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connect Runner to Tailnet (MagicDNS)
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
+
+      - name: Netmap-Sync abwarten
+        run: sleep 15
+
+      - name: VPS Tailscale-IP ermitteln (Tailscale-API)
+        run: |
+          NODE="vps-${{ inputs.target }}"
+          TS_IP=$(curl -s \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+          if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
+            echo "❌ Keine Tailscale-IP für Node ${NODE} gefunden – Workflow 02 muss zuerst laufen"
+            exit 1
+          fi
+          echo "VPS_TS_IP=${TS_IP}" >> $GITHUB_ENV
+          echo "✅ Node ${NODE} → ${TS_IP}"
+
+      - name: Public-IP je Target setzen
+        run: |
+          if [ "${{ inputs.target }}" = "dev" ]; then
+            echo "PUBLIC_IP=${{ secrets.VPS_DEV_PUBLIC_IP }}" >> $GITHUB_ENV
+          else
+            echo "PUBLIC_IP=${{ secrets.VPS_PROD_PUBLIC_IP }}" >> $GITHUB_ENV
+          fi
+
+      - name: SSH-Key vorbereiten
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: BDD-Tests ausführen (pwsh)
+        env:
+          VPS_IP: ${{ env.VPS_TS_IP }}
+          PUBLIC_IP: ${{ env.PUBLIC_IP }}
+        run: |
+          pwsh -NoProfile -File scripts/bdd/run-all.ps1 \
+            -VpsIp "$VPS_IP" \
+            -VpsUser "$VPS_USER" \
+            -SshKeyPath ~/.ssh/id_ed25519 \
+            -PublicIp "$PUBLIC_IP" \
+            -Tailnet "$TS_TAILNET" \
+            -ApiKey "$TS_API_KEY" \
+            -ExpectedHostname "vps-${{ inputs.target }}"
