@@ -1,5 +1,10 @@
-variable "tailscale_api_key" {
-  description = "Tailscale API Access Token (Bootstrap)"
+variable "tailscale_oauth_client_id" {
+  description = "Tailscale OAuth-Client-ID (tag:ci, IaC3-Verfahren)"
+  type        = string
+}
+
+variable "tailscale_oauth_client_secret" {
+  description = "Tailscale OAuth-Client-Secret (tag:ci, IaC3-Verfahren)"
   type        = string
   sensitive   = true
 }

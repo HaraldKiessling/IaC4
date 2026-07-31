@@ -45,7 +45,8 @@ jobs:
         working-directory: terraform/
     env:
       TF_IN_AUTOMATION: true
-      TF_VAR_tailscale_api_key: ${{ secrets.TAILSCALE_API_KEY }}
+      TF_VAR_tailscale_oauth_client_id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+      TF_VAR_tailscale_oauth_client_secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
       TF_VAR_tailscale_tailnet: ${{ secrets.TAILSCALE_TAILNET }}
 
     steps:

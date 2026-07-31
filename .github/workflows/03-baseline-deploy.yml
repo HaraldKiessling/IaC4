@@ -60,15 +60,24 @@ jobs:
       - name: Netmap-Sync abwarten
         run: sleep 15
 
+      - name: Tailscale OAuth-Token holen (IaC3-Verfahren)
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+        run: |
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          echo "TS_TOKEN=${TS_TOKEN}" >> $GITHUB_ENV
+
       - name: VPS Tailscale-IP ermitteln (Tailscale-API)
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
-          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
           API_RESP=$(curl -sS -w "\nHTTP_CODE:%{http_code}" \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
-            -H "Authorization: Bearer ${TS_API_KEY}")
+            -H "Authorization: Bearer ${TS_TOKEN}")
           HTTP_CODE=$(printf '%s' "$API_RESP" | tail -1 | cut -d: -f2)
           API_BODY=$(printf '%s' "$API_RESP" | sed '$d')
           echo "🔎 Tailscale-API (IP-Ermittlung): HTTP ${HTTP_CODE}"

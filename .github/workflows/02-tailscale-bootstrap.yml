@@ -54,7 +54,6 @@ jobs:
           TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
-          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           FAIL=0
           [ -n "$SSH_KEY" ] || { echo "❌ Secret SSH_KEY fehlt – Workflow 00 (SSH-Key generieren) zuerst ausführen"; FAIL=1; }
@@ -88,6 +87,7 @@ jobs:
             --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
             "https://api.tailscale.com/api/v2/oauth/token")
           ACCESS_TOKEN=$(echo "$TOKEN_RESP" | jq -r '.access_token')
+          echo "TS_TOKEN=${ACCESS_TOKEN}" >> $GITHUB_ENV
           KEY_RESP=$(curl -s --max-time 30 -X POST \
             "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/keys" \
             -u "$ACCESS_TOKEN:" \
@@ -118,7 +118,6 @@ jobs:
         continue-on-error: true
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
-          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
           # SICHERHEIT: NIE löschen. Umbenennen nur Nodes mit lastSeen > 24h
@@ -126,7 +125,7 @@ jobs:
           # für den CI-Key keine Daten (online=null) — daher lastSeen aus der Liste.
           LISTE=$(curl -s \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,lastSeen" \
-            -H "Authorization: Bearer ${TS_API_KEY}")
+            -H "Authorization: Bearer ${TS_TOKEN}")
           for DEVICE_ID in $(echo "$LISTE" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n or .hostname == ($n + "-1")) | .id'); do
             LAST=$(echo "$LISTE" | jq -r --arg id "$DEVICE_ID" '.devices[] | select(.id == $id) | .lastSeen // ""')
             AGE_SEC=0
@@ -136,7 +135,7 @@ jobs:
             if [ "$AGE_SEC" -gt 86400 ]; then
               NEW_NAME="${NODE}-old-$(date +%s)"
               curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/name" \
-                -H "Authorization: Bearer ${TS_API_KEY}" \
+                -H "Authorization: Bearer ${TS_TOKEN}" \
                 -H "Content-Type: application/json" \
                 -d "{\"name\": \"${NEW_NAME}\"}" > /dev/null
               echo "✅ Alter Node ${NODE} (${DEVICE_ID}, lastSeen vor ${AGE_SEC}s) umbenannt → ${NEW_NAME}"
@@ -162,14 +161,13 @@ jobs:
       - name: "Node auf tag:ia3 re-taggen (frischester Node aus API-Liste)"
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
-          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
           # Frischesten vps-<target>[-1]-Node aus der Liste nehmen (lastSeen desc).
           # GET /device/{id} liefert für den CI-Key keine Daten — daher Liste nutzen.
           API_RESP=$(curl -sS -w "\nHTTP_CODE:%{http_code}" \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,lastSeen" \
-            -H "Authorization: Bearer ${TS_API_KEY}")
+            -H "Authorization: Bearer ${TS_TOKEN}")
           HTTP_CODE=$(printf '%s' "$API_RESP" | tail -1 | cut -d: -f2)
           API_BODY=$(printf '%s' "$API_RESP" | sed '$d')
           echo "🔎 Tailscale-API (Re-Tag): HTTP ${HTTP_CODE}"
@@ -182,7 +180,7 @@ jobs:
             '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].id // empty' | head -1)
           if [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ]; then
             RESP=$(curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
-              -H "Authorization: Bearer ${TS_API_KEY}" \
+              -H "Authorization: Bearer ${TS_TOKEN}" \
               -H "Content-Type: application/json" \
               -d '{"tags": ["tag:ia3"]}')
             echo "Re-Tag ${NODE} (${DEVICE_ID}): $(echo "$RESP" | jq -c '{keys: keys, error: .error, message: .message}' 2>/dev/null || echo "$RESP")"
@@ -207,13 +205,12 @@ jobs:
       - name: Post-Bootstrap Check (SSH via Tailscale-IP)
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
-          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           echo "✅ Workflow abgeschlossen"
           NODE="vps-${{ inputs.target }}"
           TS_IP=$(curl -s \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+            -H "Authorization: Bearer ${TS_TOKEN}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
           echo "SSH-Verifikation via Tailscale-IP: ${TS_IP}"
           echo "TS_IP=${TS_IP}" >> $GITHUB_ENV
           sleep 15
@@ -236,7 +233,6 @@ jobs:
         if: env.SSH_OK == 'true'
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
-          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
         run: |
           NODE="vps-${{ inputs.target }}"
           # SSH via Tailscale war erfolgreich → aktiver Node funktioniert nachweislich.
@@ -248,10 +244,10 @@ jobs:
           # (früherer Rename-Bug konnte den aktiven Node so benennen!).
           for DEVICE_ID in $(curl -s \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id,name,addresses" \
-            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg p "${NODE}-old-" --arg ip "${TS_IP}" \
+            -H "Authorization: Bearer ${TS_TOKEN}" | jq -r --arg p "${NODE}-old-" --arg ip "${TS_IP}" \
             '.devices[] | select((.name | startswith($p)) and ((.addresses // []) | index($ip) == null)) | .id'); do
             curl -s -X DELETE "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
-              -H "Authorization: Bearer ${TS_API_KEY}" > /dev/null
+              -H "Authorization: Bearer ${TS_TOKEN}" > /dev/null
             echo "✅ Verwaister Node ${DEVICE_ID} (${NODE}-old-*) gelöscht"
             DELETED=1
           done
