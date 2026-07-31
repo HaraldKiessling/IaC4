@@ -129,7 +129,7 @@ Bevor ein PR als "ready" gemeldet wird:
 5. ✅ Branch auf aktuellem `main` (ggf. rebased)
 6. ✅ Kein Force-Push auf PR-Branches
 7. ✅ Overclaiming-Check: jede "fertig/funktioniert/garantiert"-Aussage mit Validierungsnachweis + Test-Kontext (P1/P9)
-8. ✅ Unabhängiger Review dokumentiert: Autor ≠ Reviewer, Ergebnis (✅ Freigabe / ❌ Befunde) im PR-Thread, Befunde bearbeitet oder als Follow-up verfolgt (Issue #37)
+8. ✅ Unabhängiger Review dokumentiert: Autor ≠ Reviewer, Ergebnis (✅ Freigabe / ❌ Befunde) im PR-Thread, Befunde bearbeitet oder als Follow-up verfolgt, Beiträge mit Rollen-Signatur (`✨ Nova` / `🔍 Reviewer` / `🏗️ Architect` / `🔧 Engineer`) (Issue #37)
 
 ### P7c – Post-Merge-Checkliste
 Nach jedem erfolgreichen Merge nach `main` (autonom ausführen, nicht rückfragen):
