@@ -33,7 +33,7 @@
 - [x] Auth-Key `tag:ia3` (ACL-kompatibel)
 - [x] **VPS neu installieren** (letzte cloud-config)
 - [x] Workflow 02 (Tailscale Bootstrap) grün — 2026-07-31 (Join tag:ci + Re-Tag tag:ia3, UFW-Restrict mit CGNAT-Allow, Cleanup = Rename)
-- [x] SSH-Zugriff via Tailscale bestätigen — 2026-07-31 (SSH-Check in Workflow 02/03: ubuntu@100.73.43.48)
+- [x] SSH-Zugriff via Tailscale bestätigen — 2026-07-31 (SSH-Check in Workflow 02/03 erfolgreich: deploy-user@<Tailscale-IP>)
 
 ## ⬜ Phase 3: Ansible-Rollen befüllen
 

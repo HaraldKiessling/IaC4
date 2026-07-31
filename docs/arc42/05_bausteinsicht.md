@@ -11,7 +11,7 @@ IaC4
 │   ├── qdrant             → Vektordatenbank (3072d, Cosine)
 │   ├── code-server        → Web-IDE
 │   └── openclaw-gateway   → OpenClaw-Install
-├── GitHub Actions (CI/CD, 6 Workflows)
+├── GitHub Actions (CI/CD, 5 Workflows)
 │   ├── ci.yml                               → Lint + Quality Gate
 │   ├── 00-generate-ssh-key.yml              → SSH-Key-Paar generieren
 │   ├── 01-tailscale-terraform.yml           → Tailscale OAuth + ACLs (Terraform Plan/Apply)
