@@ -62,19 +62,19 @@ Basierend auf den Secret-Abhängigkeiten ergibt sich diese Ausführungsreihenfol
    │ WRITE: SSH_KEY, SSH_KEY_PUB               → wird von 02, 03 gelesen
    ↓
 01 ─────────────────────────────────────────────
-   │ WRITE: TAILSCALE_OAUTH_CLIENT_ID/SECRET    → wird von 03 gelesen
+   │ WRITE: TAILSCALE_OAUTH_CLIENT_ID/SECRET    → wird von 02, 03 gelesen
    ↓
 02 ─────────────────────────────────────────────
-   │ READ: SSH_KEY → deployed Baseline via SSH auf public-IP
+   │ READ: SSH_KEY + OAuth-Secrets → Tailscale install + join + SSH-Restrict (via Public-IP)
    ↓
 03 ─────────────────────────────────────────────
-   │ READ: SSH_KEY + OAuth-Secrets → Tailscale install + SSH restrict
-   │ NACH 03: VPS nur noch via Tailscale erreichbar
+   │ READ: SSH_KEY + Tailscale → Phase-1-Baseline via Tailscale-IP
+   │ NACH 02: VPS nur noch via Tailscale erreichbar
    ↓
 [04 / Phase-3-Service-Workflows – geplant]
 ```
 
-**Kernregel:** 03 muss VOR 02 laufen (OAuth-Secrets), 01 muss VOR 02 laufen (SSH-Zugriff via public-IP). Die Nummerierung wurde auf 00→01→02→03 korrigiert (00→01→02→03).
+**Kernregel:** 02 muss VOR 03 laufen (Bootstrap via Public-IP, danach Baseline via Tailscale-IP), 01 muss VOR 02 laufen (OAuth-Secrets), 00 muss VOR 02/03 laufen (SSH_KEY). Die Nummerierung entspricht der Ausführungsreihenfolge: 00 (SSH-Key) → 01 (OAuth/ACL) → 02 (Bootstrap) → 03 (Baseline).
 
 
 

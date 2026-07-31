@@ -9,8 +9,8 @@ docker_network: "traefik-public"
 traefik_acme_email: "{{ lookup('env', 'TRAEFIK_ACME_EMAIL') | default('admin@example.com', true) }}"
 
 # Code-Server – Zugangsdaten (MÜSSEN via Extra-Vars oder GH Secrets gesetzt werden)
-code_server_password: "{{ lookup('env', 'CODE_SERVER_PASSWORD') | default('changeme', true) }}"
-code_server_sudo_password: "{{ lookup('env', 'CODE_SERVER_SUDO_PASSWORD') | default('changeme', true) }}"
+code_server_password: "{{ lookup('env', 'CODE_SERVER_PASSWORD') }}"
+code_server_sudo_password: "{{ lookup('env', 'CODE_SERVER_SUDO_PASSWORD') }}"
 code_server_hostname: "{{ lookup('env', 'CODE_SERVER_HOSTNAME') | default('code.example.com', true) }}"
 
 # Tailscale – Auth (wird dynamisch im Workflow generiert)

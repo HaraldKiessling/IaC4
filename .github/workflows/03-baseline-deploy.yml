@@ -18,6 +18,9 @@ on:
           - dev
           - prod
 
+permissions:
+  contents: read
+
 jobs:
   baseline:
     name: "Phase 1 – System-Baseline"
@@ -29,6 +32,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Vorbedingungen prüfen (Reihenfolge-Gate)
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          FAIL=0
+          [ -n "$SSH_KEY" ] || { echo "❌ Secret SSH_KEY fehlt – Workflow 00 (SSH-Key generieren) zuerst ausführen"; FAIL=1; }
+          [ -n "$VPS_USER" ] || { echo "❌ Secret VPS_USER fehlt"; FAIL=1; }
+          [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
+          [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
+          [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
+          [ -n "$TS_API_KEY" ] || { echo "❌ Secret TAILSCALE_API_KEY fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
+          [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
+          echo "✅ Vorbedingungen ok (SSH_KEY, VPS_USER, OAuth, Tailnet, API-Key)"
 
       - name: Connect Runner to Tailnet (MagicDNS)
         uses: tailscale/github-action@v4.1.3

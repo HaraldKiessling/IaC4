@@ -48,6 +48,23 @@ jobs:
           fi
           echo "Target: ${{ inputs.target }} → IP: $VPS_PUBLIC_IP"
 
+      - name: Vorbedingungen prüfen (Reihenfolge-Gate)
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          FAIL=0
+          [ -n "$SSH_KEY" ] || { echo "❌ Secret SSH_KEY fehlt – Workflow 00 (SSH-Key generieren) zuerst ausführen"; FAIL=1; }
+          [ -n "$VPS_PUBLIC_IP" ] && [ "$VPS_PUBLIC_IP" != "1.2.3.4" ] || { echo "❌ Secret VPS_DEV/PROD_PUBLIC_IP fehlt oder ist Platzhalter"; FAIL=1; }
+          [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
+          [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
+          [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
+          [ -n "$TS_API_KEY" ] || { echo "❌ Secret TAILSCALE_API_KEY fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
+          [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
+          echo "✅ Vorbedingungen ok (SSH_KEY, Public-IP, OAuth, Tailnet, API-Key)"
+
       - name: SSH-Key vorbereiten
         run: |
           mkdir -p ~/.ssh
