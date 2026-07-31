@@ -6,3 +6,7 @@
 - Empfehlungen immer mit Quellen belegen
 - Bei Unsicherheit: recherchieren, nicht raten
 - Kein IaC3-Wissen blind übernehmen (jede Übernahme braucht P1-Prüfung)
+- **Referenzierte Ressourcen im IST-Zustand verifizieren** (ACL-Tags, Secrets, Hosts, Collections) – nie aus dem Gedächtnis übernehmen
+- **Funktions-Behauptungen mit Test-Kontext:** "funktioniert/erreichbar" nur mit Angabe von wo, mit welchem Key/User, gegen welche Quelle getestet
+- **Evidenz-Typologie:** `[V]` Vendor-/Primärdoku · `[I]` IST-Zustand (verifiziert) · `[A]` Annahme (markieren)
+- **Kein Overclaiming:** "garantiert korrekt", "verifiziert", "fertig" erst nach Validierung (Lint, Testlauf, Quellenvergleich) – geprüft vs. vermutet trennen
