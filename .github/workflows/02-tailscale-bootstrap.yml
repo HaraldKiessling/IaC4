@@ -191,6 +191,14 @@ jobs:
           echo "--- Tailscale-Ping (Netzwerk-Test):"
           tailscale ping -c 2 "${TS_IP}" 2>&1 || echo "❌ Tailscale-Ping fehlgeschlagen (ACL/Netz?)"
           echo "--- SSH-Test:"
+          if ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+              "$VPS_USER@${TS_IP}" \
+              "hostname; tailscale ip -4"; then
+            echo "SSH_OK=true" >> $GITHUB_ENV
+          else
+            echo "SSH_OK=false" >> $GITHUB_ENV
+            echo "❌ SSH via Tailscale fehlgeschlagen"
+          fi
 
       - name: "Verwaiste vps-<target>-old-* Nodes löschen (SSH-Erfolg = Beweis)"
         if: env.SSH_OK == 'true'
@@ -215,11 +223,4 @@ jobs:
           if [ "$DELETED" = "0" ]; then
             echo "Keine verwaisten ${NODE}-old-* Nodes vorhanden"
           fi
-          if ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
-              "$VPS_USER@${TS_IP}" \
-              "hostname; tailscale ip -4"; then
-            echo "SSH_OK=true" >> $GITHUB_ENV
-          else
-            echo "SSH_OK=false" >> $GITHUB_ENV
-            echo "❌ SSH via Tailscale fehlgeschlagen"
-          fi
+
