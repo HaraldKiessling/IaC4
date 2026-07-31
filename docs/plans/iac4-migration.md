@@ -39,10 +39,10 @@
 ## ⬜ Phase 3: Ansible-Rollen befüllen
 
 - [x] vps-baseline: Tasks implementiert (Baseline-Deploy grün, 2026-07-31)
-- [ ] docker: Tasks implementieren
-- [ ] traefik: Tasks implementieren
-- [ ] ollama: Tasks implementieren (Rolle NEU; Design: ADR-021..023)
-- [ ] LE-Reste entfernen (ADR-018 P4-Delta): `traefik_acme_email` in group_vars, `.env.example`, Template-Port 443
+- [x] docker: Tasks implementieren (2026-07-31, ADR-015/016/017)
+- [x] traefik: Tasks implementieren (2026-07-31, ADR-017..020)
+- [x] ollama: Tasks implementieren (Rolle NEU, 2026-07-31; ADR-021..023)
+- [x] LE-Reste entfernen (ADR-018 P4-Delta): group_vars `traefik_acme_email` ✅, Template-Port 443 ✅, `.env.example` ✅ (2026-07-31)
 - [ ] qdrant: Collection-Setup (3072d/Cosine)
 - [ ] code-server: Tasks implementieren
 - [ ] openclaw-gateway: Tasks implementieren

@@ -1,0 +1,38 @@
+# Ollama docker-compose (ADR-021: Direktport + UFW-CGNAT; ADR-022: Ressourcenlimits; ADR-017: Image gepinnt)
+services:
+  ollama:
+    image: ollama/ollama:{{ ollama_version }}
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:11434:11434"
+    networks:
+      - {{ docker_network }}
+    volumes:
+      - ollama_models:/root/.ollama
+      - ./entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/entrypoint.sh"]
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_NUM_PARALLEL={{ ollama_num_parallel }}
+      - OLLAMA_KEEP_ALIVE={{ ollama_keep_alive }}
+    deploy:
+      resources:
+        limits:
+          cpus: "{{ ollama_cpu_limit }}"
+          memory: {{ ollama_mem_limit }}
+        reservations:
+          cpus: "{{ ollama_cpu_reserve }}"
+          memory: {{ ollama_mem_reserve }}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  ollama_models:
+
+networks:
+  {{ docker_network }}:
+    external: true

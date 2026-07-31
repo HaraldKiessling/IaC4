@@ -27,34 +27,52 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 ## 3. Testobjekte (aktueller Stand DEV, 2026-07-31)
 
 | Phase | Workflow | Auf dem VPS deployt? | BDD-Feature |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 2a+2b | `02-tailscale-bootstrap.yml` | ✅ ja (Tailscale-Join, tag:ia4, SSH-Restrict) | `tailscale-bootstrap.bdd.ps1` |
 | 1 | `03-baseline-deploy.yml` | ✅ ja (System-Baseline) | `system-baseline.bdd.ps1` |
-| 2c | Phase-3-Workflow (geplant) | ❌ nein (Docker/Traefik) | `docker-traefik.bdd.ps1` (geplant) |
-| 2d | Phase-3-Workflow (geplant) | ❌ nein (Qdrant, CodeServer) | `services.bdd.ps1` (geplant) |
+| 2c | `03-docker-traefik.yml` | ❌ nein (Deploy Phase 4 offen); Feature implementiert (PR ADR-015..024) | `docker-traefik.bdd.ps1` (D1-D8) |
+| 2d | `04-services.yml` (ollama, qdrant, code-server) | ❌ nein (Deploy Phase 4 offen); Ollama-Feature implementiert | `docker-traefik.bdd.ps1` (O1-O3) |
 | 2e | Phase-3-Workflow (geplant) | ❌ nein (OpenClaw) | `openclaw.bdd.ps1` (geplant) |
 
 ## 4. Testkatalog (Features & Szenarien)
 
 ### Feature: Tailscale-Bootstrap (`tailscale-bootstrap.bdd.ps1`)
+
 | # | Szenario | Then-Assertion |
-|---|---|---|
+| --- | --- | --- |
 | T1 | SSH via Tailscale erreichbar | Exit 0, Tailscale-Node-Name (`Self.DNSName`) = `vps-<target>` (OS-Hostname ist `ubuntu` – nicht Soll-Quelle), `tailscale ip -4` = `100.x` |
 | T2 | Public-SSH geschlossen (SSH-Restrict) | SSH auf Public-IP:22 schlägt fehl |
 | T3 | Node online + korrekt getaggt | Tailscale-API: Node existiert, online via `lastSeen`-Frische (< 10 min, Proxy – `online` ist kein gültiges Listen-Feld), Tags enthalten `tag:ia4` (Option A, Exact-Match; Re-Tag durchgeführt 2026-07-31) |
 | T4 | Tailscale-Infrastruktur | `NetfilterMode` = 2 (= on, ts-input aktiv), WireGuard lauscht auf UDP 41641, `tailscale0`-Interface existiert |
 
 ### Feature: System-Baseline (`system-baseline.bdd.ps1`)
+
 | # | Szenario | Then-Assertion |
-|---|---|---|
+| --- | --- | --- |
 | B1 | Baseline-Pakete installiert | `dpkg-query` → `install ok installed` für curl, wget, htop, ufw, unzip, fail2ban |
 | B2 | Zeitzone korrekt | `timedatectl` → `Europe/Berlin` |
 | B3 | Swap aktiv | `swapon --show` enthält `/swapfile` |
 | B4 | deploy-user-Sudo funktioniert | `sudo -n true` → Exit 0 |
 | B5 | UFW aktiv, öffentliches SSH blockiert | `ufw status verbose`: Status active, keine generische `22/tcp ALLOW IN Anywhere`-Regel (v4 **und** v6), `22/tcp on <public_iface> DENY IN` vorhanden (echtes ufw-Format, v4+v6), CGNAT-Allow `100.64.0.0/10` vorhanden (Defense-in-Depth) |
 
-### Geplant (Phase 3, sobald Services deployt sind)
-- **Docker/Traefik:** `docker info`, Traefik-Container running, ACME-E-Mail gesetzt
+### Feature: Docker/Traefik/Ollama (`docker-traefik.bdd.ps1`, implementiert 2026-07-31)
+
+| # | Szenario | Then-Assertion |
+| --- | --- | --- |
+| D1 | Docker Engine + Compose installiert (ADR-015) | `docker version` Server-Version, `docker compose version` v2 |
+| D2 | deploy-user NICHT in docker-Gruppe (ADR-016) | `id -nG` enthält kein `docker` |
+| D3 | Shared Network (ADR-015) | `docker network ls` enthält `traefik-network` |
+| D4 | Traefik-Container läuft (ADR-017/018) | `docker ps` → `Up`, Image `traefik:` |
+| D5 | HTTP-only: kein 443-Listener (ADR-018) | `ss -tln` zeigt kein `:443` |
+| D6 | Dashboard-Auth greift (ADR-019) | `curl :8080/dashboard/` ohne Auth → HTTP 401 |
+| D7 | Firewall Service-Ports: UFW-CGNAT (R7-R9) + DOCKER-USER (R10/R11) | `ufw status verbose` → `ALLOW FROM 100.64.0.0/10` je Port; `iptables -S DOCKER-USER` → CGNAT-ACCEPT + interface-gebundener DROP für 80,8080,11434,6333,6334 |
+| D8 | Tailscale Serve aktiv (ADR-018) | `tailscale serve status` → `localhost:80` |
+| O1 | Ollama-API erreichbar (ADR-021) | Container `Up`, `GET /api/tags` → 200 |
+| O2 | Modell pre-warmed (ADR-023) | `ollama list` enthält `nomic-embed-text` |
+| O3 | Embedding schnell (ADR-023) | `POST /api/embeddings` < 2s (Pre-Warm-Wirkung) |
+| D9 | Service-Ports von außen NICHT erreichbar (Wirkungs-Check, K1-1) | Runner → `http://<Public-IP>:80/11434/6333` → kein HTTP-Response (Timeout/Filtered) |
+
+### Geplant (sobald Services deployt sind)
 - **Qdrant:** `GET :6333/health` → `{"status":"ok"}`
 - **CodeServer:** HTTP 200 auf Hostname, Passwort-Auth greift (401 ohne / 200 mit)
 - **OpenClaw:** Gateway `/health` → `{"ok":true}`, Agents erreichbar

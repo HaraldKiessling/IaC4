@@ -5,9 +5,9 @@
     state: directory
     mode: '0755'
 
-- name: Qdrant docker-compose.yml deployen
-  ansible.builtin.copy:
-    src: docker-compose.yml
+- name: Qdrant docker-compose.yml deployen ({{ docker_network }})
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
     dest: /opt/qdrant/docker-compose.yml
     mode: '0644'
 

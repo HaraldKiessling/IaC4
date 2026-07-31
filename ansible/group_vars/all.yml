@@ -3,10 +3,22 @@
 # Secrets werden via GH Actions Workflows als Extra-Vars (-e) oder env injiziert.
 # lookup('env') hier als Fallback, wenn Variablen nicht explizit gesetzt sind.
 
-docker_network: "traefik-public"
+docker_network: "traefik-network"   # ADR-018: LE/Public-Bestand ersetzt durch Tailscale-only
 
-# Traefik – Let's Encrypt
-traefik_acme_email: "{{ lookup('env', 'TRAEFIK_ACME_EMAIL') | default('admin@example.com', true) }}"
+# Traefik (ADR-017/018/019) – HTTP-only, kein ACME; Auth via GH-Secret (Format: "user:<bcrypt-hash>")
+traefik_version: "v3.7.9"           # Docker-Hub-Tag (Stand 2026-07-31) – maßgebliche Instanz ist Docker Hub, nicht GitHub Releases (ADR-017)
+traefik_dashboard_auth: "{{ lookup('env', 'TRAEFIK_DASHBOARD_AUTH') | default('', true) }}"
+
+# Ollama (ADR-021/022/023) – erster Service
+ollama_version: "0.32.5"            # Stand 2026-07-31 (GitHub Releases), Pinning ADR-017
+ollama_model: "nomic-embed-text"    # ADR-023: nur ZooCode-Indexing; Qdrant bleibt 3072d (ADR-011)
+ollama_model_dimensions: 768         # ADR-023: Dimensionen gekoppelt an Modell (Re-Index bei Wechsel)
+ollama_cpu_limit: "2"
+ollama_mem_limit: 4G
+ollama_cpu_reserve: "1"
+ollama_mem_reserve: 2G
+ollama_num_parallel: 2        # ADR-022: parallele Embedding-Requests
+ollama_keep_alive: "24h"      # ADR-022: Modell bleibt geladen (Zoo-Indexing-Fix)
 
 # Code-Server – Zugangsdaten (MÜSSEN via Extra-Vars oder GH Secrets gesetzt werden)
 code_server_password: "{{ lookup('env', 'CODE_SERVER_PASSWORD') }}"

@@ -1,17 +1,78 @@
 ---
-- name: Traefik-Verzeichnis anlegen
+# Traefik-Rolle (ADR-018: HTTP-only + Tailscale Serve; ADR-019: Dashboard sicher; ADR-020: Logging)
+# Ersetzt den LE/Public-Bestand (arc42/05+07, P4-Delta ADR-018).
+
+- name: Traefik-Verzeichnisse anlegen
   ansible.builtin.file:
-    path: /opt/traefik
+    path: "{{ item }}"
     state: directory
     mode: '0755'
+  loop:
+    - /opt/traefik
+    - /opt/traefik/config
 
-- name: Traefik docker-compose.yml deployen
+- name: Dashboard-Auth-Secret vorhanden? (Pflicht, GH-Secret TRAEFIK_DASHBOARD_AUTH)
+  ansible.builtin.assert:
+    that:
+      - "{{ traefik_dashboard_auth | length > 0 }}"
+      - "{{ ':' in traefik_dashboard_auth and traefik_dashboard_auth.split(':')[1][:4] in ['$2a$', '$2b$', '$2y$'] }}"
+    fail_msg: "TRAEFIK_DASHBOARD_AUTH fehlt oder falsches Format (user:<bcrypt-hash>, Prefix $2a$/$2b$/$2y$) - GH-Secret setzen (ADR-019)"
+
+- name: Traefik-Static-Config deployen (HTTP-only, kein ACME)
+  ansible.builtin.template:
+    src: traefik.yml.j2
+    dest: /opt/traefik/traefik.yml
+    mode: '0644'
+
+- name: Traefik-Dynamic-Config deployen (Dashboard-Router + BasicAuth)
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: /opt/traefik/config/config.yml
+    mode: '0644'
+
+- name: Traefik-docker-compose.yml deployen (gepinnt, json-file-Logging)
   ansible.builtin.template:
     src: docker-compose.yml.j2
     dest: /opt/traefik/docker-compose.yml
     mode: '0644'
 
+- name: UFW – Port 80 aus CGNAT erlauben (Firewall-Konzept R7, ADR-018)
+  community.general.ufw:
+    rule: allow
+    from: 100.64.0.0/10
+    port: 80
+    proto: tcp
+
+- name: UFW – Port 8080 aus CGNAT erlauben (Firewall-Konzept R8, ADR-019)
+  community.general.ufw:
+    rule: allow
+    from: 100.64.0.0/10
+    port: 8080
+    proto: tcp
+
 - name: Traefik-Container starten
   community.docker.docker_compose_v2:
     project_src: /opt/traefik
     state: present
+  register: traefik_up
+
+- name: Auf Traefik warten (Default-404 = bereit)
+  ansible.builtin.uri:
+    url: http://localhost:80/
+    status_code: 404
+  register: traefik_wait
+  until: traefik_wait.status == 404
+  retries: 10
+  delay: 3
+
+- name: "Tailscale Serve aktivieren (ADR-018: HTTPS 443 → localhost:80)"
+  ansible.builtin.shell: tailscale serve status
+  register: serve_status
+  changed_when: false
+  failed_when: false
+
+- name: Tailscale Serve setzen (idempotent; Syntax >= 1.52, HTTPS:443 + Mount / sind Defaults)
+  ansible.builtin.command: tailscale serve --bg http://localhost:80
+  when: "'localhost:80' not in serve_status.stdout"
+  register: serve_set
+  changed_when: serve_set.rc == 0

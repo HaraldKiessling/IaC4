@@ -16,7 +16,7 @@
 | **Tailscale** | Mesh-VPN auf Basis von WireGuard |
 | **tag:ci** | Tailscale-Tag für CI-Runner (GH Actions) |
 | **OAuth-Client** | Tailscale-Client für GH Runner-Authentifizierung |
-| **Traefik** | Reverse Proxy mit automatischem LetsEncrypt |
+| **Traefik** | Reverse Proxy, HTTP-only (Port 80), HTTPS via Tailscale Serve (ADR-018) |
 | **Qdrant** | Vektordatenbank für Embeddings |
 | **Code-Server** | VS Code als Web-IDE |
 | **OpenClaw Gateway** | Orchestrator-Agent für IaC-Automation |

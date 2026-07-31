@@ -1,0 +1,153 @@
+# =============================================================================
+# 04 – Service-Deploy (Phase 2c/2d, ADR-024)
+#   Ein Workflow mit Playbook-Selektion: docker-traefik | services
+#   Reihenfolge (Operator-Verantwortung, ADR-024): 1. docker-traefik, 2. services
+#   Vorbedingung: Workflow 03 (Baseline) gelaufen, VPS via Tailscale erreichbar.
+#   Pflicht-Secret fuer Traefik (ADR-019): TRAEFIK_DASHBOARD_AUTH ("user:<bcrypt-hash>")
+#   Generierung: htpasswd -nbB <user> <passwort>  ->  user:$2y$05$...
+# =============================================================================
+name: "04 – Service-Deploy (Docker/Traefik/Ollama, ADR-024)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Ziel-VPS'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+      playbook:
+        description: 'Playbook (Reihenfolge: 1. docker-traefik, 2. services)'
+        required: true
+        type: choice
+        options:
+          - docker-traefik
+          - services
+
+permissions:
+  contents: read
+
+jobs:
+  service-deploy:
+    name: "Service-Deploy (${{ inputs.playbook }}, target: ${{ inputs.target }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
+      CODE_SERVER_PASSWORD: ${{ secrets.CODE_SERVER_PASSWORD }}
+      CODE_SERVER_SUDO_PASSWORD: ${{ secrets.CODE_SERVER_SUDO_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vorbedingungen prüfen (Secrets + Playbook-Selektion)
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          FAIL=0
+          [ -n "$SSH_KEY" ] || { echo "❌ Secret SSH_KEY fehlt"; FAIL=1; }
+          [ -n "$VPS_USER" ] || { echo "❌ Secret VPS_USER fehlt"; FAIL=1; }
+          [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt"; FAIL=1; }
+          [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt"; FAIL=1; }
+          [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
+          if [ "${{ inputs.playbook }}" = "docker-traefik" ] && [ -z "$TRAEFIK_DASHBOARD_AUTH" ]; then
+            echo "❌ Secret TRAEFIK_DASHBOARD_AUTH fehlt (Pflicht für Traefik, ADR-019)"
+            echo "   Generierung: htpasswd -nbB <user> <passwort>  (Format: user:<bcrypt-hash>)"
+            FAIL=1
+          fi
+          if [ "${{ inputs.playbook }}" = "services" ] && { [ -z "$CODE_SERVER_PASSWORD" ] || [ -z "$CODE_SERVER_SUDO_PASSWORD" ]; }; then
+            echo "❌ Secrets CODE_SERVER_PASSWORD/CODE_SERVER_SUDO_PASSWORD fehlen (Pflicht für services-Lauf, K2-2)"
+            FAIL=1
+          fi
+          [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
+          echo "✅ Vorbedingungen ok"
+
+      - name: Connect Runner to Tailnet (MagicDNS)
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: Netmap-Sync abwarten
+        run: sleep 15
+
+      - name: Tailscale OAuth-Token holen (IaC3-Verfahren)
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+        run: |
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          echo "TS_TOKEN=${TS_TOKEN}" >> $GITHUB_ENV
+
+      - name: VPS Tailscale-IP ermitteln (Tailscale-API)
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          NODE="vps-${{ inputs.target }}"
+          API_RESP=$(curl -sS -w "\nHTTP_CODE:%{http_code}" \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            -H "Authorization: Bearer ${TS_TOKEN}")
+          HTTP_CODE=$(printf '%s' "$API_RESP" | tail -1 | cut -d: -f2)
+          API_BODY=$(printf '%s' "$API_RESP" | sed '$d')
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ API-Fehler (HTTP ${HTTP_CODE}):"
+            printf '%s\n' "$API_BODY" | head -5
+            exit 1
+          fi
+          TS_IP=$(printf '%s' "$API_BODY" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+          if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
+            echo "❌ Keine Tailscale-IP für Node ${NODE} – Workflow 02/03 müssen zuerst laufen"
+            exit 1
+          fi
+          echo "VPS_TS_IP=${TS_IP}" >> $GITHUB_ENV
+          echo "✅ Node ${NODE} → ${TS_IP}"
+
+      - name: SSH-Key vorbereiten
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_TS_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Ansible installieren
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
+
+      - name: Ansible-Collections installieren (requirements.yml, K3-4)
+        working-directory: ansible
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Inventory-Datei erstellen (MagicDNS)
+        run: |
+          echo "[vps]" > /tmp/inventory
+          echo "vps-${{ inputs.target }} ansible_host=$VPS_TS_IP ansible_user=$VPS_USER" >> /tmp/inventory
+          cat /tmp/inventory
+
+      - name: Service-Playbook ausführen ({{ inputs.playbook }})
+        working-directory: ansible
+        run: |
+          case "${{ inputs.playbook }}" in
+            docker-traefik) PB="03-docker-traefik.yml" ;;
+            services)       PB="04-services.yml" ;;
+            *) echo "❌ Unbekanntes Playbook"; exit 1 ;;
+          esac
+          echo "▶️  Playbook: $PB (target: ${{ inputs.target }})"
+          ansible-playbook "playbooks/$PB" -i /tmp/inventory
+
+      - name: Post-Deploy Check (SSH via Tailscale)
+        run: |
+          echo "✅ Service-Deploy abgeschlossen (${{ inputs.playbook }})"
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+              "$VPS_USER@$VPS_TS_IP" \
+              "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'traefik|ollama' || true"
+          echo ""
+          echo "▶️  Nächster Schritt: Workflow 04-bdd-tests.yml (BDD-Verifikation, qa/bdd-testkonzept.md)"

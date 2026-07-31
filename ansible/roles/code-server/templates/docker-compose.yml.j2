@@ -14,7 +14,7 @@ services:
     volumes:
       - code-server-data:/config
     networks:
-      - traefik-public
+      - {{ docker_network }}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.code-server.rule=Host(`{{ code_server_hostname }}`)"
@@ -24,5 +24,5 @@ volumes:
   code-server-data:
 
 networks:
-  traefik-public:
+  {{ docker_network }}:
     external: true

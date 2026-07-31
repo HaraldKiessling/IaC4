@@ -59,7 +59,7 @@ UFW first-match:
 ### 2.3 Essentielle Netzwerk-Devices
 
 | Device | Rolle | Essentiell für | Berührt der Fix? |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **`tailscale0`** (virtuell, WireGuard) | Entkapselter Verkehr (TCP/100.x) | den eigentlichen TS-Datenverkehr | ❌ – kein UFW-deny auf dieses Interface; ts-input akzeptiert |
 | **`eth0`/`ens3`** (physisch) | WireGuard-Tunnel-UDP auf **41641** | die Tunnel-Ebene selbst (ausgehende Verbindung, Hole-Punching) | ❌ – kein deny auf 41641/udp; doppelt abgedeckt: conntrack ESTABLISHED + Tailscale-eigene ts-input-ACCEPT (Magicsock-Port) |
 | `sshd` (0.0.0.0:22) | Zugang | – | Selektiert per Interface-Regel (deny eth0), nicht per sshd-Config |
@@ -82,7 +82,7 @@ UFW first-match:
 Quellen: [netfilter-modes](https://tailscale.com/docs/reference/netfilter-modes), [UFW-Guide](https://tailscale.com/docs/how-to/secure-ubuntu-server-with-ufw)
 
 | Mode | Verhalten |
-|---|---|
+| --- | --- |
 | `on` (Default) | Tailscale legt `ts-input`/`ts-forward` an und **jumpt an den Anfang** von INPUT/FORWARD → akzeptiert tailscale0-Verkehr VOR UFW |
 | `nodivert` | Chains existieren, aber keine Jumps → UFW ist der Gatekeeper → **UFW-Allow für TS zwingend** |
 | `off` | Keine Tailscale-Regeln → alles manuell |
@@ -100,7 +100,7 @@ Quellen: [netfilter-modes](https://tailscale.com/docs/reference/netfilter-modes)
 ## 4. Abgeleitete Ziel-Firewall-Regeln (Soll-Zustand nach Workflow 02)
 
 | # | Regel | Zweck | Evidenz |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | R1 | `ufw default deny incoming` / `allow outgoing` | Basis-Policy (cloud-config) | `[I]` cloud-config Z. 16–17 |
 | R2 | **keine** generische `allow 22` (aus cloud-config gelöscht) | Erstzugang nur für Bootstrap; nach 02 entfernt, sonst first-match-Gewinner | `[I]` BDD-Lauf 2 T2 |
 | – | IPv6 | UFW erzeugt automatisch v6-Pendants (z. B. `22/tcp (v6) DENY IN on eth0`); `ts-input` existiert für v4+v6 analog — alle Ziel-Regeln gelten für beide Stacks | `[V]` ufw/Tailscale-Source |
@@ -111,6 +111,10 @@ Quellen: [netfilter-modes](https://tailscale.com/docs/reference/netfilter-modes)
 | R7 | `ufw allow from 100.64.0.0/10 to any port 80 proto tcp` | Traefik HTTP (Tailscale-only, ADR-018) | `[A]` ADR-018 (Design, Umsetzung Phase 3/4) |
 | R8 | `ufw allow from 100.64.0.0/10 to any port 8080 proto tcp` | Traefik-Dashboard (Tailscale-only, ADR-019) | `[A]` ADR-019 (Design, Umsetzung Phase 3/4) |
 | R9 | `ufw allow from 100.64.0.0/10 to any port 11434 proto tcp` | Ollama-API (Tailscale-only, ADR-021) | `[A]` ADR-021 (Design, Umsetzung Phase 3/4) |
+| R10 | `iptables -I DOCKER-USER 1 -s 100.64.0.0/10 -p tcp -m multiport --dports 80,8080,11434,6333,6334 -j ACCEPT` | Docker-published Ports: CGNAT-Allow (Defense-in-Depth; Tailscale-Pfad kommt auf tailscale0 an) | `[V]` Docker-Doku DOCKER-USER + Harald-Review K1-1/K2-1 2026-07-31 |
+| R11 | `iptables -I DOCKER-USER 2 -i <public_iface> -p tcp -m multiport --dports 80,8080,11434,6333,6334 -j DROP` | Docker-published Ports: Internet-Ingress droppen; **interface-gebunden** (K1-1-Fix: localhost/docker-proxy/Container bleiben erreichbar) | `[V]` s.o. |
+
+> **Docker-Abschnitt (R10/R11):** Docker-published Ports werden in der FORWARD-Kette (DOCKER-USER) verarbeitet — UFW-Regeln (INPUT) greifen dort **nicht**. Der DROP ist bewusst **interface-gebunden** (`-i <public_iface>`, per Default-Route ermittelt, auf dem VPS `eth0`): Ein globaler DROP würde Host-Loopback (docker-proxy, Quelle 172.17.0.1) und Container-zu-Container-Zugriffe mit droppen (Harald-Review K1-1, 2026-07-31). Persistenz: systemd-Drop-in `docker.service.d/docker-user-cgnat.conf` (ExecStartPost) setzt die Regeln bei **jedem** Docker-Daemon-Start neu (K2-3-Fix). Abgedeckte Ports: Traefik 80/8080, Ollama 11434, Qdrant 6333/6334 (K2-1).
 
 ## 5. Schritte zum Ziel – ohne Lockout
 
@@ -127,7 +131,7 @@ Reihenfolge mit Sicherheitsbegründung (Workflow 02, Phase 2a → 2b):
 ## 6. Lockout-Risiko-Profil (R-001 – zur Übernahme in arc42/11)
 
 | Dimension | Wert | Begründung |
-|---|---|---|
+| --- | --- | --- |
 | Schwere | **hoch** | Lockout = nur Provider-Konsole/Neuinstallation (Vorfall 2026-07-31) |
 | Wahrscheinlichkeit | **niedrig** | Mehrfach-Schutz: Join-vor-Restrict, R4 vor R3, Interface-Deny statt global, Post-Bootstrap-Verifikation, ts-input (netfilter=on) |
 | Restrisiko | **Tailscale-Ausfall direkt nach Restrict** | Tunnel down + Public dicht = kein Zugang; Node-Fehler (Lesson: Nodes nie löschen) |
@@ -137,7 +141,7 @@ Reihenfolge mit Sicherheitsbegründung (Workflow 02, Phase 2a → 2b):
 ## 7. BDD-Abdeckung (Szenarien ↔ Ziel-Regeln)
 
 | Szenario | prüft | Regel |
-|---|---|---|
+| --- | --- | --- |
 | T1 SSH via Tailscale | TS-SSH funktioniert (Paketpfad §2.1 intakt) | R4 + ts-input |
 | T2 Public-SSH dicht | Negativtest von außen | R3 |
 | B5 UFW-Regelreihenfolge | Status active, keine generische Allow-22 (v4+v6), Deny auf iface, **CGNAT-Allow vorhanden** | R1+R2+R3+R4 |
@@ -169,7 +173,7 @@ Reihenfolge mit Sicherheitsbegründung (Workflow 02, Phase 2a → 2b):
 ### 9.3 Ziel-Zustand (dieser PR)
 
 | Element | Vorher | Nachher (Option A) |
-|---|---|---|
+| --- | --- | --- |
 | OAuth-Client-Tags | `["tag:ci"]` | `["tag:ci", "tag:ia4"]` |
 | Auth-Key-Tags (02) | `["tag:ci"]` | `["tag:ci", "tag:ia4"]` (Exact-Match, IaC3-Muster) → VPS joint direkt mit beiden Tags |
 | Re-Tag-Step (02) | Workaround auf ia3 | Korrektur auf ia4 (frische Nodes: no-op) |

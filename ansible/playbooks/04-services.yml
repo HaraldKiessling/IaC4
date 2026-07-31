@@ -1,7 +1,9 @@
 ---
-- name: Phase 2c – Services
+# Phase 2d – Services (Ollama = erster Service, ADR-021..023; dann Qdrant, Code-Server)
+- name: Phase 2d – Services
   hosts: vps
   become: true
   roles:
+    - ollama
     - qdrant
     - code-server
