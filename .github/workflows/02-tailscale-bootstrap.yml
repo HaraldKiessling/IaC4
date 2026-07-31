@@ -57,7 +57,8 @@ jobs:
         run: |
           FAIL=0
           [ -n "$SSH_KEY" ] || { echo "❌ Secret SSH_KEY fehlt – Workflow 00 (SSH-Key generieren) zuerst ausführen"; FAIL=1; }
-          [ -n "$VPS_PUBLIC_IP" ] && [ "$VPS_PUBLIC_IP" != "1.2.3.4" ] || { echo "❌ Secret VPS_DEV/PROD_PUBLIC_IP fehlt oder ist Platzhalter"; FAIL=1; }
+          IP_SECRET="VPS_${{ inputs.target | upper }}_PUBLIC_IP"
+          [ -n "$VPS_PUBLIC_IP" ] && [ "$VPS_PUBLIC_IP" != "1.2.3.4" ] || { echo "❌ Secret ${IP_SECRET} fehlt oder ist Platzhalter (target: ${{ inputs.target }})"; FAIL=1; }
           [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
           [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
           [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
