@@ -1,0 +1,2 @@
+# Fallback (SSoT: group_vars/all.yml)
+docker_network: "traefik-network"

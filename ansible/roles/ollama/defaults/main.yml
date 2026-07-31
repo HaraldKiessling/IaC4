@@ -8,3 +8,5 @@ ollama_cpu_reserve: "1"
 ollama_mem_reserve: 2G
 ollama_num_parallel: 2
 ollama_keep_alive: "24h"
+
+docker_network: "traefik-network"   # Fallback (SSoT: group_vars/all.yml)
