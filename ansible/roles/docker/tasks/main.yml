@@ -43,6 +43,12 @@
     dest: /usr/local/sbin/docker-user-cgnat.sh
     mode: '0755'
 
+- name: Drop-in-Verzeichnis anlegen (docker.service.d)
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: '0755'
+
 - name: DOCKER-USER-Drop-in deployen (Regeln bei jedem Daemon-Start, K2-3)
   ansible.builtin.copy:
     src: docker-user-cgnat-dropin.conf
