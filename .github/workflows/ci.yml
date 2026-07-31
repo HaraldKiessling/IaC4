@@ -1,3 +1,4 @@
+---
 name: CI – Lint + Quality Gate
 
 on:
@@ -25,7 +26,7 @@ jobs:
           echo "Prüfe ob docs/arc42/ alle 12 Kapitel enthält…"
           FAIL=0
           for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
-            if [ -f "docs/arc42/${i}_"*".md" ]; then
+            if ls docs/arc42/${i}_*.md >/dev/null 2>&1; then
               echo "  ✅ Kapitel $i"
             else
               echo "  ⚠️  Kapitel $i fehlt"

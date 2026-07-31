@@ -57,7 +57,8 @@ jobs:
         run: |
           FAIL=0
           [ -n "$SSH_KEY" ] || { echo "❌ Secret SSH_KEY fehlt – Workflow 00 (SSH-Key generieren) zuerst ausführen"; FAIL=1; }
-          IP_SECRET="VPS_${{ inputs.target | upper }}_PUBLIC_IP"
+          TARGET_UC=$(echo "${{ inputs.target }}" | tr '[:lower:]' '[:upper:]')
+          IP_SECRET="VPS_${TARGET_UC}_PUBLIC_IP"
           [ -n "$VPS_PUBLIC_IP" ] && [ "$VPS_PUBLIC_IP" != "1.2.3.4" ] || { echo "❌ Secret ${IP_SECRET} fehlt oder ist Platzhalter (target: ${{ inputs.target }})"; FAIL=1; }
           [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
           [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
@@ -218,6 +219,7 @@ jobs:
           else
             echo "SSH_OK=false" >> $GITHUB_ENV
             echo "❌ SSH via Tailscale fehlgeschlagen"
+            exit 1
           fi
 
       - name: "Verwaiste vps-<target>-old-* Nodes löschen (SSH-Erfolg = Beweis)"
