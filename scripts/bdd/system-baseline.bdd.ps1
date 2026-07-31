@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Feature: System-Baseline (Workflow 03, Phase 1)
-# Verifiziert: Baseline-Pakete, Zeitzone, Swap, deploy-user-Sudo.
+# Verifiziert: Baseline-Pakete, Zeitzone, Swap, deploy-user-Sudo, UFW-Restrict (Regelreihenfolge).
 param(
     [Parameter(Mandatory)][string]$VpsIp,       # Tailscale-IP (100.x)
     [Parameter(Mandatory)][string]$VpsUser,     # z.B. deploy-user
@@ -42,3 +42,14 @@ Given "deploy-user ist in der sudoers (Ansible become)"
 $r = Invoke-SSH "sudo -n true && echo SUDO_OK" $VpsUser $VpsIp $SshKeyPath
 When "sudo -n true als $VpsUser ausgeführt wird"
 Then-True "sudo ohne Passwort funktioniert" ($r.Output -match 'SUDO_OK') $r.Output
+
+# ── Szenario 5: UFW aktiv, öffentliches SSH blockiert (Regelreihenfolge) ──
+Write-Host "`nScenario: UFW aktiv – öffentliches SSH blockiert, keine generische Allow-Regel" -ForegroundColor Yellow
+Given "cloud-config aktiviert UFW und setzt generisches allow ssh (Bootstrap-Zugang)"
+$r = Invoke-SSH "sudo ufw status verbose" $VpsUser $VpsIp $SshKeyPath
+When "ufw status verbose abgefragt wird"
+Then-True "UFW ist aktiv (Status: active)" ($r.Output -match 'Status: active') $r.Output
+Then-True "Keine generische Allow-Regel für Port 22 mehr (cloud-config-Regel gelöscht)" ($r.Output -notmatch '22/tcp\s+ALLOW IN\s+Anywhere') $r.Output
+Then-True "Keine generische Allow-Regel für Port 22 (v6) mehr" ($r.Output -notmatch '22/tcp \(v6\)\s+ALLOW IN') $r.Output
+Then-True "Deny-Regel auf öffentlichem Interface vorhanden" ($r.Output -match '22/tcp\s+DENY IN on ') $r.Output
+Then-True "CGNAT-Allow für Tailscale (100.64.0.0/10) vorhanden (Defense-in-Depth)" ($r.Output -match '22/tcp\s+ALLOW IN\s+100\.64\.0\.0/10') $r.Output
