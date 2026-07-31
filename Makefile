@@ -9,13 +9,13 @@ lint:          ## Lintet YAML + Markdown
 	@echo "=== Markdown Lint ===" && markdownlint 'docs/**/*.md' || true
 	@echo "=== Ansible Syntax ===" && ansible-playbook --syntax-check ansible/playbooks/site.yml 2>/dev/null || true
 
-deploy-dev:    ## Deploy auf DEV-VPS (Phase 1+2)
+deploy-dev:    ## Baseline-Deploy auf DEV (nach Workflow 02 Bootstrap)
 	@echo "Trigger GH Actions Deploy (target=dev)…"
-	@gh workflow run deploy.yml -f target=dev
+	@gh workflow run 03-baseline-deploy.yml -f target=dev
 
-deploy-prod:   ## Deploy auf PROD-VPS (Phase 1+2) – nur mit Haralds OK!
+deploy-prod:   ## Baseline-Deploy auf PROD (nach Workflow 02) – nur mit Haralds OK!
 	@echo "Trigger GH Actions Deploy (target=prod)…"
-	@gh workflow run deploy.yml -f target=prod
+	@gh workflow run 03-baseline-deploy.yml -f target=prod
 
 docs:          ## Startet arc42-Dokumentations-Server (optional)
 	@echo "Öffne docs/arc42/ im Browser oder Editor."

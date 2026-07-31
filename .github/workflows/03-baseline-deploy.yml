@@ -1,10 +1,4 @@
-# =============================================================================
-# 02 – Baseline Deploy — MUSS NACH 03 (Tailscale-Bootstrap) laufen!
-#   Vorbedingung: Ziel-VPS hat Tailscale-IP (wird per API geprüft, sonst Abbruch).
-#   Läuft über Tailscale (Public-IP ist nach 03 geschlossen).
-# Siehe docs/workflows/deploy-stages.md
-# =============================================================================
-name: "02 – Baseline Deploy (Phase 1)"
+name: "03 – Baseline Deploy (Phase 1, via Tailscale-IP)"
 
 on:
   workflow_dispatch:
@@ -50,8 +44,7 @@ jobs:
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
             -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
           if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
-            echo "❌ Keine Tailscale-IP für Node ${NODE} gefunden."
-            echo "   Vorbedingung nicht erfüllt: Workflow 03 (Tailscale-Bootstrap) muss zuerst laufen!"
+            echo "❌ Keine Tailscale-IP für Node ${NODE} gefunden"
             exit 1
           fi
           echo "VPS_TS_IP=${TS_IP}" >> $GITHUB_ENV

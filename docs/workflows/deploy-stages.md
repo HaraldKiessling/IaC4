@@ -1,69 +1,62 @@
-# Deployment-Stufen & Workflow-Reihenfolge
+# Deployment-Stufen & SSH-Transition
 
-> **Logische Reihenfolge:** Erst Zugangskanal herstellen, dann härten, dann Services.
-> **Kernprinzip:** `03` (Bootstrap) läuft über Public-IP und MUSS vor `02` (Baseline) laufen.
+## Überblick
 
-## Stufen-Übersicht
+> **Wichtig:** Die Workflow-Nummern (`00`–`03`) = **Ausführungsreihenfolge**.
+> Die Phasen-Nummern (Phase 0–2c) beschreiben den VPS-Lifecycle (Playbook-Namen) und
+> sind **nicht** die Ausführungsreihenfolge. Seit PR #26 (MagicDNS-Umstellung) läuft die
+> Baseline **nach** dem Tailscale-Join: **Workflow 02 (Bootstrap) MUSS vor
+> Workflow 03 (Baseline) ausgeführt werden.**
 
 ```
-Stufe 0: Setup (einmalig, Repo-Ebene)
-         → 00-generate-ssh-key.yml   SSH-Key-Paar + Secrets (nur wenn SSH_KEY fehlt)
-         → 01-tailscale-terraform.yml Tailscale OAuth-Client (Terraform)
+Ausführungsreihenfolge (Workflows):
 
-Stufe 1: VPS-Provisioning (Provider, Harald)
-         → cloud-config: deploy-user + SSH-Key + UFW (nur SSH offen)
+Phase 0: cloud-config beim VPS-Setup
+         → deploy-user mit SSH-Key
+         → UFW (nur SSH offen)
          → KEIN Tailscale (wird via Ansible installiert)
          → VPS via PUBLIC-IP erreichbar 🔓
 
-Stufe 2: 03-tailscale-bootstrap.yml  (via Public-IP) 🔓→🔒
-         → SSH-Zugang testen (IaC4-SSH_KEY ↔ cloud-config-Key)
-         → Tailscale installieren + joinen (tag:ia3)
-         → Node-Cleanup: offline vps-<target> → vps-<target>-old-<ts> (NIE löschen)
-         → SSH-Restrict: UFW deny 22 auf Public-IP,
-           Allow für Tailscale-CGNAT 100.64.0.0/10
-         → SSH NUR noch via Tailscale 🔒
+Workflow 02 – Phase 2a: Tailscale-Join (via SSH auf Public-IP)
+         → tailscale installieren & joinen
+         → SSH via Public-IP 🔓 (noch offen)
 
-Stufe 3: 02-baseline-deploy.yml      (via Tailscale) 🔒
-         → System aktualisieren, Pakete, Timezone, SSH-Härtung
-         → Vorbedingung: Tailscale-IP muss existieren (sonst Abbruch:
-           „Workflow 03 zuerst ausführen“)
+Workflow 02 – Phase 2b: SSH-Restrict
+         → UFW deny 22 🔒
+         → SSH NUR noch via Tailscale (MagicDNS)
 
-Stufe 4: Docker + Traefik            (Playbook 03-docker-traefik.yml) 🔒
-Stufe 5: Services                    (Playbook 04-services.yml: Qdrant, Code-Server) 🔒
-Stufe 6: OpenClaw Gateway            (Playbook 05-openclaw.yml) 🔒
+Workflow 03 – Phase 1: Ansible-Baseline (via SSH auf Tailscale-IP 🔒)
+         → System aktualisieren, Pakete, Swap
+
+Phase 2c+: Docker, Services, OpenClaw
+         → Alle via Tailscale-SSH 🔒
 ```
 
-## Warum 03 vor 02?
+## Secrets für Bootstrap
 
-1. **03 ist der einzige Workflow über Public-IP** — danach ist der VPS bewusst nur
-   noch via Tailscale erreichbar (Lockout-Prävention).
-2. **02 kann technisch nicht vor 03 laufen:** Er ermittelt die Tailscale-IP des
-   Ziel-Nodes per API. Ein frischer VPS ohne Tailscale hat keine → Abbruch.
-3. SSH-Härtung (`PasswordAuthentication no`) vor dem Tailscale-Join wäre riskant:
-   Fehlschlag beim Join = VPS ohne Zugangsweg.
+Für Workflow 02 (Phasen 2a/2b, vor Tailscale) wird die **öffentliche IP** des VPS benötigt.
+Aktuell gesetzt:
 
-## Secrets
+| Secret | Wert | Nutzung |
+|--------|------|---------|
+| `VPS_DEV_PUBLIC_IP` | (muss gesetzt werden) | Workflow 02 (Bootstrap) – Phasen 2a/2b |
+| `VPS_DEV_HOST` | `vps-dev.tailcfea8a.ts.net` | ⚠️ nicht mehr genutzt – IP-Resolution via Tailscale-API (Workflow 03) |
+| `SSH_KEY` | 🔑 (private Key) | SSH-Zugriff |
+| `VPS_USER` | `deploy-user` | SSH-User |
 
-| Secret | Zweck | Genutzt in |
-|--------|-------|-----------|
-| `SSH_KEY` | Private Key (deploy-user) | 02, 03 |
-| `VPS_USER` | SSH-User (`deploy-user`) | 02, 03 |
-| `VPS_DEV_PUBLIC_IP` / `VPS_PROD_PUBLIC_IP` | Public-IP (nur Stufe 2/03) | 03 |
-| `TAILSCALE_TAILNET` | Tailnet (z.B. tailcfea8a.ts.net) | 02, 03 |
-| `TAILSCALE_API_KEY` | Tailscale-API (Node-IP, Cleanup, Re-Tag) | 02, 03 |
-| `TAILSCALE_OAUTH_CLIENT_ID/SECRET` | OAuth (Runner-Join + Auth-Keys) | 02, 03 |
-| `TAILSCALE_HOSTNAME_DEV/PROD` | MagicDNS-Hostnamen (Referenz) | – |
+Nach Phase 2b läuft alles via Tailscale. Workflow 03 löst die VPS-IP per **Tailscale-API**
+aus dem Node-Hostnamen (`vps-dev`) auf – ein `VPS_DEV_HOST`-Secret ist dafür nicht nötig.
 
 ## SSH-Key
 
-- **Private Key:** GH Secret `SSH_KEY` (IaC4 — NICHT das IaC3-Secret!)
+- **Private Key:** in GH Secret `SSH_KEY`
 - **Public Key:** in `cloud-config.yaml` (beim VPS-Setup eingespielt)
-- **Typ:** ED25519 (`iac4-deploy-key-20260730`, Fingerprint SHA256:zNZbl83…)
+- **Typ:** ED25519, generiert 2026-07-30
 
-## Workflow-Reihenfolge (verbindlich)
+## Workflow-Reihenfolge
 
-1. `00-generate-ssh-key.yml`      → einmalig, nur wenn `SSH_KEY` fehlt
-2. `01-tailscale-terraform.yml`   → einmalig, OAuth-Client (Plan/Apply)
-3. **`03-tailscale-bootstrap.yml`** → pro frischem VPS (Public-IP, schließt SSH 🔒)
-4. **`02-baseline-deploy.yml`**   → danach (Tailscale, Härtung)
-5. Docker/Traefik → Services → OpenClaw (Playbooks, Workflows folgen Phase 6)
+1. `00-generate-ssh-key.yml`           → SSH-Key-Paar generieren + Secrets anlegen (einmalig)
+2. `01-tailscale-terraform.yml`        → Tailscale OAuth + ACLs (Terraform Plan/Apply, einmalig)
+3. `02-tailscale-bootstrap.yml`        → Phase 2a + 2b (via Public-IP, schliesst SSH 🔒)
+4. `03-baseline-deploy.yml`            → Phase 1 (via Tailscale-IP 🔒)
+5. Danach: weitere Services via Tailscale (04-service-deploy, 05-openclaw-install geplant)
