@@ -67,6 +67,7 @@
 - [ ] Idempotent? (2. Lauf = 1. Lauf?)
 - [ ] P4: arc42 aktualisiert?
 - [ ] Commit-Nachricht informativ?
+**Regel (Issue #37):** Autor ≠ Reviewer. Review-Ergebnis wird im PR-Thread dokumentiert (✅ Freigabe oder Befundliste); Befunde werden bearbeitet oder explizit als Follow-up verfolgt – kein stiller Tod.
 **Output:** "Befund: Zeile 42 …" oder "✅ Freigabe"
 
 ### Schritt 7: Integration
