@@ -28,7 +28,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 
 | Phase | Workflow | Auf dem VPS deployt? | BDD-Feature |
 |---|---|---|---|
-| 2a+2b | `02-tailscale-bootstrap.yml` | ✅ ja (Tailscale-Join, tag:ia3, SSH-Restrict) | `tailscale-bootstrap.bdd.ps1` |
+| 2a+2b | `02-tailscale-bootstrap.yml` | ✅ ja (Tailscale-Join, tag:ia4, SSH-Restrict) | `tailscale-bootstrap.bdd.ps1` |
 | 1 | `03-baseline-deploy.yml` | ✅ ja (System-Baseline) | `system-baseline.bdd.ps1` |
 | 2c | Phase-3-Workflow (geplant) | ❌ nein (Docker/Traefik) | `docker-traefik.bdd.ps1` (geplant) |
 | 2d | Phase-3-Workflow (geplant) | ❌ nein (Qdrant, CodeServer) | `services.bdd.ps1` (geplant) |
@@ -41,7 +41,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 |---|---|---|
 | T1 | SSH via Tailscale erreichbar | Exit 0, Tailscale-Node-Name (`Self.DNSName`) = `vps-<target>` (OS-Hostname ist `ubuntu` – nicht Soll-Quelle), `tailscale ip -4` = `100.x` |
 | T2 | Public-SSH geschlossen (SSH-Restrict) | SSH auf Public-IP:22 schlägt fehl |
-| T3 | Node online + korrekt getaggt | Tailscale-API: Node existiert, online via `lastSeen`-Frische (< 10 min, Proxy – `online` ist kein gültiges Listen-Feld), Tags enthalten `tag:ia3` |
+| T3 | Node online + korrekt getaggt | Tailscale-API: Node existiert, online via `lastSeen`-Frische (< 10 min, Proxy – `online` ist kein gültiges Listen-Feld), Tags enthalten `tag:ia4` (Option A, Exact-Match; Re-Tag durchgeführt 2026-07-31) |
 | T4 | Tailscale-Infrastruktur | `NetfilterMode` = 2 (= on, ts-input aktiv), WireGuard lauscht auf UDP 41641, `tailscale0`-Interface existiert |
 
 ### Feature: System-Baseline (`system-baseline.bdd.ps1`)

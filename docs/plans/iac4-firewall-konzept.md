@@ -148,7 +148,72 @@ Reihenfolge mit Sicherheitsbegründung (Workflow 02, Phase 2a → 2b):
 4. **Vendor-Empfehlung vs. eigene Regel:** `allow in on tailscale0` (interface-basiert) vs. CGNAT-Allow (quellenbasiert, RFC-6598-Raum) — Entscheidung dokumentieren, aktuell: CGNAT-Allow (funktional äquivalent; nicht Tailscale-exklusiv, praktisch aber nur via TS erreichbar)
 5. **Tailscale-Version auf dem VPS + Vorhandensein der ts-input-41641-Regel (AddMagicsockPortRule) verifizieren** — stützt R5-Evidenzlage
 
-## 9. Quellen
+## 9. Tag-Design & Provisionierung (Option A – IaC3-Muster mit tag:ia4)
+
+### 9.1 Evidenzlage
+
+- **Original-ACL (Commit `0d3d1de`):** IaC4-Port sah **`tag:ia4`** für VPS-Nodes vor — `tagOwners: { tag:ia4: [admin], tag:ci: [admin] }`, `ssh: src [tag:ci] → dst [tag:ia4]` (deploy-user/root/ubuntu). Die ACL wurde später aus Terraform entfernt (geteilte Konsole-ACL, `tailscale-acl.mdc`: nie überschreiben, ia3+ia4+ha koordiniert). `[I]` Git-Historie
+- **IaC3-Referenz:** `terraform/oauth-client.tf` = `tags ["tag:ci", "tag:ia3"]`; Auth-Keys mit `["tag:ia3","tag:ci"]`; Runner-Joins mit `tag:ci,tag:ia3` → **ein Client mit beiden Tags**, VPS joint direkt mit Ziel-Tag. `[I]` IaC3-Repo
+- **IaC4-Ist (vor diesem PR):** Client nur `["tag:ci"]`, Auth-Key nur `tag:ci` → frischer VPS startet als tag:ci → **Re-Tag-Workaround auf tag:ia3** (Migration-Kompromiss „SSH-ACL-Kompatibilität"). `[I]` Migrationsplan + Workflows
+
+### 9.2 Diagnose
+
+1. `tag:ia3` auf dem IaC4-VPS ist ein **Fremd-Tag aus dem IaC3-Projekt** — das designierte IaC4-Tag ist `tag:ia4` (Original-ACL).
+2. Der Re-Tag-Workaround entstand, weil die **Tag-Ownership** (ACL) bestimmt, welche Tags ein Client vergeben darf: Ein tag:ci-Client kann nur tag:ci-Auth-Keys erzeugen → der VPS startet falsch getaggt und muss umgetaggt werden (funktioniert nur, weil die geteilte ACL es implizit erlaubt — empirisch HTTP 200, nicht dokumentiert).
+3. IaC3-Praxis bestätigt: **Ein Client mit beiden Tags** (nicht zwei Clients) — damit kann der Auth-Key das Ziel-Tag direkt setzen, kein Workaround.
+4. **Exact-Match vs. Ownership-Mode (Tailscale-Doku):** Ein Auth-Key, dessen Tags ein **Subset** der Client-Tags sind (z. B. nur `["tag:ia4"]` bei Client `[tag:ci, tag:ia4]`), erfordert **tag-basierte Ownership** in der ACL (`tagOwners: tag:ia4 → [tag:ci]` oder Selbst-Ownership). IaC3 nutzt **Exact-Match** (Key-Tags = alle Client-Tags `["tag:ia3","tag:ci"]`) — das funktioniert ohne Ownership-Abhängigkeit. Option A übernimmt Exact-Match: Key-Tags `["tag:ci", "tag:ia4"]`.
+
+### 9.3 Ziel-Zustand (dieser PR)
+
+| Element | Vorher | Nachher (Option A) |
+|---|---|---|
+| OAuth-Client-Tags | `["tag:ci"]` | `["tag:ci", "tag:ia4"]` |
+| Auth-Key-Tags (02) | `["tag:ci"]` | `["tag:ci", "tag:ia4"]` (Exact-Match, IaC3-Muster) → VPS joint direkt mit beiden Tags |
+| Re-Tag-Step (02) | Workaround auf ia3 | Korrektur auf ia4 (frische Nodes: no-op) |
+| VPS-Dauertag | `tag:ia3` | `tag:ia4` |
+| BDD-T3 | erwartet tag:ia3 | erwartet tag:ia4 |
+
+### 9.4 Schrittfolge ohne Lockout/Breakage (operativ, NACH diesem PR)
+
+1. **ACL-Verifikation VOR allem** (Checkliste, `GET /api/v2/tailnet/{t}/acl` mit temporärem API-Key):
+   - `tagOwners` enthält `tag:ia4` mit **tag-basiertem** Owner (`tag:ia4` oder `tag:ci` — nicht nur User/Group-Einträge, sonst schlägt die Key-Erzeugung im Ownership-Mode fehl)
+   - `ssh`-Sektion enthält `src: [tag:ci] → dst: [tag:ia4]` für deploy-user/root/ubuntu
+   - Fehlt etwas → koordinierte ACL-Ergänzung (Konsole, ia3+ia4+ha zusammen) — **kein Re-Tag ohne ACL-Nachweis** (Lockout-Klasse: SSH via Tailscale würde brechen).
+   - **Zwischenzustand (2026-07-31 durchgeführt):** BDD-T3 war zwischen PR-Merge und Schritt 3 erwartungsgemäß rot (vps-dev noch tag:ia3); nach dem Re-Tag: BDD-Lauf 4 komplett grün inkl. T3 `tag:ia4`.
+2. **Client neu erzeugen:** Workflow 01 (force=true) mit dem temporären API-Key → Client mit `["tag:ci", "tag:ia4"]`, Secrets werden aktualisiert.
+3. **Bestands-VPS re-taggen:** `vps-dev` von tag:ia3 auf tag:ia4 (via API mit temporärem Key oder nach 01 via OAuth-Token) — erst NACH Schritt 1.
+4. **Verifikation:** BDD-Lauf 4 → T1 (SSH via TS bleibt), T2 (Public dicht bleibt), T3 (tag:ia4), T4 unverändert.
+5. **Rollback:** Re-Tag zurück auf ia3 (falls Schritt-1-Nachweis doch fehlerhaft war).
+
+### 9.5 Risiko
+
+R-002: Tag-Umbruch bricht TS-SSH (wenn ACL ia4 nicht kennt) — Schwere hoch (Lockout-Klasse), W'keit niedrig (Original-ACL hatte ia4; Schritt 1 verifiziert vor dem Umbau). Monitoring: BDD-T1/T3.
+
+## 10. ACL-Policy-Erweiterung (idempotent, Workflow 01)
+
+### 10.1 Problem
+Die Tailscale-ACL ist **geteilt** (IaC3 `tag:ia3` + IaC4 `tag:ia4` + Home-Assistant `tag:ha`), im HUPL-Format mit Kommentaren, und darf **nie überschrieben** werden (Regel `tailscale-acl.mdc`; historisch: `terraform/acl.tf` mit `overwrite_existing_content = true` wurde deshalb entfernt). IaC4 braucht aber die ia4-Regeln (tagOwners + acls + ssh).
+
+### 10.2 Lösung: `scripts/ensure-acl-ia4.py` (in Workflow 01, nach Terraform Apply)
+Idempotenter, **rein additiver** Ablauf:
+1. `GET /acl` → aktuelle Policy (HUPL)
+2. **Idempotenz-Guard:** enthält die Policy bereits `tag:ia4` → no-op (exit 0)
+3. **Backup** der aktuellen Policy (`/tmp/acl-backup.json`, Log-Hinweis)
+4. **Additive Einfügung** an exakten Ankern (tagOwners-Zeile nach ia3, acl-Blöcke nach dem ci→ia3-Block, ssh-Eintrag nach dem ia3-Eintrag) — Anker müssen exakt 1× existieren, sonst Abbruch OHNE Änderung
+5. `POST /acl` (Content-Type hujson)
+6. **Verifikation:** ia4-Einträge vorhanden (4 Checks) + **ia3/ha-Bestand unverändert** (Zähler) + **Additivitäts-Diff** (keine bestehende Zeile entfernt/geändert — normalisierter Zeilenvergleich)
+7. **Auto-Rollback** bei jedem Fehler: POST des Backups + exit 1
+
+### 10.3 Sicherheits-Nachweise ("100 %")
+- **Rein additiv:** Der normalisierte Diff Backup→Neu enthält nur `>`-Zeilen (bewiesen bei der manuellen Erst-Erweiterung 2026-07-31: POST 200, Verifikation bestanden, Backup `/tmp/acl-backup-20260731.hujson`)
+- **Idempotent:** Wiederholte Läufe sind no-op (Guard); der erste Workflow-Lauf nach der manuellen Erweiterung ist der Idempotenz-Test
+- **Fail-safe:** Mehrdeutige Anker → Abbruch vor Änderung; Verifikationsfehler → Rollback
+- **Koordination:** ia3/ha-Blöcke werden nie angefasst (Zähler-Checks)
+
+### 10.4 Abgrenzung
+Kein Terraform-ACL-Management (kein `overwrite_existing_content`); das Skript ist ein eigenständiger, transparenter Schritt mit dokumentiertem Backup-/Rollback-Pfad.
+
+## 11. Quellen
 
 - Tailscale: [netfilter modes](https://tailscale.com/docs/reference/netfilter-modes) (on/nodivert/off, ts-input-Jumps)
 - Tailscale: [Secure Ubuntu Server with UFW](https://tailscale.com/docs/how-to/secure-ubuntu-server-with-ufw)

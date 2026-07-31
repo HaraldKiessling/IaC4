@@ -20,7 +20,7 @@
 ## ✅ Phase 1: Tailscale OAuth (erledigt)
 
 - [x] Terraform OAuth-Client erzeugt (IaC4 GH Secrets gespeichert)
-- [x] OAuth-Client tag:ia3 hinzugefügt (für SSH-ACL-Kompatibilität)
+- [x] OAuth-Client tag:ia3 hinzugefügt (für SSH-ACL-Kompatibilität) — *historisch, ersetzt durch Option A (tag:ia4, 2026-07-31)*
 - [x] Workflow 01 (Tailscale Terraform / rotate OAuth) erstellt (force=false)
 
 ## ✅ Phase 2: VPS DEV via Tailscale (erledigt)
@@ -30,9 +30,10 @@
 - [x] Workflow 02 (Tailscale Bootstrap) erstellt
 - [x] Handler `creates:` gefixt (skip Bug)
 - [x] Auth-Key `ephemeral: false` (permanenter Server)
-- [x] Auth-Key `tag:ia3` (ACL-kompatibel)
+- [x] Auth-Key `tag:ia3` (ACL-kompatibel) — *historisch, ersetzt durch Exact-Match `[tag:ci, tag:ia4]` (Option A)*
 - [x] **VPS neu installieren** (letzte cloud-config)
-- [x] Workflow 02 (Tailscale Bootstrap) grün — 2026-07-31 (Join tag:ci + Re-Tag tag:ia3, UFW-Restrict mit CGNAT-Allow, Cleanup = Rename)
+- [x] Workflow 02 (Tailscale Bootstrap) grün — 2026-07-31 (Join tag:ci + Re-Tag tag:ia3, UFW-Restrict mit CGNAT-Allow, Cleanup = Rename) — *hist. Stand; seit Option A: Join direkt tag:ia4*
+- [x] **Option A (2026-07-31):** OAuth-Client `[tag:ci, tag:ia4]` (IaC3-Muster, Exact-Match), Auth-Key `[tag:ci, tag:ia4]`, Runner-Join `tag:ci,tag:ia4`, vps-dev → `tag:ia4`; ACL additiv um ia4 erweitert (`scripts/ensure-acl-ia4.py`, Workflow 01, Backup+Rollback); BDD-Lauf 4 komplett grün
 - [x] SSH-Zugriff via Tailscale bestätigen — 2026-07-31 (SSH-Check in Workflow 02/03 erfolgreich: deploy-user@<Tailscale-IP>)
 
 ## ⬜ Phase 3: Ansible-Rollen befüllen

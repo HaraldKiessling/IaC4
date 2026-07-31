@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Feature: Tailscale-Bootstrap (Workflow 02)
-# Verifiziert: VPS im Tailnet (online, tag:ia3), SSH via Tailscale erreichbar, Public-SSH geschlossen.
+# Verifiziert: VPS im Tailnet (online, tag:ia4), SSH via Tailscale erreichbar, Public-SSH geschlossen.
 param(
     [Parameter(Mandatory)][string]$VpsIp,        # Tailscale-IP (100.x)
     [Parameter(Mandatory)][string]$VpsUser,      # z.B. deploy-user
@@ -62,7 +62,7 @@ When "SSH auf $PublicIp:22 versucht wird"
 Then-True "Verbindung fehlgeschlagen (Port 22 dicht)" (Test-SshPortClosed $VpsUser $PublicIp $SshKeyPath)
 
 # ── Szenario 3: Node online und korrekt getaggt ──
-Write-Host "`nScenario: VPS-Node ist online und mit tag:ia3 getaggt" -ForegroundColor Yellow
+Write-Host "`nScenario: VPS-Node ist online und mit tag:ia4 getaggt" -ForegroundColor Yellow
 Given "OAuth-Client-Credentials sind verfügbar (IaC3-Verfahren)"
 $devices = $null
 try {
@@ -93,7 +93,7 @@ if ($devices) {
             catch { $fresh = $false }
         }
         Then-True "Node ist online (Proxy: lastSeen < 10 min)" $fresh "lastSeen=$($node.lastSeen)"
-        Then-True "Node trägt tag:ia3" (($node.tags -join ",") -match 'tag:ia3') ($node.tags -join ",")
+        Then-True "Node trägt tag:ia4" (($node.tags -join ",") -match 'tag:ia4') ($node.tags -join ",")
     }
 }
 else {
