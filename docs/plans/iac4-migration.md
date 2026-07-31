@@ -2,7 +2,8 @@
 
 > **Übergeordnetes Ziel:** IaC3-Inhalte nach IaC4 migrieren, VPS DEV via Tailscale bereitstellen.
 > **Stand:** 2026-07-31 | **Methodik:** docs/workflows/methodology.md
-> **Aktuell:** Phase 2 (VPS DEV via Tailscale) — VPS DEV frisch installiert, Workflow 02 (Tailscale Bootstrap) in Arbeit (MagicDNS-Join-Fix). Nach DEV-Erfolg: PROD-Migration (Phase 8), dann IaC3 = Backup (Phase 9).
+> **Aktuell:** Phase 3 (Ansible-Rollen befüllen) — Phase 2 abgeschlossen 2026-07-31 (Workflow 02+03 grün, SSH via Tailscale bestätigt).
+> **Workflow-Nummern = Ausführungsreihenfolge:** 02 (Bootstrap) → 03 (Baseline) → Services (docs/workflows/deploy-stages.md)
 
 ## ✅ Phase 0: Grundstruktur (erledigt)
 
@@ -31,12 +32,12 @@
 - [x] Auth-Key `ephemeral: false` (permanenter Server)
 - [x] Auth-Key `tag:ia3` (ACL-kompatibel)
 - [x] **VPS neu installieren** (letzte cloud-config)
-- [ ] Workflow 02 (Tailscale Bootstrap) grün (Join-Fix in Arbeit: fix/workflow-magicdns-deploy)
-- [ ] SSH-Zugriff via Tailscale bestätigen
+- [x] Workflow 02 (Tailscale Bootstrap) grün — 2026-07-31 (Join tag:ci + Re-Tag tag:ia3, UFW-Restrict mit CGNAT-Allow, Cleanup = Rename)
+- [x] SSH-Zugriff via Tailscale bestätigen — 2026-07-31 (SSH-Check in Workflow 02/03: ubuntu@100.73.43.48)
 
 ## ⬜ Phase 3: Ansible-Rollen befüllen
 
-- [ ] vps-baseline: Tasks implementieren
+- [x] vps-baseline: Tasks implementiert (Baseline-Deploy grün, 2026-07-31)
 - [ ] docker: Tasks implementieren
 - [ ] traefik: Tasks implementieren
 - [ ] qdrant: Collection-Setup (3072d/Cosine)
