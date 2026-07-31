@@ -51,7 +51,7 @@ jobs:
         run: |
           NODE="vps-${{ inputs.target }}"
           TS_IP=$(curl -s \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses,lastSeen" \
             -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
           if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
             echo "❌ Keine Tailscale-IP für Node ${NODE} gefunden – Workflow 02 muss zuerst laufen"
@@ -60,13 +60,18 @@ jobs:
           echo "VPS_TS_IP=${TS_IP}" >> $GITHUB_ENV
           echo "✅ Node ${NODE} → ${TS_IP}"
 
-      - name: Public-IP je Target setzen
+      - name: Public-IP je Target setzen (mit Leer-Check)
         run: |
           if [ "${{ inputs.target }}" = "dev" ]; then
-            echo "PUBLIC_IP=${{ secrets.VPS_DEV_PUBLIC_IP }}" >> $GITHUB_ENV
+            PUB="${{ secrets.VPS_DEV_PUBLIC_IP }}"
           else
-            echo "PUBLIC_IP=${{ secrets.VPS_PROD_PUBLIC_IP }}" >> $GITHUB_ENV
+            PUB="${{ secrets.VPS_PROD_PUBLIC_IP }}"
           fi
+          if [ -z "$PUB" ] || [ "$PUB" = "1.2.3.4" ]; then
+            echo "❌ Public-IP für target=${{ inputs.target }} fehlt oder ist Platzhalter – T2 (Public-SSH dicht) wäre ein False-Positive"
+            exit 1
+          fi
+          echo "PUBLIC_IP=${PUB}" >> $GITHUB_ENV
 
       - name: SSH-Key vorbereiten
         run: |
@@ -84,6 +89,4 @@ jobs:
             -VpsUser "$VPS_USER" \
             -SshKeyPath ~/.ssh/id_ed25519 \
             -PublicIp "$PUBLIC_IP" \
-            -Tailnet "$TS_TAILNET" \
-            -ApiKey "$TS_API_KEY" \
             -ExpectedHostname "vps-${{ inputs.target }}"

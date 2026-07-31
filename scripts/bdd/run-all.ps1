@@ -8,13 +8,16 @@ param(
     [Parameter(Mandatory)][string]$VpsUser,
     [Parameter(Mandatory)][string]$SshKeyPath,
     [Parameter(Mandatory)][string]$PublicIp,
-    [Parameter(Mandatory)][string]$Tailnet,
-    [Parameter(Mandatory)][string]$ApiKey,
+    [string]$Tailnet = $env:TS_TAILNET,
+    [string]$ApiKey = $env:TS_API_KEY,
     [Parameter(Mandatory)][string]$ExpectedHostname,
     [string]$ExpectedTz = "Europe/Berlin"
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrEmpty($ApiKey)) { Write-Host "❌ TS_API_KEY fehlt (env) – Abbruch"; exit 1 }
+if ([string]::IsNullOrEmpty($Tailnet)) { Write-Host "❌ TS_TAILNET fehlt (env) – Abbruch"; exit 1 }
 
 Write-Host "═══ IaC4 BDD-Tests – Target: $ExpectedHostname ($VpsIp) ═══" -ForegroundColor Cyan
 Write-Host "Start: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')`n"

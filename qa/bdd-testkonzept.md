@@ -39,7 +39,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 ### Feature: Tailscale-Bootstrap (`tailscale-bootstrap.bdd.ps1`)
 | # | Szenario | Then-Assertion |
 |---|---|---|
-| T1 | SSH via Tailscale erreichbar | Exit 0, `hostname` = `vps-<target>`, `tailscale ip -4` = `100.x` |
+| T1 | SSH via Tailscale erreichbar | Exit 0, Tailscale-Node-Name (`Self.DNSName`) = `vps-<target>` (OS-Hostname ist `ubuntu` – nicht Soll-Quelle), `tailscale ip -4` = `100.x` |
 | T2 | Public-SSH geschlossen (SSH-Restrict) | SSH auf Public-IP:22 schlägt fehl |
 | T3 | Node online + korrekt getaggt | Tailscale-API: Node existiert, `online=true`, Tags enthalten `tag:ia3` |
 
@@ -78,7 +78,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 1. Roter Szenario → Workflow-Log = Evidenz (welches Then, welcher Detail-Output)
 2. Unterscheidung: Deploy-Lücke (VPS weicht vom Soll ab) vs. Test-Lücke (Assertion/Umgebung falsch)
 3. Behandlung über IaC4-Prozess: Fix im Repo (Branch → PR → Review → Merge → Deploy), **nie** direkt am VPS
-4. Bekannte Grenzen dokumentieren (z. B. T2 abhängig von UFW-Zustand, B4 abhängig von sudoers)
+4. Bekannte Grenzen dokumentieren (z. B. T2 abhängig von UFW-Zustand; T2-Negativtest: jeder Nicht-Null-Exit inkl. Netz-/DNS-Fehler gilt als „Port dicht“ – False-Positive möglich, für Smoke akzeptiert; B4 abhängig von sudoers)
 
 ## 8. Integration Quality Gates
 

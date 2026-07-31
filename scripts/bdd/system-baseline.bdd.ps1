@@ -1,8 +1,6 @@
 #!/usr/bin/env pwsh
 # Feature: System-Baseline (Workflow 03, Phase 1)
 # Verifiziert: Baseline-Pakete, Zeitzone, Swap, deploy-user-Sudo.
-. "$PSScriptRoot/bdd-lib.ps1"
-
 param(
     [Parameter(Mandatory)][string]$VpsIp,       # Tailscale-IP (100.x)
     [Parameter(Mandatory)][string]$VpsUser,     # z.B. deploy-user

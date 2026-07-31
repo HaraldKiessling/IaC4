@@ -2,9 +2,11 @@
 # Konvention: Feature-Skripte in scripts/bdd/*.bdd.ps1, Testkatalog in qa/bdd-testkonzept.md
 # Ausführung: GH Runner (ubuntu-latest, pwsh), nie lokal (Zugriffs-Design)
 
-$global:BDD_PASS = 0
-$global:BDD_FAIL = 0
-$global:BDD_FAILURES = @()
+if ($null -eq $global:BDD_FAILURES) {
+    $global:BDD_PASS = 0
+    $global:BDD_FAIL = 0
+    $global:BDD_FAILURES = @()
+}
 
 function Given([string]$desc) {
     Write-Host "  Given  $desc" -ForegroundColor DarkGray
