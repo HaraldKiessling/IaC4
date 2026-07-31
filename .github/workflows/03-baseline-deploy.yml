@@ -1,4 +1,4 @@
-name: "02 – Baseline Deploy (Phase 1)"
+name: "03 – Baseline Deploy (Phase 1, via Tailscale-IP)"
 
 on:
   workflow_dispatch:

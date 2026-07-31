@@ -1,4 +1,4 @@
-name: "03 – Tailscale Bootstrap (Phase 2a + 2b)"
+name: "02 – Tailscale Bootstrap (Phase 2a + 2b, via Public-IP)"
 
 on:
   workflow_dispatch:
