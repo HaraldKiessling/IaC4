@@ -42,6 +42,7 @@
 - [ ] docker: Tasks implementieren
 - [ ] traefik: Tasks implementieren
 - [ ] ollama: Tasks implementieren (Rolle NEU; Design: ADR-021..023)
+- [ ] LE-Reste entfernen (ADR-018 P4-Delta): `traefik_acme_email` in group_vars, `.env.example`, Template-Port 443
 - [ ] qdrant: Collection-Setup (3072d/Cosine)
 - [ ] code-server: Tasks implementieren
 - [ ] openclaw-gateway: Tasks implementieren
@@ -63,6 +64,7 @@
 
 - [ ] 03-baseline-deploy: Vollständiger Run
 - [ ] 04-service-deploy (neu): Vollständiger Run
+- [ ] BDD-Szenarien aus ADR-018/019/021 konkretisieren (Serve-Status, 8080-CGNAT, 11434-Nicht-Erreichbarkeit) in `qa/bdd-testkonzept.md`
 - [ ] 05-openclaw-install (neu): Vollständiger Run
 - [ ] CI mit Quality-Gates
 
