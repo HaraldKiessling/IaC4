@@ -148,8 +148,11 @@ jobs:
           # Node-ID direkt vom VPS holen (tailscale status --json → Self.ID).
           # Die API-Node-Liste ist für den CI-Key unvollständig (ACL tagOwners),
           # der VPS kennt seine eigene ID aber zuverlässig.
+          echo "--- Self-Felder (Diagnose):"
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+            "$VPS_USER@$VPS_PUBLIC_IP" "tailscale status --json | jq -c '.Self | {ID: .ID, MachineID: .MachineID, StableID: .StableID, DNSName: .DNSName, TailscaleIPs: .TailscaleIPs}'" 2>/dev/null || echo "SSH-Fehler"
           DEVICE_ID=$(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
-            "$VPS_USER@$VPS_PUBLIC_IP" "tailscale status --json | jq -r .Self.ID" 2>/dev/null)
+            "$VPS_USER@$VPS_PUBLIC_IP" "tailscale status --json | jq -r '.Self.MachineID // .Self.ID'" 2>/dev/null)
           if [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ]; then
             RESP=$(curl -s -X POST "https://api.tailscale.com/api/v2/device/${DEVICE_ID}/tags" \
               -H "Authorization: Bearer ${TS_API_KEY}" \
