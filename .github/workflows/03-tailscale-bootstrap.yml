@@ -80,6 +80,24 @@ jobs:
           echo "auth_key=$AUTH_KEY" >> $GITHUB_OUTPUT
           echo "::add-mask::$AUTH_KEY"
 
+      - name: Alten Node mit Ziel-Hostname entfernen (Tailscale-API)
+        continue-on-error: true
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          NODE="vps-${{ inputs.target }}"
+          DEVICE_ID=$(curl -s \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,id" \
+            -H "Authorization: Bearer ${TS_API_KEY}" | jq -r --arg n "$NODE" '.devices[] | select(.hostname == $n) | .id' | head -1)
+          if [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ]; then
+            curl -s -X DELETE "https://api.tailscale.com/api/v2/device/${DEVICE_ID}" \
+              -H "Authorization: Bearer ${TS_API_KEY}"
+            echo "✅ Alter Node ${NODE} (${DEVICE_ID}) entfernt"
+          else
+            echo "Kein alter Node ${NODE} vorhanden — weiter"
+          fi
+
       - name: Inventory-Datei erstellen
         run: |
           echo "[vps]" > /tmp/inventory
