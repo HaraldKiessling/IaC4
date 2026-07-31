@@ -63,9 +63,8 @@ jobs:
           [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
           [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
           [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
-          [ -n "$TS_API_KEY" ] || { echo "❌ Secret TAILSCALE_API_KEY fehlt – Workflow 01 (Terraform) zuerst ausführen"; FAIL=1; }
           [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
-          echo "✅ Vorbedingungen ok (SSH_KEY, Public-IP, OAuth, Tailnet, API-Key)"
+          echo "✅ Vorbedingungen ok (SSH_KEY, Public-IP, OAuth, Tailnet)"
 
       - name: SSH-Key vorbereiten
         run: |
