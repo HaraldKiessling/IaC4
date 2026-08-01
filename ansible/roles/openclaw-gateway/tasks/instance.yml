@@ -15,12 +15,20 @@
 
 - name: "{{ oc.name }}: Secrets aus env aufloesen (set_fact, fuer Jinja-Conditionals)"
   ansible.builtin.set_fact:
-    oc_llm_provider: "{{ lookup('env', oc.llm_provider_env) | default('deepseek', true) }}"
-    oc_llm_api_key: "{{ lookup('env', oc.llm_api_key_env) | default('', true) }}"
+    oc_llm_provider: "{{ oc.llm_provider | default('deepseek', true) }}"
+    oc_llm_api_key: "{{ lookup('env', openclaw_provider_envs[oc.llm_provider | default('deepseek', true)]) | default('', true) }}"
     oc_websearch_api_key: "{{ lookup('env', oc.websearch_api_key_env) | default('', true) }}"
-    oc_google_api_key: "{{ lookup('env', oc.google_api_key_env) | default('', true) }}"
     oc_gateway_token: "{{ lookup('env', oc.gateway_token_env) | default('', true) }}"
     oc_telegram_bot_token: "{{ lookup('env', oc.telegram_bot_token_env) | default('', true) }}"
+
+- name: "{{ oc.name }}: Assert – API-Key des aktiven Providers ({{ oc_llm_provider }}) gesetzt"
+  ansible.builtin.assert:
+    that:
+      - oc_llm_api_key | length > 0
+    fail_msg: >-
+      API-Key für aktiven Provider '{{ oc_llm_provider }}' von {{ oc.name }} fehlt
+      (Secret {{ openclaw_provider_envs[oc_llm_provider] }} nicht gesetzt). Weitere Provider optional –
+      nur gesetzte Keys werden konfiguriert; später im Betrieb: docker exec openclaw-{{ oc.name }} openclaw config set providers.<name>.apiKey <key>
 
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
   ansible.builtin.template:

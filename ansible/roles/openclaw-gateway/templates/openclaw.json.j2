@@ -53,14 +53,39 @@
     }
   },
   "providers": {
-    "{{ oc_llm_provider }}": {
-      "apiKey": "{{ oc_llm_api_key }}"
-    }
-{% if oc_google_api_key | default('') | length > 0 %},
-    "google": {
-      "apiKey": "{{ oc_google_api_key }}"
-    }
+{% for pname, penv in openclaw_provider_envs.items() %}
+{% set pkey = lookup('env', penv) | default('', true) if penv else '' %}
+{% if pkey | length > 0 %}
+    "{{ pname }}": {
+      "apiKey": "{{ pkey }}"
+    }{{ "," if not loop.last else "" }}
+{% elif pname == 'ollama' %}
+    "ollama": {
+      "baseUrl": "http://ollama:11434"
+    }{{ "," if not loop.last else "" }}
 {% endif %}
+{% endfor %}
+  },
+  "models": {
+    "providers": {
+{% set ns = namespace(first=true) %}
+{% for pname, penv in openclaw_provider_envs.items() %}
+{% set pkey = lookup('env', penv) | default('', true) if penv else '' %}
+{% if (pkey | length > 0) or (pname == 'ollama') %}
+{% set pm = openclaw_provider_models[pname] %}
+{% if not ns.first %},{% endif %}{% set ns.first = false %}
+      "{{ pname }}": {
+        "api": "{{ pm.api }}"
+{% if pm.baseUrl is defined and pm.baseUrl %},
+        "baseUrl": "{{ pm.baseUrl }}"
+{% endif %}
+{% if pm.models is defined %},
+        "models": {{ pm.models | tojson }}
+{% endif %}
+      }
+{% endif %}
+{% endfor %}
+    }
   },
   "channels": {
     "telegram": {

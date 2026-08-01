@@ -47,3 +47,27 @@ openclaw_agent_models:
   Reviewer:     {primary: "deepseek/deepseek-v4-pro",    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]}
 
 # Instanz-Definitionen je Target: group_vars/vps-dev.yml (DEV_-Secrets) und vps-prod.yml (PROD_-Secrets)
+
+# Provider-Modelle (Stand 2026-08-01, bisherige Instanz) – damit Agent-Matrix-Modelle existieren
+openclaw_provider_models:
+  deepseek:
+    api: "openai-completions"
+    baseUrl: "https://api.deepseek.com"
+    models:
+      - {id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", reasoning: true, input: ["text"], contextWindow: 1048576, maxTokens: 384000}
+      - {id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", reasoning: true, input: ["text"], contextWindow: 1048576, maxTokens: 384000}
+  openrouter:
+    api: "openai-completions"
+    baseUrl: "https://openrouter.ai/api/v1"
+    models:
+      - {id: "openrouter/auto", name: "OpenRouter Auto", reasoning: true, input: ["text", "image"], contextWindow: 200000, maxTokens: 8192}
+  openai:
+    api: "openai"
+  google:
+    api: "google-generative-ai"
+    models:
+      - {id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", reasoning: true, input: ["text", "image"], contextWindow: 1048576, maxTokens: 65536}
+      - {id: "gemini-embedding-2", name: "Gemini Embedding 2", reasoning: null, input: ["text"], contextWindow: 8192, maxTokens: 1}
+  ollama:
+    api: "ollama"
+    baseUrl: "http://ollama:11434"   # Docker-DNS im traefik-network

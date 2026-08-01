@@ -50,40 +50,30 @@ jobs:
       SSH_KEY: ${{ secrets.SSH_KEY }}
       CODE_SERVER_PASSWORD: ${{ secrets.CODE_SERVER_PASSWORD }}
       CODE_SERVER_SUDO_PASSWORD: ${{ secrets.CODE_SERVER_SUDO_PASSWORD }}
-      DEV_OC1_LLM_PROVIDER: ${{ secrets.DEV_OC1_LLM_PROVIDER }}
-      DEV_OC1_LLM_API_KEY: ${{ secrets.DEV_OC1_LLM_API_KEY }}
+      DEV_DEEPSEEK_API_KEY: ${{ secrets.DEV_DEEPSEEK_API_KEY }}
+      DEV_OPENROUTER_API_KEY: ${{ secrets.DEV_OPENROUTER_API_KEY }}
+      DEV_OPENAI_API_KEY: ${{ secrets.DEV_OPENAI_API_KEY }}
+      DEV_GOOGLE_API_KEY: ${{ secrets.DEV_GOOGLE_API_KEY }}
       DEV_OC1_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC1_WEBSEARCH_API_KEY }}
-      DEV_OC1_GOOGLE_API_KEY: ${{ secrets.DEV_OC1_GOOGLE_API_KEY }}
       DEV_OC1_GATEWAY_TOKEN: ${{ secrets.DEV_OC1_GATEWAY_TOKEN }}
       DEV_OC1_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC1_TELEGRAM_BOT_TOKEN }}
-      DEV_OC2_LLM_PROVIDER: ${{ secrets.DEV_OC2_LLM_PROVIDER }}
-      DEV_OC2_LLM_API_KEY: ${{ secrets.DEV_OC2_LLM_API_KEY }}
       DEV_OC2_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC2_WEBSEARCH_API_KEY }}
-      DEV_OC2_GOOGLE_API_KEY: ${{ secrets.DEV_OC2_GOOGLE_API_KEY }}
       DEV_OC2_GATEWAY_TOKEN: ${{ secrets.DEV_OC2_GATEWAY_TOKEN }}
       DEV_OC2_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC2_TELEGRAM_BOT_TOKEN }}
-      DEV_OC3_LLM_PROVIDER: ${{ secrets.DEV_OC3_LLM_PROVIDER }}
-      DEV_OC3_LLM_API_KEY: ${{ secrets.DEV_OC3_LLM_API_KEY }}
       DEV_OC3_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC3_WEBSEARCH_API_KEY }}
-      DEV_OC3_GOOGLE_API_KEY: ${{ secrets.DEV_OC3_GOOGLE_API_KEY }}
       DEV_OC3_GATEWAY_TOKEN: ${{ secrets.DEV_OC3_GATEWAY_TOKEN }}
       DEV_OC3_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC3_TELEGRAM_BOT_TOKEN }}
-      PROD_OC1_LLM_PROVIDER: ${{ secrets.PROD_OC1_LLM_PROVIDER }}
-      PROD_OC1_LLM_API_KEY: ${{ secrets.PROD_OC1_LLM_API_KEY }}
+      PROD_DEEPSEEK_API_KEY: ${{ secrets.PROD_DEEPSEEK_API_KEY }}
+      PROD_OPENROUTER_API_KEY: ${{ secrets.PROD_OPENROUTER_API_KEY }}
+      PROD_OPENAI_API_KEY: ${{ secrets.PROD_OPENAI_API_KEY }}
+      PROD_GOOGLE_API_KEY: ${{ secrets.PROD_GOOGLE_API_KEY }}
       PROD_OC1_WEBSEARCH_API_KEY: ${{ secrets.PROD_OC1_WEBSEARCH_API_KEY }}
-      PROD_OC1_GOOGLE_API_KEY: ${{ secrets.PROD_OC1_GOOGLE_API_KEY }}
       PROD_OC1_GATEWAY_TOKEN: ${{ secrets.PROD_OC1_GATEWAY_TOKEN }}
       PROD_OC1_TELEGRAM_BOT_TOKEN: ${{ secrets.PROD_OC1_TELEGRAM_BOT_TOKEN }}
-      PROD_OC2_LLM_PROVIDER: ${{ secrets.PROD_OC2_LLM_PROVIDER }}
-      PROD_OC2_LLM_API_KEY: ${{ secrets.PROD_OC2_LLM_API_KEY }}
       PROD_OC2_WEBSEARCH_API_KEY: ${{ secrets.PROD_OC2_WEBSEARCH_API_KEY }}
-      PROD_OC2_GOOGLE_API_KEY: ${{ secrets.PROD_OC2_GOOGLE_API_KEY }}
       PROD_OC2_GATEWAY_TOKEN: ${{ secrets.PROD_OC2_GATEWAY_TOKEN }}
       PROD_OC2_TELEGRAM_BOT_TOKEN: ${{ secrets.PROD_OC2_TELEGRAM_BOT_TOKEN }}
-      PROD_OC3_LLM_PROVIDER: ${{ secrets.PROD_OC3_LLM_PROVIDER }}
-      PROD_OC3_LLM_API_KEY: ${{ secrets.PROD_OC3_LLM_API_KEY }}
       PROD_OC3_WEBSEARCH_API_KEY: ${{ secrets.PROD_OC3_WEBSEARCH_API_KEY }}
-      PROD_OC3_GOOGLE_API_KEY: ${{ secrets.PROD_OC3_GOOGLE_API_KEY }}
       PROD_OC3_GATEWAY_TOKEN: ${{ secrets.PROD_OC3_GATEWAY_TOKEN }}
       PROD_OC3_TELEGRAM_BOT_TOKEN: ${{ secrets.PROD_OC3_TELEGRAM_BOT_TOKEN }}
 
@@ -108,10 +98,10 @@ jobs:
           fi
           if [ "${{ inputs.playbook }}" = "openclaw" ]; then
             T="${{ inputs.target }}"
-            eval "K1=\$${T}_OC1_LLM_API_KEY"
-            eval "K2=\$${T}_OC2_LLM_API_KEY"
-            if [ -z "$K1" ] || [ -z "$K2" ]; then
-              echo "❌ Secrets ${T}_OC1/OC2_LLM_API_KEY fehlen (Pflicht für openclaw-Lauf; Telegram/WebSearch/Token optional)"
+            eval "KD=\$${T}_DEEPSEEK_API_KEY"; eval "KO=\$${T}_OPENROUTER_API_KEY"
+            eval "KA=\$${T}_OPENAI_API_KEY";    eval "KG=\$${T}_GOOGLE_API_KEY"
+            if [ -z "$KD" ] && [ -z "$KO" ] && [ -z "$KA" ] && [ -z "$KG" ]; then
+              echo "❌ Kein LLM-Provider-Key für target=${T} gesetzt (${T}_DEEPSEEK|OPENROUTER|OPENAI|GOOGLE_API_KEY – mind. einer nötig; pro Instanz prüft die Rolle den aktiven Provider)"
               FAIL=1
             fi
           fi

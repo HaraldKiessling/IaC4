@@ -2,16 +2,22 @@
 env: dev
 
 # OpenClaw-Instanzen DEV (Harald 2026-08-01: getrennt je Target deploybar)
-# Secrets-Konvention: DEV_<INST>_<SECRET> in GH-Secrets; Workflow reicht sie als env durch
+# Secrets-Konvention: <TARGET>_<PROVIDER>_API_KEY (optional, NUR gesetzte Keys landen in der Config)
+# Ollama braucht keinen Key (lokal, Docker-DNS); baseUrl-Override via DEV_OLLAMA_BASEURL optional
+openclaw_provider_envs:
+  deepseek: "DEV_DEEPSEEK_API_KEY"
+  openrouter: "DEV_OPENROUTER_API_KEY"
+  openai: "DEV_OPENAI_API_KEY"
+  google: "DEV_GOOGLE_API_KEY"
+  ollama: ""
+
 openclaw_instances:
   - name: oc1
     enabled: true
     port: 18789
     label: "OC1 – Default Gateway (out of box)"
-    llm_provider_env: "DEV_OC1_LLM_PROVIDER"
-    llm_api_key_env: "DEV_OC1_LLM_API_KEY"
+    llm_provider: deepseek            # aktiver Provider (Key Pflicht: DEV_DEEPSEEK_API_KEY)
     websearch_api_key_env: "DEV_OC1_WEBSEARCH_API_KEY"
-    google_api_key_env: "DEV_OC1_GOOGLE_API_KEY"
     gateway_token_env: "DEV_OC1_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC1_TELEGRAM_BOT_TOKEN"
     agents: []
@@ -19,10 +25,8 @@ openclaw_instances:
     enabled: true
     port: 18790
     label: "OC2 – DevOps Team (4 Agents)"
-    llm_provider_env: "DEV_OC2_LLM_PROVIDER"
-    llm_api_key_env: "DEV_OC2_LLM_API_KEY"
+    llm_provider: deepseek
     websearch_api_key_env: "DEV_OC2_WEBSEARCH_API_KEY"
-    google_api_key_env: "DEV_OC2_GOOGLE_API_KEY"
     gateway_token_env: "DEV_OC2_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC2_TELEGRAM_BOT_TOKEN"
     agents: [Orchestrator, Architekt, "Engineer Pro", Reviewer]
@@ -30,10 +34,8 @@ openclaw_instances:
     enabled: false
     port: 18791
     label: "OC3 – Future Purpose (geplant)"
-    llm_provider_env: "DEV_OC3_LLM_PROVIDER"
-    llm_api_key_env: "DEV_OC3_LLM_API_KEY"
+    llm_provider: deepseek
     websearch_api_key_env: "DEV_OC3_WEBSEARCH_API_KEY"
-    google_api_key_env: "DEV_OC3_GOOGLE_API_KEY"
     gateway_token_env: "DEV_OC3_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC3_TELEGRAM_BOT_TOKEN"
     agents: []
