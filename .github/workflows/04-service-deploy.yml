@@ -172,10 +172,11 @@ jobs:
           # group_vars werden von Ansible NUR inventory-adjacent geladen -> /tmp/group_vars spiegeln
           mkdir -p /tmp/group_vars
           cp ansible/group_vars/all.yml /tmp/group_vars/all.yml
-          cp ansible/group_vars/vps-${{ inputs.target }}.yml /tmp/group_vars/vps-${{ inputs.target }}.yml
+          # Ansible lädt group_vars/<GRUPPENNAME>.yml (Gruppe [vps]) – NICHT <hostname>.yml
+          cp ansible/group_vars/vps-${{ inputs.target }}.yml /tmp/group_vars/vps.yml
           cat /tmp/inventory
 
-      - name: Service-Playbook ausführen ({{ inputs.playbook }})
+      - name: Service-Playbook ausführen (${{ inputs.playbook }})
         working-directory: ansible
         run: |
           case "${{ inputs.playbook }}" in

@@ -50,7 +50,7 @@
   ansible.builtin.template:
     src: docker-compose.yml.j2
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/docker-compose.yml"
-    mode: '0644'
+    mode: '0600'   # enthält OPENCLAW_GATEWAY_TOKEN-ENV – nicht weltlesbar (Reviewer 2. Runde)
 
 - name: "{{ oc.name }}: Container starten"
   community.docker.docker_compose_v2:
