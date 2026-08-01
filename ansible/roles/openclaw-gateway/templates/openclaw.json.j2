@@ -21,6 +21,7 @@
 {% if oc.agents | length > 0 %},
     "list": [
 {% for a in oc.agents %}      {
+        "id": "{{ a | lower | replace(' ', '-') }}",
         "name": "{{ a }}",
         "model": {
           "primary": "{{ openclaw_agent_models[a].primary }}",
@@ -35,7 +36,7 @@
   },
   "plugins": {
     "entries": {
-      "perplexity": {
+{% if oc_websearch_api_key | default('') | length > 0 %}      "perplexity": {
         "enabled": true,
         "config": {
           "webSearch": {
@@ -43,7 +44,10 @@
           }
         }
       }
-    }
+{% else %}      "perplexity": {
+        "enabled": false
+      }
+{% endif %}    }
   },
   "tools": {
     "web": {
@@ -51,20 +55,6 @@
         "provider": "perplexity"
       }
     }
-  },
-  "providers": {
-{% for pname, penv in openclaw_provider_envs.items() %}
-{% set pkey = lookup('env', penv) | default('', true) if penv else '' %}
-{% if pkey | length > 0 %}
-    "{{ pname }}": {
-      "apiKey": "{{ pkey }}"
-    }{{ "," if not loop.last else "" }}
-{% elif pname == 'ollama' %}
-    "ollama": {
-      "baseUrl": "http://ollama:11434"
-    }{{ "," if not loop.last else "" }}
-{% endif %}
-{% endfor %}
   },
   "models": {
     "providers": {
@@ -76,6 +66,9 @@
 {% if not ns.first %},{% endif %}{% set ns.first = false %}
       "{{ pname }}": {
         "api": "{{ pm.api }}"
+{% if pkey | length > 0 %},
+        "apiKey": "{{ pkey }}"
+{% endif %}
 {% if pm.baseUrl is defined and pm.baseUrl %},
         "baseUrl": "{{ pm.baseUrl }}"
 {% endif %}

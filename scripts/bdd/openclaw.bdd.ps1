@@ -30,9 +30,11 @@ foreach ($inst in $Instances.Split(',')) {
     $port = $instPorts[$inst]
     Write-Host "`nScenario: Instanz $inst – Health via HTTPS (TS-TLS, Port $port)" -ForegroundColor Yellow
     Given "Gateway-Container openclaw-$inst laeuft; TS-Serve terminiert TLS auf $port"
-    $code = & curl -sk --connect-timeout 8 --resolve "${Fqdn}:${port}:${VpsIp}" -o /dev/null -w '%{http_code}' "https://$Fqdn:$port/" 2>&1
-    When "HTTPS-GET auf https://$Fqdn:$port/ ausgefuehrt wird (Runner im Tailnet)"
-    Then-True "HTTP 200 (war: $code)" ($code.Trim() -eq '200') $code
+    $resp = & curl -sk --connect-timeout 8 --resolve "${Fqdn}:${port}:${VpsIp}" -w "`n%{http_code}" "https://$Fqdn:$port/health" 2>&1
+    $code = ($resp -split "`n")[-1].Trim()
+    When "HTTPS-GET auf https://$Fqdn:$port/health ausgefuehrt wird (Runner im Tailnet)"
+    Then-True "HTTP 200 (war: $code)" ($code -eq '200') $code
+    Then-True "Health-Body enthaelt ok" ($resp -match '"ok"') $resp
 }
 
 # ── O2: Ports von aussen (Public-IP) dicht ──
@@ -55,9 +57,9 @@ foreach ($inst in $Instances.Split(',')) {
     $inst = $inst.Trim()
     Write-Host "`nScenario: Instanz $inst – openclaw.json (SSoT) vorhanden" -ForegroundColor Yellow
     Given "Rolle deployt openclaw.json je Instanz (Config-Volume)"
-    $r = Invoke-SSH "sudo test -f /srv/openclaw/$inst/config/openclaw.json && echo OK" $VpsUser $VpsIp $SshKeyPath
-    When "die Config-Datei auf dem VPS geprueft wird"
-    Then-True "openclaw.json existiert" ($r.Output -match 'OK') $r.Output
+    $r = Invoke-SSH "sudo test -f /srv/openclaw/$inst/config/openclaw.json && sudo python3 -m json.tool /srv/openclaw/$inst/config/openclaw.json >/dev/null 2>&1 && echo OK" $VpsUser $VpsIp $SshKeyPath
+    When "die Config-Datei auf dem VPS geprueft wird (Existenz + JSON-Validitaet)"
+    Then-True "openclaw.json existiert und ist valides JSON" ($r.Output -match 'OK') $r.Output
 }
 
 # ── O4: Geplante Instanz nicht deployed (OC3 disabled) ──

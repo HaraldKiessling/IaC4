@@ -3,7 +3,7 @@
 ## Komponenten-Übersicht
 ```
 IaC4
-├── Ansible (Provisionierung, 6 Rollen)
+├── Ansible (Provisionierung, 7 Rollen)
 │   ├── vps-baseline      → SSH, Pakete, Swap
 │   ├── tailscale          → Tailscale-Join
 │   ├── docker             → Docker-Engine + Compose
@@ -11,7 +11,7 @@ IaC4
 │   ├── qdrant             → Vektordatenbank (3072d, Cosine)
 │   ├── code-server        → Web-IDE
 │   └── openclaw-gateway   → OpenClaw-Gateways (Docker-Container, Multi-Instanz OC1-OC3)
-├── GitHub Actions (CI/CD, 5 Workflows)
+├── GitHub Actions (CI/CD, 7 Workflows)
 │   ├── ci.yml                               → Lint + Quality Gate
 │   ├── 00-generate-ssh-key.yml              → SSH-Key-Paar generieren
 │   ├── 01-tailscale-terraform.yml           → Tailscale OAuth + ACLs (Terraform Plan/Apply)

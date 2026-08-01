@@ -15,10 +15,12 @@
 | TAILSCALE_OAUTH_CLIENT_ID | GH Actions Secret | OAuth-Client-ID |
 | TAILSCALE_OAUTH_CLIENT_SECRET | GH Actions Secret | OAuth-Client-Secret |
 | TAILSCALE_TAILNET | GH Actions Secret | Tailnet-Name |
-| OC<n>_LLM_API_KEY | GH Actions Secret | API-Key (noch zu setzen) |
-| OC<n>_WEBSEARCH_API_KEY | GH Actions Secret | API-Key (noch zu setzen) |
+| <T>_<PROVIDER>_API_KEY | GH Actions Secret | LLM-Provider-Keys (T=DEV/PROD; PROVIDER=deepseek/openrouter/openai/google; nur gesetzte werden konfiguriert) |
+| <T>_OC<n>_WEBSEARCH_API_KEY | GH Actions Secret | Perplexity-WebSearch je Instanz (optional) |
+| <T>_OC<n>_GATEWAY_TOKEN | GH Actions Secret | Gateway-Auth-Token je Instanz (Pflicht, K3-1) |
+| <T>_OC<n>_TELEGRAM_BOT_TOKEN | GH Actions Secret | Telegram-Bot je Instanz (optional) |
 
-**Nicht in diesem Repo:** Telegram-Bot-Tokens, Ollama-Keys (später)
+**Nicht in diesem Repo:** Secret-Werte (nur Env-Referenzen in Workflow/group_vars); Ollama braucht keinen Key (lokal, Docker-DNS)
 
 ## Persistenz
 - **Qdrant:** Docker-Volume (`qdrant_data`)
@@ -39,6 +41,8 @@
 | 01 | Tailscale Terraform (OAuth + ACLs, Merge aus 03+04) | Grundstruktur | PR/Push `terraform/**` + `workflow_dispatch` |
 | 02 | Tailscale Bootstrap (Phase 2a+2b) | VPS-Konfiguration | `workflow_dispatch` |
 | 03 | Baseline Deploy (Phase 1) | VPS-Konfiguration | `workflow_dispatch` |
+| 04 | Service-Deploy (docker-traefik/services/openclaw, ADR-024) | VPS-Konfiguration | `workflow_dispatch` |
+| 04b | BDD-Tests (Post-Deploy-Verifikation) | Verifikation | `workflow_dispatch` |
 | CI | Lint + Quality Gate | CI | Push/PR auf `main`/`dev` |
 
 ### Secret-Abhängigkeiten

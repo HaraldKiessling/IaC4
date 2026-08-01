@@ -22,6 +22,7 @@ Wie wird das OpenClaw-Gateway auf dem IaC4-VPS betrieben — und wie werden mehr
 - Pro Instanz: **ein Container** (`ghcr.io/openclaw/openclaw:<version>`, ADR-017-Pin) + **ein Config-Volume** (Host-Bind-Mount `/srv/openclaw/<name>/config` mit `openclaw.json` = SSoT) + **ein Workspace** (`/srv/openclaw/<name>/workspace`).
 - Ports binden nur an **localhost**; **Tailscale Serve terminiert TLS** (`--https=<port>`, beliebige Ports im Tailnet, heute verifiziert) → `https://<fqdn>:<port>/`.
 - Container im **traefik-network** → Ollama/Qdrant via Docker-DNS (`http://ollama:11434`, `http://qdrant:6333`); **kein `host.docker.internal`** nötig (alle Dienste containerisiert).
+- **Memory:** `memory.backend: qmd` = eingebautes Default-Backend (dateibasiert, kein Qdrant nötig – belegt durch laufende lokale Instanz). Qdrant-Anbindung (Collection `zoocode-3072d`) ist bewusst später (Migrationsplan B11); Docker-DNS `http://qdrant:6333` steht dafür bereit.
 - Multi-Instanz: Liste `openclaw_instances` in group_vars (OC1/OC2/OC3), Ansible-Loop erzeugt Container + Config + Serve.
 - **Reinstall = Container + Volume neu** → keine Altlasten (löst IaC3-Problem).
 - **Worst-Case:** Image-Update defekt → Container-Rollback via alten Pin; Volumes bleiben; kein Host-Schaden.

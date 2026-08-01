@@ -30,6 +30,14 @@
       (Secret {{ openclaw_provider_envs[oc_llm_provider] }} nicht gesetzt). Weitere Provider optional –
       nur gesetzte Keys werden konfiguriert; später im Betrieb: docker exec openclaw-{{ oc.name }} openclaw config set providers.<name>.apiKey <key>
 
+- name: "{{ oc.name }}: Assert – Gateway-Token gesetzt (Auth deterministisch, arc42/07)"
+  ansible.builtin.assert:
+    that:
+      - oc_gateway_token | length > 0
+    fail_msg: >-
+      Gateway-Token für {{ oc.name }} fehlt (Secret {{ oc.gateway_token_env }} nicht gesetzt).
+      Auth-Zustand wäre sonst unbestimmt (K3-1) – Token zwingend, da Gateway nur via Tailnet erreichbar sein soll.
+
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
   ansible.builtin.template:
     src: openclaw.json.j2
@@ -59,8 +67,6 @@
   retries: 12
   delay: 5
 
-  when: oc.websearch_api_key | default('') | length > 0
-
 - name: "{{ oc.name }}: Tailscale Serve-Status (Idempotenz)"
   ansible.builtin.shell: tailscale serve status
   register: _serve_status
@@ -69,6 +75,6 @@
 
 - name: "{{ oc.name }}: Tailscale Serve aktivieren (HTTPS {{ oc.port }} → localhost:{{ oc.port }})"
   ansible.builtin.command: tailscale serve --bg --https={{ oc.port }} http://localhost:{{ oc.port }}
-  when: "'localhost:{{ oc.port }}' not in _serve_status.stdout"
+  when: "'localhost:{{ oc.port }}' not in _serve_status.stdout and '127.0.0.1:{{ oc.port }}' not in _serve_status.stdout"
   register: _serve_set
   changed_when: _serve_set.rc == 0
