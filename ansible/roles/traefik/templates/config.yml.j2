@@ -1,6 +1,8 @@
 # Traefik Dynamic Config (ADR-019): Dashboard nur via EntryPoint :8080.
-# Auth: IP-Allowlist (Tailscale-CGNAT) – IaC3-Muster (auth-tailscale-only),
-# kein Passwort (Nutzbarkeit im Browser; Schutz = Tailnet). BasicAuth bei Bedarf reaktivierbar.
+# Schutz: UFW-Regel R8 (8080 nur aus 100.64.0.0/10) + Tailscale Serve (tailnet only) + DOCKER-USER.
+# KEINE ipAllowList-Middleware: Traefik-v3-Bug blockt 127.0.0.1 trotz sourceRange
+# (https://github.com/traefik/traefik/issues/10653) – Serve verbindet selbst von 127.0.0.1
+# -> jeder Nutzer bekäme 403. IaC3-Verhalten: Schutz rein über Tailnet/Firewall.
 http:
   routers:
     dashboard:
@@ -8,11 +10,3 @@ http:
       entryPoints:
         - dashboard
       service: api@internal
-      middlewares:
-        - auth-tailscale-only
-
-  middlewares:
-    auth-tailscale-only:
-      ipAllowList:
-        sourceRange:
-          - "100.64.0.0/10"

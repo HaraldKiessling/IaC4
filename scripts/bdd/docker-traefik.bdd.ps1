@@ -59,10 +59,10 @@ Then-True "Kein 443-Listener außer tailscaled" ($r.Output -match 'NO_443') $r.O
 
 # ── D6: Dashboard erreichbar – Auth via Tailscale-IP-Allowlist (ADR-019, IaC3-Muster) ──
 Write-Host "`nScenario: Traefik-Dashboard antwortet (ADR-019, IP-Allowlist)" -ForegroundColor Yellow
-Given "dashboard-Router hat ipAllowList-Middleware (100.64.0.0/10)"
-$r = Invoke-SSH "curl -s -o /dev/null -w '%{http_code}' http://$VpsIp:8080/dashboard/" $VpsUser $VpsIp $SshKeyPath
-When "das Dashboard ueber die Tailscale-IP abgerufen wird"
-Then-True "HTTP 200 (CGNAT in Allowlist)" ($r.Output.Trim() -eq '200') $r.Output
+Given "Schutz: UFW R8 (8080 CGNAT-only) + Serve tailnet only (keine Middleware, Traefik-v3-Bug)"
+$code = & curl -s --connect-timeout 8 -o /dev/null -w '%{http_code}' "http://$VpsIp:8080/dashboard/" 2>&1
+When "das Dashboard vom Runner ueber die Tailscale-IP abgerufen wird"
+Then-True "HTTP 200 (war: $code)" ($code.Trim() -eq '200') $code
 
 # ── D7: Firewall – UFW-CGNAT (R7-R9) + DOCKER-USER (R10/R11) ──
 Write-Host "`nScenario: Firewall-Regeln für Service-Ports (Firewall-Konzept R7-R11)" -ForegroundColor Yellow

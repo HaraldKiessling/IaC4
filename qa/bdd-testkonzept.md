@@ -64,7 +64,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | D3 | Shared Network (ADR-015) | `docker network ls` enthält `traefik-network` |
 | D4 | Traefik-Container läuft (ADR-017/018) | `docker ps` → `Up`, Image `traefik:` |
 | D5 | HTTP-only: kein 443-Listener (ADR-018) | `ss -tln` zeigt kein `:443` |
-| D6 | Dashboard erreichbar (ADR-019, IP-Allowlist IaC3-Muster) | `curl :8080/dashboard/` (localhost) → HTTP 200 |
+| D6 | Dashboard erreichbar (ADR-019; Schutz UFW-R8 + Serve tailnet-only, keine Middleware wg. Traefik-v3-Bug #10653) | Runner → `http://<ts-ip>:8080/dashboard/` → HTTP 200 |
 | D7 | Firewall Service-Ports: UFW-CGNAT (R7-R9) + DOCKER-USER (R10/R11) | `ufw status verbose` → `ALLOW FROM 100.64.0.0/10` je Port; `iptables -S DOCKER-USER` → CGNAT-ACCEPT + interface-gebundener DROP für 80,8080,11434,6333,6334 |
 | D8 | Tailscale Serve aktiv (ADR-018) + Dashboard-Mounts | `tailscale serve status` → `localhost:80`, `/dashboard` + `/api` → `localhost:8080` |
 | O1 | Ollama-API erreichbar (ADR-021) | Container `Up`, `GET /api/tags` → 200 |
