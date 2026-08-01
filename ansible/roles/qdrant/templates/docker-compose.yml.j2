@@ -9,7 +9,6 @@ services:
     volumes:
       - qdrant-data:/qdrant/storage
       - ./config.yaml:/qdrant/config/production.yaml:ro
-      - ./certs:/qdrant/tls:ro
     networks:
       - {{ docker_network }}
 

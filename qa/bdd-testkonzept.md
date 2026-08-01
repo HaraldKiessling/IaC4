@@ -76,9 +76,9 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 
 | # | Szenario | Then-Assertion |
 | --- | --- | --- |
-| Q1 | HTTPS 6333 antwortet (TS-TLS-Terminierung) | Runner (im Tailnet) → `curl -sk https://<fqdn>:6333/` → HTTP 200 |
-| Q2 | Zertifikat passt zum MagicDNS-Namen | `openssl s_client` → Subject enthält `<fqdn>` (Tailscale-CA) |
-| Q3 | Health-Endpoint ok | `GET https://localhost:6333/healthz` → `{"status":"ok"}` (nicht `/health` → 404) |
+| Q1 | HTTPS 6333 antwortet (TS-TLS-Terminierung) | Runner → `curl -sk --resolve <fqdn>:6333:<ts-ip> https://<fqdn>:6333/` → HTTP 200 |
+| Q2 | Zertifikat passt zum MagicDNS-Namen | Runner → `openssl s_client -connect <ts-ip>:6333` → Subject enthält `<fqdn>` (Tailscale-CA) |
+| Q3 | Health-Endpoint ok (Qdrant intern HTTP) | `GET http://localhost:6333/healthz` → `{"status":"ok"}` (nicht `/health` → 404) |
 | Q4 | Collection `zoocode-3072d` existiert (RFC 0034b/#195) | `GET /collections/zoocode-3072d` → status ok, `3072`, `Cosine` |
 
 ### Geplant (sobald Services deployt sind)

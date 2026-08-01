@@ -1,14 +1,7 @@
 # Qdrant Storage-Konfiguration – IaC4
 # Tuning übernommen aus IaC3 (RFC 0011 v0.2, prod-Bestand)
-# TLS-Terminierung: Tailscale-Zertifikat (MagicDNS) → HTTPS auf 6333
+# KEIN eigenes TLS: Tailscale Serve terminiert TLS auf Port 6333 (Entscheidung Harald 2026-08-01)
 # Siehe: https://qdrant.tech/documentation/guides/configuration/
-
-service:
-  enable_tls: true
-
-tls:
-  cert: /qdrant/tls/tls.crt
-  key: /qdrant/tls/tls.key
 
 storage:
   optimizers:

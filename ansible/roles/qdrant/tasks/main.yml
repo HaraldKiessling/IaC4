@@ -1,37 +1,20 @@
 ---
-# Qdrant (ADR-011) – gepinnt, TLS via Tailscale-Zertifikat (MagicDNS), Collection zoocode-3072d
-# TLS-Terminierung: Qdrant selbst (enable_tls) mit TS-ausgestelltem Zertifikat → HTTPS auf 6333
+# Qdrant (ADR-011) – gepinnt, HTTP-only; TLS-Terminierung via Tailscale Serve auf 6333
+# (Entscheidung Harald 2026-08-01: NUR Tailscale terminiert TLS, Qdrant bleibt HTTP)
 
 - name: Qdrant-Verzeichnisse anlegen
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: /opt/qdrant
     state: directory
     mode: '0755'
-  loop:
-    - /opt/qdrant
-    - "{{ qdrant_cert_dir }}"
 
-- name: Tailscale-FQDN ermitteln (MagicDNS-Name, nicht OS-Hostname)
-  ansible.builtin.command: tailscale status --json
-  register: _ts_status
-  changed_when: false
-
-- name: FQDN als Fakt setzen
-  ansible.builtin.set_fact:
-    qdrant_fqdn: "{{ (_ts_status.stdout | from_json).Self.DNSName | trim('.') }}"
-
-- name: Tailscale-Zertifikat ausstellen (90 Tage Gültigkeit; Renewal via systemd-Timer)
-  ansible.builtin.command: tailscale cert --cert-file={{ qdrant_cert_dir }}/tls.crt --key-file={{ qdrant_cert_dir }}/tls.key {{ qdrant_fqdn }}
-  args:
-    creates: "{{ qdrant_cert_dir }}/tls.crt"
-
-- name: Qdrant config.yaml deployen (Tuning aus IaC3 RFC 0011 + TLS)
+- name: Qdrant config.yaml deployen (Tuning aus IaC3 RFC 0011, kein TLS)
   ansible.builtin.template:
     src: config.yaml.j2
     dest: /opt/qdrant/config.yaml
     mode: '0644'
 
-- name: Qdrant docker-compose.yml deployen (gepinnt, TLS-Certs, traefik-network)
+- name: Qdrant docker-compose.yml deployen (gepinnt, traefik-network)
   ansible.builtin.template:
     src: docker-compose.yml.j2
     dest: /opt/qdrant/docker-compose.yml
@@ -42,10 +25,9 @@
     project_src: /opt/qdrant
     state: present
 
-- name: Auf Qdrant warten (HTTPS /healthz; /health existiert nicht → 404)
+- name: Auf Qdrant warten (HTTP /healthz; /health existiert nicht → 404)
   ansible.builtin.uri:
-    url: "https://localhost:6333/healthz"
-    validate_certs: false   # Zertifikat ist für MagicDNS-FQDN, nicht localhost
+    url: "http://localhost:6333/healthz"
     status_code: 200
   register: _qdrant_health
   until: _qdrant_health.status == 200
@@ -54,7 +36,7 @@
 
 - name: Collection {{ qdrant_collection }} anlegen (idempotent, 3072d/Cosine)
   ansible.builtin.uri:
-    url: "https://localhost:6333/collections/{{ qdrant_collection }}"
+    url: "http://localhost:6333/collections/{{ qdrant_collection }}"
     method: PUT
     headers:
       Content-Type: application/json
@@ -63,28 +45,17 @@
       vectors:
         size: "{{ qdrant_collection_size }}"
         distance: "{{ qdrant_collection_distance }}"
-    validate_certs: false
     status_code: 200
   failed_when: false   # existiert bereits → kein Fehler
 
-- name: Cert-Renewal-Skript deployen (systemd-Timer, monatlich)
-  ansible.builtin.copy:
-    src: qdrant-cert-renew.sh
-    dest: /usr/local/bin/qdrant-cert-renew.sh
-    mode: '0755'
+- name: Tailscale Serve-Status abfragen (idempotenz)
+  ansible.builtin.shell: tailscale serve status
+  register: serve_status
+  changed_when: false
+  failed_when: false
 
-- name: Cert-Renewal-Systemd-Unit deployen
-  ansible.builtin.copy:
-    src: "{{ item }}"
-    dest: "/etc/systemd/system/{{ item }}"
-    mode: '0644'
-  loop:
-    - qdrant-cert-renew.service
-    - qdrant-cert-renew.timer
-
-- name: systemd daemon-reload + Timer aktivieren
-  ansible.builtin.systemd:
-    daemon_reload: true
-    name: qdrant-cert-renew.timer
-    enabled: true
-    state: started
+- name: "Tailscale Serve aktivieren – HTTPS 6333 → localhost:6333 (TS-TLS-Terminierung)"
+  ansible.builtin.command: tailscale serve --bg --https=6333 http://localhost:6333
+  when: "'localhost:6333' not in serve_status.stdout"
+  register: serve_set
+  changed_when: serve_set.rc == 0
