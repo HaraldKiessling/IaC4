@@ -43,7 +43,7 @@ Given "DOCKER-USER + UFW: Gateway-Ports nur localhost + TS-Serve (tailnet only)"
 $ports = @('18789', '18790', '18791')
 $ext = @()
 foreach ($port in $ports) {
-    $code = & curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "http://$PublicIp:$port/" 2>&1
+    $code = & curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "http://${PublicIp}:${port}/" 2>&1
     & timeout 3 bash -c "echo > /dev/tcp/$PublicIp/$port" 2>$null
     $tcp = if ($LASTEXITCODE -eq 0) { 'OPEN' } else { 'closed' }
     $ext += "$port=$($code.Trim())/$tcp"
