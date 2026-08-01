@@ -1,0 +1,77 @@
+---
+# 05 – OpenClaw Device-Pairing (Control-UI-Freigabe)
+#   Workflow-basierte Gerätekopplung (IaC4-Zugriffs-Design: kein direkter VPS-Zugriff).
+#   Flow: Control-UI zeigt "pairing required" + requestId -> diesen Workflow starten
+#   (request_id aus der UI), Workflow listet pending Devices und approved die Request-ID.
+name: "05 – OpenClaw Device-Pairing"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Ziel-VPS'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, prod]
+      instance:
+        description: 'OpenClaw-Instanz'
+        required: true
+        default: 'oc1'
+        type: choice
+        options: [oc1, oc2, oc3]
+      request_id:
+        description: 'Request-ID aus der Control-UI (leer = nur Liste anzeigen)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  pairing:
+    name: "Device-Pairing (target: ${{ inputs.target }}, ${{ inputs.instance }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+      TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+      TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+    steps:
+      - name: Connect Runner to Tailnet
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: Tailscale-OAuth-Token + VPS-IP ermitteln
+        run: |
+          TS_TOKEN=*** -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          NODE="vps-${{ inputs.target }}"
+          TS_IP=$(curl -sS "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses,lastSeen" \
+            -H "Authorization: Bearer $TS_TOKEN" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n)] | .[0].addresses[0]')
+          [ -n "$TS_IP" ] || { echo "❌ Keine Tailscale-IP für $NODE"; exit 1; }
+          echo "VPS_TS_IP=$TS_IP" >> $GITHUB_ENV
+
+      - name: SSH-Key vorbereiten
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Pending Devices auflisten
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
+            "$VPS_USER@$VPS_TS_IP" "sudo docker exec openclaw-${{ inputs.instance }} openclaw devices list" \
+            || echo "❌ Konnte openclaw-${{ inputs.instance }} nicht erreichen"
+
+      - name: Request-ID approved (falls angegeben)
+        if: inputs.request_id != ''
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
+            "$VPS_USER@$VPS_TS_IP" "sudo docker exec openclaw-${{ inputs.instance }} openclaw devices approve ${{ inputs.request_id }}"
