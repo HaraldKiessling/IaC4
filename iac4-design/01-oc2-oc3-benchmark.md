@@ -13,9 +13,11 @@
 
 Harald (2026-08-01): OC3 bekommt komplett freie Hand für ein neues Modell — **oder** die Community-Evidenz ist so nah an OC2, dass OC3 eine Kopie sein sollte — **oder** OC2 und OC3 werden bewusst unterschiedlich gestaltet, um später im Vergleich ein geeignetes Betriebsmodell zu finden.
 
-**Entscheidung aus Voranalyse (2026-08-01):** Option C — beide Instanzen als kontrolliertes A/B-Experiment gestalten. Begründung:
+**Entscheidung aus Voranalyse (2026-08-01, historisch — vor der OC1-Erweiterung):** Option C — beide Instanzen (OC2/OC3) als kontrolliertes A/B-Experiment gestalten. Begründung:
 - Die Community ist **gespalten** in zwei dokumentierte Lager (Orchestrator-Muster vs. Creator-Style), die Doku unterstützt beide. Eine Kopie (Option B) dupliziert Befunde, radikales Neuland (Option A) macht den Vergleich unbrauchbar (zu viele Variablen).
 - ADR-025 dokumentiert den Zweck der Multi-Instanz wörtlich als „Untersuchungen".
+
+**OC1-Rolle (Harald 2026-08-01):** OC1 ist **dritter Benchmark-Arm** (Creator/Vanilla-Baseline, Kap. 6.1), kein Design-Objekt — Kap. 1–5 behandeln das OC2/OC3-Design, die 3-Arm-Logik lebt in Kap. 6.
 
 **Methodik-Transparenz (Review R1):** Der Vergleich ist kein „1-Variable-Experiment" im strengen Sinn — die getestete Variable ist ein **Bündel „Sub-Agent-Betriebskonfiguration"** (Modell-Zuordnung + allowAgents/Rollen-IDs + Delegation/Depth). Dieses Bündel wird bewusst als Einheit getestet (OC2 = Ist-Bündel, OC3 = Best-Practice-Bündel); eine Attribuierung auf einzelne Elemente ist daraus **nicht** ableitbar (Architect MAJOR-2). Alle übrigen Parameter (Infrastruktur, Provider, Secrets, Timeouts, Concurrency, Hardware) werden konstant gehalten.
 
@@ -177,12 +179,12 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 ```
 
 ### 5.4 Worst-Case & Rollback
-- **Worst-Case:** Template-Änderung bricht OC2-Deploy → beide Instanzen betroffen. **Gegenmaßnahme:** Template-Erweiterung strikt additiv + per-Instanz (Default = heutiges Verhalten), Render-Validierung + BDD vor Deploy; Rollback = alten Pin zurück.
+- **Worst-Case:** Template-Änderung bricht Deploy → betroffene Instanzen (DEV OC1/OC2/OC3) rendern fehlerhaft. **Gegenmaßnahme:** Template-Erweiterung strikt additiv + per-Instanz (Default = heutiges Verhalten), Render-Validierung + **Golden-File-Renderdiff** (fängt auch OC1-Regressionen) + BDD vor Deploy; Rollback = alten Pin zurück.
 - **Rollback:** Config-Volume `/srv/openclaw/oc2/config` ist SSoT; ein Deploy mit alter Template-Version stellt den Ist-Zustand wieder her (ADR-025: Reinstall = Volume neu). `enabled: false` entfernt den Container nicht (s. 4.4).
 
 ---
 
-## 6. Benchmark-Protokoll (A/B, kontrolliert)
+## 6. Benchmark-Protokoll (3 Arme, kontrolliert)
 
 ### 6.1 Design (3 Arme — OC1-Baseline ergänzt, Harald 2026-08-01)
 - **Getestete Variable (Bündel, s. Kap. 1):** Sub-Agent-Betriebskonfiguration (Modell-Zuordnung, allowAgents/Rollen-IDs, Delegation/Depth, Vorhandensein von Rollen-Agents).
