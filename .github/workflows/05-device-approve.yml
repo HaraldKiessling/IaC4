@@ -35,10 +35,10 @@ jobs:
     timeout-minutes: 10
     env:
       VPS_USER: ${{ secrets.VPS_USER }}
-      SSH_KEY: *** secrets.SSH_KEY }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
       TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
       TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-      TS_CLIENT_SECRET: *** secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+      TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
     steps:
       - name: Connect Runner to Tailnet
         uses: tailscale/github-action@v4.1.3
