@@ -17,9 +17,13 @@ Write-Host "`n[1] Runner-DNS (MagicDNS):"
 $dns = & getent hosts $Fqdn 2>&1
 Write-Host "  $($dns -join ' ')"
 
-Write-Host "`n[2] Runner curl -v https (TLS/Connect):"
-$v = & curl -sv --connect-timeout 8 -o /dev/null "https://$Fqdn/dashboard/" 2>&1
-$v | Select-String -Pattern 'Trying|Connected|SSL connection|HTTP/|refused|timed out|Could not|error' | ForEach-Object { Write-Host "  $($_.Line.Trim())" }
+Write-Host "`n[2] Runner curl -v https mit --resolve (TLS/Connect):"
+$v = & curl -sv --connect-timeout 8 --resolve "${Fqdn}:443:${VpsIp}" -o /dev/null "https://$Fqdn/dashboard/" 2>&1
+$v | Select-String -Pattern 'Trying|Connected|SSL connection|HTTP/|refused|timed out|Could not|error|alert' | ForEach-Object { Write-Host "  $($_.Line.Trim())" }
+
+Write-Host "`n[2b] Tailscale-API: httpsCertsEnabled? (Tailnet-weit)"
+$api = & curl -sS --max-time 15 "https://api.tailscale.com/api/v2/tailnet/$env:TS_TAILNET/dns/config" -H "Authorization: Bearer $env:TS_TOKEN" 2>&1
+try { $cfg = $api | ConvertFrom-Json; Write-Host "  magicDnsEnabled=$($cfg.magicDnsEnabled) httpsCertsEnabled=$($cfg.httpsCertsEnabled)" } catch { Write-Host "  API-Fehler: $api" }
 
 Write-Host "`n[3] VPS tailscale serve status:"
 $r = Invoke-SSH "sudo tailscale serve status" $VpsUser $VpsIp $SshKeyPath
