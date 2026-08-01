@@ -43,22 +43,22 @@
 - [x] traefik: Tasks implementieren (2026-07-31, ADR-017..020)
 - [x] ollama: Tasks implementieren (Rolle NEU, 2026-07-31; ADR-021..023)
 - [x] LE-Reste entfernen (ADR-018 P4-Delta): group_vars `traefik_acme_email` ✅, Template-Port 443 ✅, `.env.example` ✅ (2026-07-31)
-- [ ] qdrant: Collection-Setup (3072d/Cosine)
-- [ ] code-server: Tasks implementieren
-- [ ] openclaw-gateway: Tasks implementieren
+- [x] qdrant: Collection-Setup (zoocode-3072d, 3072d/Cosine) — deployed 2026-08-01, BDD Q4 grün
+- [ ] code-server: Tasks implementieren — **bewusst offen** (Rolle vorhanden, aber in 04-services.yml deaktiviert bis Abnahme, Harald 2026-08-01)
+- [x] openclaw-gateway: Tasks implementieren — deployed 2026-08-01 (Container-Multi-Instanz OC1/OC2, ADR-025 revidiert)
 
-## ⬜ Phase 4: Services deployen
+## ✅ Phase 4: Services deployen (DEV abgeschlossen 2026-08-01; code-server bewusst offen)
 
-- [ ] Docker + Traefik auf DEV deployen
-- [ ] Ollama auf DEV deployen (erster Service, ADR-021..023)
-- [ ] Qdrant auf DEV deployen
-- [ ] Code-Server auf DEV deployen
+- [x] Docker + Traefik auf DEV deployen — 2026-08-01 (Dashboard via Serve-HTTPS, BDD D1-D10 grün)
+- [x] Ollama auf DEV deployen (erster Service, ADR-021..023) — 2026-08-01, BDD O1-O3 grün
+- [x] Qdrant auf DEV deployen — 2026-08-01 (TS-TLS 6333 + TCP 6334), BDD Q1-Q5 grün
+- [ ] Code-Server auf DEV deployen — **bewusst offen** (bis Abnahme)
 
-## ⬜ Phase 5: OpenClaw Minimal
+## ✅ Phase 5: OpenClaw (DEV abgeschlossen 2026-08-01)
 
-- [ ] OpenClaw-Gateways auf DEV deployen (Docker-Container, Multi-Instanz OC1/OC2, Design: ADR-025 revidiert 2026-08-01)
-- [ ] Memory: Default-Backend (qmd) je Instanz; Qdrant-Backend als spätere Option (bewusst, Reviewer B11)
-- [ ] WebSearch-Tool einrichten
+- [x] OpenClaw-Gateways auf DEV deployen (Docker-Container, Multi-Instanz OC1/OC2, Design: ADR-025 revidiert) — 2026-08-01, BDD O1-O4 grün (62/62 Gesamtlauf)
+- [x] Memory: Default-Backend (qmd) je Instanz aktiv; Qdrant-Backend als spätere Option (bewusst, Reviewer B11)
+- [x] WebSearch-Tool einrichten — Perplexity-Plugin mit OpenRouter-Key (Legacy-Pfad, offiziell unterstützt)
 
 ## ⬜ Phase 6: CI/CD ausbauen
 
