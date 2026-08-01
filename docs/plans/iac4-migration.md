@@ -56,8 +56,8 @@
 
 ## ⬜ Phase 5: OpenClaw Minimal
 
-- [ ] OpenClaw Gateway auf DEV deployen (nativ/systemd, Design: ADR-025)
-- [ ] Memory-Backend (Qdrant) konfigurieren
+- [ ] OpenClaw-Gateways auf DEV deployen (Docker-Container, Multi-Instanz OC1/OC2, Design: ADR-025 revidiert 2026-08-01)
+- [ ] Memory: Default-Backend (qmd) je Instanz; Qdrant-Backend als spätere Option (bewusst, Reviewer B11)
 - [ ] WebSearch-Tool einrichten
 
 ## ⬜ Phase 6: CI/CD ausbauen

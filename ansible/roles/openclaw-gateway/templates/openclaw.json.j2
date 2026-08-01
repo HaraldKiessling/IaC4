@@ -1,13 +1,94 @@
 {
   "gateway": {
     "mode": "local",
-    "port": {{ openclaw_gateway_port }},
-    "bind": "loopback"
+    "port": {{ oc.port }},
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "allowTailscale": true
+{% if oc_gateway_token | default('') | length > 0 %},
+      "token": "{{ oc_gateway_token }}"
+{% endif %}
+    },
+    "controlUi": {
+      "allowedOrigins": ["http://localhost:{{ oc.port }}", "http://127.0.0.1:{{ oc.port }}"]
+    }
   },
   "agents": {
     "defaults": {
-      "workspace": "~/.openclaw/workspace"
+      "workspace": "/home/node/.openclaw/workspace"
+    }
+{% if oc.agents | length > 0 %},
+    "list": [
+{% for a in oc.agents %}      {
+        "id": "{{ a | lower | replace(' ', '-') }}",
+        "name": "{{ a }}",
+        "model": {
+          "primary": "{{ openclaw_agent_models[a].primary }}",
+          "fallbacks": {{ openclaw_agent_models[a].fallbacks | tojson }}
+        }
+      }{{ "," if not loop.last else "" }}
+{% endfor %}    ]
+{% endif %}
+  },
+  "memory": {
+    "backend": "qmd"
+  },
+  "plugins": {
+    "entries": {
+{% if oc_websearch_api_key | default('') | length > 0 %}      "perplexity": {
+        "enabled": true,
+        "config": {
+          "webSearch": {
+            "apiKey": "{{ oc_websearch_api_key }}"
+          }
+        }
+      }
+{% else %}      "perplexity": {
+        "enabled": false
+      }
+{% endif %}    }
+  },
+  "tools": {
+    "web": {
+      "search": {
+{% if oc_websearch_api_key | default('') | length > 0 %}        "provider": "perplexity"
+{% else %}        "provider": "none"
+{% endif %}      }
     }
   },
-  "providers": {}
+  "models": {
+    "providers": {
+{% set ns = namespace(first=true) %}
+{% for pname, penv in openclaw_provider_envs.items() %}
+{% set pkey = lookup('env', penv) | default('', true) if penv else '' %}
+{% if (pkey | length > 0) or (pname == 'ollama') %}
+{% set pm = openclaw_provider_models[pname] %}
+{% if not ns.first %},{% endif %}{% set ns.first = false %}
+      "{{ pname }}": {
+        "api": "{{ pm.api }}"
+{% if pkey | length > 0 %},
+        "apiKey": "{{ pkey }}"
+{% endif %}
+{% if pm.baseUrl is defined and pm.baseUrl %},
+        "baseUrl": "{{ pm.baseUrl }}"
+{% endif %}
+{% if pm.models is defined %},
+        "models": {{ pm.models | tojson }}
+{% endif %}
+      }
+{% endif %}
+{% endfor %}
+    }
+  },
+  "channels": {
+    "telegram": {
+{% if oc_telegram_bot_token | default('') | length > 0 %}
+      "enabled": true,
+      "botToken": "{{ oc_telegram_bot_token }}"
+{% else %}
+      "enabled": false
+{% endif %}
+    }
+  }
 }

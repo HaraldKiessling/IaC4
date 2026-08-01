@@ -33,6 +33,11 @@ jobs:
           if [ "$FAIL" -ne 0 ]; then echo "❌ Ansible-Syntax-Check fehlgeschlagen"; exit 1; fi
           echo "✅ Alle Playbooks syntaktisch valide"
 
+      - name: OpenClaw-Templates rendern + validieren (K2-3)
+        run: |
+          python3 -m pip install --quiet pyyaml jinja2
+          python3 scripts/validate-openclaw-templates.py
+
       - name: Check arc42 Living Docs (hart)
         run: |
           echo "Prüfe ob docs/arc42/ alle 12 Kapitel enthält…"

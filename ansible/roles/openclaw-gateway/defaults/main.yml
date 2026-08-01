@@ -1,0 +1,7 @@
+---
+# Fallback (SSoT: group_vars/all.yml)
+openclaw_image: "ghcr.io/openclaw/openclaw"
+openclaw_image_version: "2026.7.1"   # Pin (ADR-017); kein latest-Fallback (Reviewer B12)
+openclaw_instances: []
+openclaw_instance_filter: "all"   # all | oc1 | oc2 | oc3 (Harald 2026-08-01: getrennt deploybar)
+openclaw_data_root: /srv/openclaw

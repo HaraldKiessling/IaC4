@@ -1,0 +1,80 @@
+---
+# Einzelne OpenClaw-Instanz (oc = loop_var)
+
+- name: "{{ oc.name }}: Verzeichnisse anlegen (uid 1000 = node-User im Image, Reviewer B3)"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: '1000'
+    group: '1000'
+  loop:
+    - "{{ openclaw_data_root }}/{{ oc.name }}"
+    - "{{ openclaw_data_root }}/{{ oc.name }}/config"
+    - "{{ openclaw_data_root }}/{{ oc.name }}/workspace"
+
+- name: "{{ oc.name }}: Secrets aus env aufloesen (set_fact, fuer Jinja-Conditionals)"
+  ansible.builtin.set_fact:
+    oc_llm_provider: "{{ oc.llm_provider | default('deepseek', true) }}"
+    oc_llm_api_key: "{{ lookup('env', openclaw_provider_envs[oc.llm_provider | default('deepseek', true)]) | default('', true) }}"
+    oc_websearch_api_key: "{{ lookup('env', oc.websearch_api_key_env) | default('', true) }}"
+    oc_gateway_token: "{{ lookup('env', oc.gateway_token_env) | default('', true) }}"
+    oc_telegram_bot_token: "{{ lookup('env', oc.telegram_bot_token_env) | default('', true) }}"
+
+- name: "{{ oc.name }}: Assert – API-Key des aktiven Providers ({{ oc_llm_provider }}) gesetzt"
+  ansible.builtin.assert:
+    that:
+      - oc_llm_api_key | length > 0
+    fail_msg: >-
+      API-Key für aktiven Provider '{{ oc_llm_provider }}' von {{ oc.name }} fehlt
+      (Secret {{ openclaw_provider_envs[oc_llm_provider] }} nicht gesetzt). Weitere Provider optional –
+      nur gesetzte Keys werden konfiguriert; später im Betrieb: docker exec openclaw-{{ oc.name }} openclaw config set providers.<name>.apiKey <key>
+
+- name: "{{ oc.name }}: Assert – Gateway-Token gesetzt (Auth deterministisch, arc42/07)"
+  ansible.builtin.assert:
+    that:
+      - oc_gateway_token | length > 0
+    fail_msg: >-
+      Gateway-Token für {{ oc.name }} fehlt (Secret {{ oc.gateway_token_env }} nicht gesetzt).
+      Auth-Zustand wäre sonst unbestimmt (K3-1) – Token zwingend, da Gateway nur via Tailnet erreichbar sein soll.
+
+- name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
+  ansible.builtin.template:
+    src: openclaw.json.j2
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/config/openclaw.json"
+    mode: '0600'
+    owner: '1000'
+    group: '1000'
+
+- name: "{{ oc.name }}: docker-compose.yml deployen (gepinnt, ADR-017)"
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/docker-compose.yml"
+    mode: '0600'   # enthält OPENCLAW_GATEWAY_TOKEN-ENV – nicht weltlesbar (Reviewer 2. Runde)
+
+- name: "{{ oc.name }}: Container starten"
+  community.docker.docker_compose_v2:
+    project_src: "{{ openclaw_data_root }}/{{ oc.name }}"
+    state: present
+    pull: always
+
+- name: "{{ oc.name }}: Auf Health warten (localhost:{{ oc.port }}/health)"
+  ansible.builtin.uri:
+    url: "http://localhost:{{ oc.port }}/health"
+    status_code: 200
+  register: _oc_health
+  until: _oc_health.status == 200
+  retries: 12
+  delay: 5
+
+- name: "{{ oc.name }}: Tailscale Serve-Status (Idempotenz)"
+  ansible.builtin.shell: tailscale serve status
+  register: _serve_status
+  changed_when: false
+  failed_when: false
+
+- name: "{{ oc.name }}: Tailscale Serve aktivieren (HTTPS {{ oc.port }} → localhost:{{ oc.port }})"
+  ansible.builtin.command: tailscale serve --bg --https={{ oc.port }} http://localhost:{{ oc.port }}
+  when: "'localhost:{{ oc.port }}' not in _serve_status.stdout and '127.0.0.1:{{ oc.port }}' not in _serve_status.stdout"
+  register: _serve_set
+  changed_when: _serve_set.rc == 0

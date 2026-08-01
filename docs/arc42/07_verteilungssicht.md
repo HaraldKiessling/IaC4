@@ -13,7 +13,9 @@
     ├── Container: traefik      → Port 80 (Tailnet-only, UFW-CGNAT)
     ├── Container: qdrant       → Port 6333, 6334 (lokal + TS)
     ├── Container: code-server  → Port 8443 (via Traefik)
-    └── Host-Process: openclaw  → Port 18789 (nur Tailscale)
+    ├── Container: openclaw-oc1 → Port 18789 (localhost-only, TS-Serve-TLS) – Default-Gateway
+    ├── Container: openclaw-oc2 → Port 18790 (localhost-only, TS-Serve-TLS) – DevOps (4 Agents)
+    └── Container: openclaw-oc3 → Port 18791 (geplant, enabled=false)
 ```
 
 ## Netzwerk-Security (nach SSH-Transition)
@@ -23,7 +25,8 @@
 | SSH | NUR Tailscale (100.x.y.z:22) | SSH-Key + Tailscale ACL |
 | Qdrant | localhost + Tailscale | Tailscale ACL |
 | Code-Server | Tailscale (Traefik-Route) | Traefik-ForwardAuth |
-| OpenClaw Gateway | Tailscale (18789) | Tailscale ACL |
+| OpenClaw OC1/OC2 | Tailscale via Serve-TLS (18789/18790) | Gateway-Token + Tailscale ACL |
+| OpenClaw OC3 | – (geplant, nicht deployed) | – |
 
 ## SSH-Transition (zeitlich)
 | Phase | SSH-Zugriff | Via | Dauer |

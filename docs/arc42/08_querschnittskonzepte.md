@@ -15,10 +15,12 @@
 | TAILSCALE_OAUTH_CLIENT_ID | GH Actions Secret | OAuth-Client-ID |
 | TAILSCALE_OAUTH_CLIENT_SECRET | GH Actions Secret | OAuth-Client-Secret |
 | TAILSCALE_TAILNET | GH Actions Secret | Tailnet-Name |
-| OPENCLAW_LLM_API_KEY | GH Actions Secret | API-Key (noch zu setzen) |
-| OPENCLAW_WEBSEARCH_API_KEY | GH Actions Secret | API-Key (noch zu setzen) |
+| <T>_<PROVIDER>_API_KEY | GH Actions Secret | LLM-Provider-Keys (T=DEV/PROD; PROVIDER=deepseek/openrouter/openai/google; nur gesetzte werden konfiguriert) |
+| <T>_OC<n>_WEBSEARCH_API_KEY | GH Actions Secret | Perplexity-WebSearch je Instanz (optional) |
+| <T>_OC<n>_GATEWAY_TOKEN | GH Actions Secret | Gateway-Auth-Token je Instanz (Pflicht, K3-1) |
+| <T>_OC<n>_TELEGRAM_BOT_TOKEN | GH Actions Secret | Telegram-Bot je Instanz (optional) |
 
-**Nicht in diesem Repo:** Telegram-Bot-Tokens, Ollama-Keys (später)
+**Nicht in diesem Repo:** Secret-Werte (nur Env-Referenzen in Workflow/group_vars); Ollama braucht keinen Key (lokal, Docker-DNS)
 
 ## Persistenz
 - **Qdrant:** Docker-Volume (`qdrant_data`)
@@ -39,6 +41,8 @@
 | 01 | Tailscale Terraform (OAuth + ACLs, Merge aus 03+04) | Grundstruktur | PR/Push `terraform/**` + `workflow_dispatch` |
 | 02 | Tailscale Bootstrap (Phase 2a+2b) | VPS-Konfiguration | `workflow_dispatch` |
 | 03 | Baseline Deploy (Phase 1) | VPS-Konfiguration | `workflow_dispatch` |
+| 04 | Service-Deploy (docker-traefik/services/openclaw, ADR-024) | VPS-Konfiguration | `workflow_dispatch` |
+| 04b | BDD-Tests (Post-Deploy-Verifikation) | Verifikation | `workflow_dispatch` |
 | CI | Lint + Quality Gate | CI | Push/PR auf `main`/`dev` |
 
 ### Secret-Abhängigkeiten
@@ -51,6 +55,8 @@ Jeder Workflow liest und schreibt bestimmte GitHub Secrets. Die folgende Tabelle
 | **01** | `TAILSCALE_API_KEY`, `TAILSCALE_TAILNET`, `GH_TOKEN` | **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`** |
 | **02** | `SSH_KEY`, `VPS_USER`, `VPS_DEV_PUBLIC_IP` (dev) / `VPS_PROD_PUBLIC_IP` (prod), **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET` (OAuth-Client-Token) | – |
 | **03** | `SSH_KEY`, `VPS_USER`, **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET` (OAuth-Client-Token; IP via Tailscale-API – keine Public-IP-Secrets) | – |
+| **04** | `SSH_KEY`, `VPS_USER`, Tailscale-OAuth-Secrets, `TRAEFIK_DASHBOARD_AUTH`(hist.), `CODE_SERVER_*`, `<T>_<PROVIDER>_API_KEY`, `<T>_OC<n>_{WEBSEARCH,GATEWAY,TELEGRAM}` | – |
+| **04b** | `SSH_KEY`, `VPS_USER`, Tailscale-OAuth-Secrets, `VPS_DEV_PUBLIC_IP` | – |
 | **CI** | – | – |
 
 ### Logisch zwingende Reihenfolge
@@ -71,7 +77,7 @@ Basierend auf den Secret-Abhängigkeiten ergibt sich diese Ausführungsreihenfol
    │ READ: SSH_KEY + Tailscale → Phase-1-Baseline via Tailscale-IP
    │ NACH 02: VPS nur noch via Tailscale erreichbar
    ↓
-[04 / Phase-3-Service-Workflows – geplant]
+[04 / Service-Deploy (docker-traefik/services/openclaw) + 04b / BDD-Tests – aktiv (ADR-024)]
 ```
 
 **Kernregel:** 02 muss VOR 03 laufen (Bootstrap via Public-IP, danach Baseline via Tailscale-IP), 01 muss VOR 02 laufen (OAuth-Secrets), 00 muss VOR 02/03 laufen (SSH_KEY). Die Nummerierung entspricht der Ausführungsreihenfolge: 00 (SSH-Key) → 01 (OAuth/ACL) → 02 (Bootstrap) → 03 (Baseline).

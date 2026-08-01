@@ -1,0 +1,23 @@
+# OpenClaw-Gateway {{ oc.name }} (ADR-025 revidiert) – gepinnt, localhost-only, traefik-network
+services:
+  openclaw:
+    image: {{ openclaw_image }}:{{ openclaw_image_version }}
+    container_name: openclaw-{{ oc.name }}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ oc.port }}:{{ oc.port }}"
+    environment:
+      OPENCLAW_GATEWAY_TOKEN: "{{ oc_gateway_token | default('') }}"
+      OPENCLAW_WORKSPACE_DIR: "/home/node/.openclaw/workspace"
+{% if oc_telegram_bot_token | default('') | length > 0 %}
+      TELEGRAM_BOT_TOKEN: "{{ oc_telegram_bot_token }}"
+{% endif %}
+    volumes:
+      - ./config:/home/node/.openclaw
+      - ./workspace:/home/node/.openclaw/workspace
+    networks:
+      - {{ docker_network }}
+
+networks:
+  {{ docker_network }}:
+    external: true

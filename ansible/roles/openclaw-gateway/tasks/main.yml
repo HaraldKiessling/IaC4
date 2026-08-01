@@ -1,49 +1,21 @@
 ---
-- name: Node.js 24 installieren (nodesource)
-  ansible.builtin.shell: |
-    curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-  args:
-    creates: /etc/apt/sources.list.d/nodesource.list
+# OpenClaw-Gateway als Docker-Container (ADR-025 revidiert, 2026-08-01)
+# Multi-Instanz: Loop über openclaw_instances. Pro Instanz: Container + Config + Workspace (Bind-Mounts),
+# Port localhost-only, TLS-Terminierung via Tailscale Serve (--https=<port>), Netz traefik-network
+# (Ollama/Qdrant via Docker-DNS: http://ollama:11434, http://qdrant:6333).
+# Vorteil ggü. nativ: keine Host-Node/pnpm, keine ~/.openclaw-Altlasten (IaC3-Lesson), sauberer Reinstall.
 
-- name: Node.js installieren
-  ansible.builtin.apt:
-    name: nodejs
-    state: present
+- name: OpenClaw-Datenroot anlegen
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}"
+    state: directory
+    mode: '0755'
 
-- name: OpenClaw CLI installieren
-  ansible.builtin.shell: |
-    curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash
-  args:
-    creates: /usr/local/bin/openclaw
-  environment:
-    PATH: "{{ ansible_env.PATH }}:/usr/local/bin"
-
-- name: openclaw.json Konfiguration schreiben
-  ansible.builtin.template:
-    src: openclaw.json.j2
-    dest: ~/.openclaw/openclaw.json
-    mode: '0600'
-  become_user: "deploy-user"
-
-- name: Gateway-Daemon installieren
-  ansible.builtin.shell: |
-    openclaw gateway install
-  args:
-    creates: /etc/systemd/system/openclaw-gateway.service
-  environment:
-    HOME: "/home/deploy-user"
-
-- name: Gateway starten
-  ansible.builtin.systemd:
-    name: openclaw-gateway
-    state: started
-    enabled: true
-
-- name: Gateway-Health prüfen
-  ansible.builtin.uri:
-    url: "http://localhost:{{ openclaw_gateway_port }}/health"
-    status_code: 200
-  register: health
-  until: health.status == 200
-  retries: 6
-  delay: 5
+- name: "Pro Instanz: Verzeichnisse, Config, Compose, Start, Health, Serve"
+  ansible.builtin.include_tasks: instance.yml
+  loop: "{{ openclaw_instances }}"
+  loop_control:
+    loop_var: oc
+  when:
+    - oc.enabled | default(false)
+    - openclaw_instance_filter == 'all' or oc.name == openclaw_instance_filter

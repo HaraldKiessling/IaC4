@@ -1,7 +1,7 @@
 # =============================================================================
-# 04 – Service-Deploy (Phase 2c/2d, ADR-024)
-#   Ein Workflow mit Playbook-Selektion: docker-traefik | services
-#   Reihenfolge (Operator-Verantwortung, ADR-024): 1. docker-traefik, 2. services
+# 04 – Service-Deploy (Phase 2c/2d/2e, ADR-024)
+#   Ein Workflow mit Playbook-Selektion: docker-traefik | services | openclaw
+#   Reihenfolge (Operator-Verantwortung, ADR-024): 1. docker-traefik, 2. services, 3. openclaw
 #   Vorbedingung: Workflow 03 (Baseline) gelaufen, VPS via Tailscale erreichbar.
 #   Generierung: htpasswd -nbB <user> <passwort>  ->  user:$2y$05$...
 # =============================================================================
@@ -19,12 +19,23 @@ on:
           - dev
           - prod
       playbook:
-        description: 'Playbook (Reihenfolge: 1. docker-traefik, 2. services)'
+        description: 'Playbook (Reihenfolge: 1. docker-traefik, 2. services, 3. openclaw)'
         required: true
         type: choice
         options:
           - docker-traefik
           - services
+          - openclaw
+      instance:
+        description: 'OpenClaw-Instanz (nur playbook=openclaw): all | oc1 | oc2 | oc3'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - oc1
+          - oc2
+          - oc3
 
 permissions:
   contents: read
@@ -33,12 +44,38 @@ jobs:
   service-deploy:
     name: "Service-Deploy (${{ inputs.playbook }}, target: ${{ inputs.target }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
       CODE_SERVER_PASSWORD: ${{ secrets.CODE_SERVER_PASSWORD }}
       CODE_SERVER_SUDO_PASSWORD: ${{ secrets.CODE_SERVER_SUDO_PASSWORD }}
+      DEV_DEEPSEEK_API_KEY: ${{ secrets.DEV_DEEPSEEK_API_KEY }}
+      DEV_OPENROUTER_API_KEY: ${{ secrets.DEV_OPENROUTER_API_KEY }}
+      DEV_OPENAI_API_KEY: ${{ secrets.DEV_OPENAI_API_KEY }}
+      DEV_GOOGLE_API_KEY: ${{ secrets.DEV_GOOGLE_API_KEY }}
+      DEV_OC1_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC1_WEBSEARCH_API_KEY }}
+      DEV_OC1_GATEWAY_TOKEN: ${{ secrets.DEV_OC1_GATEWAY_TOKEN }}
+      DEV_OC1_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC1_TELEGRAM_BOT_TOKEN }}
+      DEV_OC2_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC2_WEBSEARCH_API_KEY }}
+      DEV_OC2_GATEWAY_TOKEN: ${{ secrets.DEV_OC2_GATEWAY_TOKEN }}
+      DEV_OC2_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC2_TELEGRAM_BOT_TOKEN }}
+      DEV_OC3_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC3_WEBSEARCH_API_KEY }}
+      DEV_OC3_GATEWAY_TOKEN: ${{ secrets.DEV_OC3_GATEWAY_TOKEN }}
+      DEV_OC3_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC3_TELEGRAM_BOT_TOKEN }}
+      PROD_DEEPSEEK_API_KEY: ${{ secrets.PROD_DEEPSEEK_API_KEY }}
+      PROD_OPENROUTER_API_KEY: ${{ secrets.PROD_OPENROUTER_API_KEY }}
+      PROD_OPENAI_API_KEY: ${{ secrets.PROD_OPENAI_API_KEY }}
+      PROD_GOOGLE_API_KEY: ${{ secrets.PROD_GOOGLE_API_KEY }}
+      PROD_OC1_WEBSEARCH_API_KEY: ${{ secrets.PROD_OC1_WEBSEARCH_API_KEY }}
+      PROD_OC1_GATEWAY_TOKEN: ${{ secrets.PROD_OC1_GATEWAY_TOKEN }}
+      PROD_OC1_TELEGRAM_BOT_TOKEN: ${{ secrets.PROD_OC1_TELEGRAM_BOT_TOKEN }}
+      PROD_OC2_WEBSEARCH_API_KEY: ${{ secrets.PROD_OC2_WEBSEARCH_API_KEY }}
+      PROD_OC2_GATEWAY_TOKEN: ${{ secrets.PROD_OC2_GATEWAY_TOKEN }}
+      PROD_OC2_TELEGRAM_BOT_TOKEN: ${{ secrets.PROD_OC2_TELEGRAM_BOT_TOKEN }}
+      PROD_OC3_WEBSEARCH_API_KEY: ${{ secrets.PROD_OC3_WEBSEARCH_API_KEY }}
+      PROD_OC3_GATEWAY_TOKEN: ${{ secrets.PROD_OC3_GATEWAY_TOKEN }}
+      PROD_OC3_TELEGRAM_BOT_TOKEN: ${{ secrets.PROD_OC3_TELEGRAM_BOT_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +95,15 @@ jobs:
           if [ "${{ inputs.playbook }}" = "services" ] && { [ -z "$CODE_SERVER_PASSWORD" ] || [ -z "$CODE_SERVER_SUDO_PASSWORD" ]; }; then
             echo "❌ Secrets CODE_SERVER_PASSWORD/CODE_SERVER_SUDO_PASSWORD fehlen (Pflicht für services-Lauf, K2-2)"
             FAIL=1
+          fi
+          if [ "${{ inputs.playbook }}" = "openclaw" ]; then
+            T="${{ inputs.target }}"
+            eval "KD=\$${T}_DEEPSEEK_API_KEY"; eval "KO=\$${T}_OPENROUTER_API_KEY"
+            eval "KA=\$${T}_OPENAI_API_KEY";    eval "KG=\$${T}_GOOGLE_API_KEY"
+            if [ -z "$KD" ] && [ -z "$KO" ] && [ -z "$KA" ] && [ -z "$KG" ]; then
+              echo "❌ Kein LLM-Provider-Key für target=${T} gesetzt (${T}_DEEPSEEK|OPENROUTER|OPENAI|GOOGLE_API_KEY – mind. einer nötig; pro Instanz prüft die Rolle den aktiven Provider)"
+              FAIL=1
+            fi
           fi
           [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
           echo "✅ Vorbedingungen ok"
@@ -126,24 +172,27 @@ jobs:
           # group_vars werden von Ansible NUR inventory-adjacent geladen -> /tmp/group_vars spiegeln
           mkdir -p /tmp/group_vars
           cp ansible/group_vars/all.yml /tmp/group_vars/all.yml
+          # Ansible lädt group_vars/<GRUPPENNAME>.yml (Gruppe [vps]) – NICHT <hostname>.yml
+          cp ansible/group_vars/vps-${{ inputs.target }}.yml /tmp/group_vars/vps.yml
           cat /tmp/inventory
 
-      - name: Service-Playbook ausführen ({{ inputs.playbook }})
+      - name: Service-Playbook ausführen (${{ inputs.playbook }})
         working-directory: ansible
         run: |
           case "${{ inputs.playbook }}" in
             docker-traefik) PB="03-docker-traefik.yml" ;;
             services)       PB="04-services.yml" ;;
-            *) echo "❌ Unbekanntes Playbook"; exit 1 ;;
+            openclaw) PB="05-openclaw.yml" ;;
+          *) echo "❌ Unbekanntes Playbook"; exit 1 ;;
           esac
           echo "▶️  Playbook: $PB (target: ${{ inputs.target }})"
-          ansible-playbook "playbooks/$PB" -i /tmp/inventory
+          ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}
 
       - name: Post-Deploy Check (SSH via Tailscale)
         run: |
           echo "✅ Service-Deploy abgeschlossen (${{ inputs.playbook }})"
           ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
               "$VPS_USER@$VPS_TS_IP" \
-              "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'traefik|ollama' || true"
+              "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'traefik|ollama|openclaw' || true"
           echo ""
           echo "▶️  Nächster Schritt: Workflow 04-bdd-tests.yml (BDD-Verifikation, qa/bdd-testkonzept.md)"

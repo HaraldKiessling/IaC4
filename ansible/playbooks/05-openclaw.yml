@@ -1,5 +1,5 @@
 ---
-- name: Phase 2d – OpenClaw Gateway
+- name: Phase 2e – OpenClaw-Gateways (Container, Multi-Instanz)
   hosts: vps
   become: true
   roles:

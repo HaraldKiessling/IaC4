@@ -34,8 +34,48 @@ code_server_hostname: "{{ lookup('env', 'CODE_SERVER_HOSTNAME') | default('code.
 # Tailscale – Auth (wird dynamisch im Workflow generiert)
 tailscale_auth_key: "{{ lookup('env', 'TAILSCALE_AUTH_KEY') | default('', true) }}"
 
-# OpenClaw
-openclaw_llm_provider: "{{ lookup('env', 'OPENCLAW_LLM_PROVIDER') | default('anthropic', true) }}"
-openclaw_llm_api_key: "{{ lookup('env', 'OPENCLAW_LLM_API_KEY') | default('', true) }}"
-openclaw_websearch_api_key: "{{ lookup('env', 'OPENCLAW_WEBSEARCH_API_KEY') | default('', true) }}"
-openclaw_gateway_port: 18789
+# OpenClaw – Multi-Instanz (ADR-025, revidiert 2026-08-01): Gateway als gepinnter Docker-Container
+# pro Instanz: Container + Config-Volume + openclaw.json (SSoT). Ports localhost-only, TLS via Tailscale Serve.
+# Secrets je Instanz als GH-Secrets: <INST>_TELEGRAM_BOT_TOKEN, <INST>_LLM_API_KEY, <INST>_WEBSEARCH_API_KEY
+openclaw_image: "ghcr.io/openclaw/openclaw"
+openclaw_image_version: "2026.7.1"          # Pin (ADR-017); Update = Variable + Deploy. GHCR-Tag bei Deploy verifizieren
+# Agent-Modell-Matrix (Stand 2026-08-01, bisherige Instanz) – je Instanz referenzierbar
+openclaw_agent_models:
+  Orchestrator:
+    primary: "deepseek/deepseek-v4-flash"
+    fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+  Architect:   # RFC-0040/IaC3-Konvention (N3); ID wird "architect"
+    primary: "deepseek/deepseek-v4-pro"
+    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+  "Engineer Pro":
+    primary: "deepseek/deepseek-v4-flash"
+    fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+  Reviewer:
+    primary: "deepseek/deepseek-v4-pro"
+    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+
+# Instanz-Definitionen je Target: group_vars/vps-dev.yml (DEV_-Secrets) und vps-prod.yml (PROD_-Secrets)
+
+# Provider-Modelle (Stand 2026-08-01, bisherige Instanz) – damit Agent-Matrix-Modelle existieren
+openclaw_provider_models:
+  deepseek:
+    api: "openai-completions"
+    baseUrl: "https://api.deepseek.com"
+    models:
+      - {id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", reasoning: true, input: ["text"], contextWindow: 1048576, maxTokens: 384000}
+      - {id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", reasoning: true, input: ["text"], contextWindow: 1048576, maxTokens: 384000}
+  openrouter:
+    api: "openai-completions"
+    baseUrl: "https://openrouter.ai/api/v1"
+    models:
+      - {id: "openrouter/auto", name: "OpenRouter Auto", reasoning: true, input: ["text", "image"], contextWindow: 200000, maxTokens: 8192}
+  openai:
+    api: "openai"
+  google:
+    api: "google-generative-ai"
+    models:
+      - {id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", reasoning: true, input: ["text", "image"], contextWindow: 1048576, maxTokens: 65536}
+      - {id: "gemini-embedding-2", name: "Gemini Embedding 2", reasoning: null, input: ["text"], contextWindow: 8192, maxTokens: 1}
+  ollama:
+    api: "ollama"
+    baseUrl: "http://ollama:11434"   # Docker-DNS im traefik-network

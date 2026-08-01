@@ -3,20 +3,22 @@
 ## Komponenten-Übersicht
 ```
 IaC4
-├── Ansible (Provisionierung, 6 Rollen)
+├── Ansible (Provisionierung, 7 Rollen)
 │   ├── vps-baseline      → SSH, Pakete, Swap
 │   ├── tailscale          → Tailscale-Join
 │   ├── docker             → Docker-Engine + Compose
 │   ├── traefik            → Reverse Proxy (HTTP-only, Port 80, Tailscale-only)
 │   ├── qdrant             → Vektordatenbank (3072d, Cosine)
 │   ├── code-server        → Web-IDE
-│   └── openclaw-gateway   → OpenClaw-Install
-├── GitHub Actions (CI/CD, 5 Workflows)
+│   └── openclaw-gateway   → OpenClaw-Gateways (Docker-Container, Multi-Instanz OC1-OC3)
+├── GitHub Actions (CI/CD, 7 Workflows)
 │   ├── ci.yml                               → Lint + Quality Gate
 │   ├── 00-generate-ssh-key.yml              → SSH-Key-Paar generieren
 │   ├── 01-tailscale-terraform.yml           → Tailscale OAuth + ACLs (Terraform Plan/Apply)
 │   ├── 02-tailscale-bootstrap.yml           → Phase 2a+2b (via Public-IP, schliesst SSH)
-│   └── 03-baseline-deploy.yml               → Phase 1 (via Tailscale-IP)
+│   ├── 03-baseline-deploy.yml               → Phase 1 (via Tailscale-IP)
+│   ├── 04-service-deploy.yml              → Phase 2c-2e Services (Selektor, ADR-024)
+│   └── 04-bdd-tests.yml                   → Post-Deploy-Verifikation (BDD)
 ├── Terraform (Tailscale OAuth-Client)
 │   └── oauth-client.tf                      → Erzeugt Client (tag:ci)
 ├── Docker Compose (Services)
@@ -35,4 +37,4 @@ IaC4
 | traefik | Traefik-Container + Config | docker |
 | qdrant | Qdrant-Container + Collection (3072d/Cosine) | docker |
 | code-server | Code-Server-Container + Reverse-Proxy-Route | docker, traefik |
-| openclaw-gateway | Node.js + openclaw onboard + Config | docker, qdrant |
+| openclaw-gateway | Docker-Container (ghcr.io/openclaw/openclaw, gepinnt); je Instanz Config+Workspace unter /srv/openclaw/<name>/ | docker, traefik-network, ollama, qdrant |
