@@ -2,7 +2,8 @@
 # Feature: OpenClaw-Gateways (Phase 2e, ADR-025 revidiert) – Docker-Container, Multi-Instanz
 # Verifiziert: Health je Instanz via HTTPS (TS-Serve-TLS), Ports von außen dicht,
 # openclaw.json je Instanz (SSoT), Instanz-Liste (DEV: OC1-OC3 aktiv; PROD: OC3 disabled,
-# RFC 01-oc2-oc3-benchmark – Instanzen je Target via run-all.ps1/Workflow gesteuert).
+# RFC 01-oc2-oc3-benchmark – Instanzen je Target via run-all.ps1/Workflow gesteuert),
+# O5: Ressourcen-Kovariate (docker stats, V5/RFC 01 Kap. 6.3).
 # MagicDNS fehlt auf GH-Runnern -> --resolve auf die Tailscale-IP (VpsIp).
 param(
     [Parameter(Mandatory)][string]$VpsIp,
@@ -46,9 +47,10 @@ foreach ($inst in $Instances.Split(',')) {
     $inst = $inst.Trim()
     Write-Host "`nScenario: Instanz $inst – Ressourcen-Kovariate (docker stats)" -ForegroundColor Yellow
     Given "Container openclaw-$inst laeuft; docker stats liefert CPU/RAM"
-    $r = Invoke-SSH "docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' openclaw-$inst" $VpsUser $VpsIp $SshKeyPath
+    # Docker via sudo (ADR-016: deploy-user bewusst nicht in docker-Gruppe; Muster O3/O4)
+    $r = Invoke-SSH "sudo docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' openclaw-$inst" $VpsUser $VpsIp $SshKeyPath
     When "docker stats fuer openclaw-$inst abgefragt wird"
-    Then-True "Kovariate im Log: $($r.Output.Trim())" ($r.Output -match 'openclaw-') $r.Output
+    Then-True "Kovariate im Log: $($r.Output.Trim())" ($r.ExitCode -eq 0 -and $r.Output -match 'openclaw-oc\d+\|\d+') $r.Output
 }
 
 # ── O2: Ports von aussen (Public-IP) dicht ──
