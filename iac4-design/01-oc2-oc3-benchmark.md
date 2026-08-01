@@ -1,4 +1,4 @@
-# RFC: OpenClaw-Instanz-Benchmark OC2 vs. OC3
+# Design: OpenClaw-Instanz-Benchmark OC2 vs. OC3
 
 - **Status:** Vorgeschlagen — Review abgeschlossen: R1 (Architect + Reviewer) eingearbeitet, R2 = ✅ FREIGABE (Reviewer), externer Architect-Review (IaC3-Workspace) = ✅ APPROVE, Befunde N1–N5 eingearbeitet
 - **Datum:** 2026-08-01
