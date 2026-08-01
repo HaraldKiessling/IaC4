@@ -60,11 +60,10 @@
     pull: always
 
 - name: "{{ oc.name }}: Container neu starten (Config geaendert – Mount-Change triggert kein Recreate)"
-  community.docker.docker_compose_v2:
-    project_src: "{{ openclaw_data_root }}/{{ oc.name }}"
-    state: present
-    restarted: true
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ openclaw_data_root }}/{{ oc.name }}/docker-compose.yml restart openclaw"
   when: _oc_cfg.changed
+  changed_when: true
 
 - name: "{{ oc.name }}: Auf Health warten (localhost:{{ oc.port }}/health)"
   ansible.builtin.uri:
