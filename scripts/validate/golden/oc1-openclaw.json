@@ -17,7 +17,14 @@
   },
   "agents": {
     "defaults": {
-      "workspace": "/home/node/.openclaw/workspace"
+      "workspace": "/home/node/.openclaw/workspace",
+      "subagents": {
+        "delegationMode": "suggest",
+        "maxChildrenPerAgent": 5,
+        "maxConcurrent": 4,
+        "maxSpawnDepth": 1,
+        "runTimeoutSeconds": 900
+      }
     }
   },
   "memory": {

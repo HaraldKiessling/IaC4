@@ -15,12 +15,21 @@ openclaw_instances:
   - name: oc1
     enabled: true
     port: 18789
-    label: "OC1 – Default Gateway (out of box)"
+    label: "OC1 – Creator/Vanilla-Baseline (Benchmark-Arm, Design 01-oc2-oc3-benchmark Kap. 6.1)"
     llm_provider: deepseek            # aktiver Provider (Key Pflicht: DEV_DEEPSEEK_API_KEY)
     websearch_api_key_env: "DEV_OC1_WEBSEARCH_API_KEY"
     gateway_token_env: "DEV_OC1_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC1_TELEGRAM_BOT_TOKEN"
-    agents: []
+    agents: []                        # bewusst KEINE Rollen-Agents (Single-Agent, Creator-These)
+    # Konstant-Haltung wie OC2 (Design 01 Kap. 6.1): identische Timeouts/Concurrency
+    # fuer alle 3 Benchmark-Arme – Timeout/Concurrency duerfen keine Variable sein.
+    # Bewusst NICHT Doku-Defaults (maxConcurrent 8, runTimeout 0) – Abweichung dokumentiert.
+    subagents_defaults:
+      delegationMode: "suggest"      # Doku-Default, explizit (Creator: sparsame Delegation)
+      maxSpawnDepth: 1               # Doku-Default, explizit (kein Orchestrator-Pattern)
+      maxChildrenPerAgent: 5
+      maxConcurrent: 4               # Konstante (identisch OC2/OC3)
+      runTimeoutSeconds: 900         # Konstante (identisch OC2/OC3)
   - name: oc2
     enabled: true
     port: 18790

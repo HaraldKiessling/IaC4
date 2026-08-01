@@ -1,11 +1,11 @@
-# Design: OpenClaw-Instanz-Benchmark OC2 vs. OC3
+# Design: OpenClaw-Instanz-Benchmark OC1–OC3 (OC2 vs. OC3 als Kernvergleich, OC1 = Creator-Baseline-Arm; Design-Entscheidungen Kap. 1–5 betreffen OC2/OC3, OC1 ist Benchmark-Objekt)
 
 - **Status:** Vorgeschlagen — Review abgeschlossen: R1 (Architect + Reviewer) eingearbeitet, R2 = ✅ FREIGABE (Reviewer), externer Architect-Review (IaC3-Workspace) = ✅ APPROVE, Befunde N1–N5 eingearbeitet
 - **Datum:** 2026-08-01
 - **Autor:** ✨ Nova (Orchestrator)
 - **Review R1:** 🏗️ Architect (APPROVED MIT BEFUNDEN, 4 MAJOR/7 MINOR) + 🔍 Reviewer (KEINE FREIGABE, 0 Blocker/4 MAJOR/7 MINOR) — Befunde verifiziert und vollständig eingearbeitet (2026-08-01)
 - **Bezug:** ADR-025 (Multi-Instanz OC1-OC3), `docs/workflows/methodology.md`, Migrationsplan Phase 5
-- **Ziel:** Evidenzbasiertes Design für OC3 („Future Purpose") **und** Vervollständigung von OC2 („DevOps Team"), plus Benchmark-Protokoll für einen kontrollierten A/B-Vergleich.
+- **Ziel:** Evidenzbasiertes Design für OC3 („Future Purpose") **und** Vervollständigung von OC2 („DevOps Team"), plus Benchmark-Protokoll für einen kontrollierten Vergleich — **erweitert um OC1 als dritten Arm** (Harald 2026-08-01): Vanilla/Creator-Baseline, testet die These des OpenClaw-Creators (Peter Gyang: „ein einzelner Agent reicht, keine komplexen Orchestratoren").
 
 ---
 
@@ -13,9 +13,11 @@
 
 Harald (2026-08-01): OC3 bekommt komplett freie Hand für ein neues Modell — **oder** die Community-Evidenz ist so nah an OC2, dass OC3 eine Kopie sein sollte — **oder** OC2 und OC3 werden bewusst unterschiedlich gestaltet, um später im Vergleich ein geeignetes Betriebsmodell zu finden.
 
-**Entscheidung aus Voranalyse (2026-08-01):** Option C — beide Instanzen als kontrolliertes A/B-Experiment gestalten. Begründung:
+**Entscheidung aus Voranalyse (2026-08-01, historisch — vor der OC1-Erweiterung):** Option C — beide Instanzen (OC2/OC3) als kontrolliertes A/B-Experiment gestalten. Begründung:
 - Die Community ist **gespalten** in zwei dokumentierte Lager (Orchestrator-Muster vs. Creator-Style), die Doku unterstützt beide. Eine Kopie (Option B) dupliziert Befunde, radikales Neuland (Option A) macht den Vergleich unbrauchbar (zu viele Variablen).
 - ADR-025 dokumentiert den Zweck der Multi-Instanz wörtlich als „Untersuchungen".
+
+**OC1-Rolle (Harald 2026-08-01):** OC1 ist **dritter Benchmark-Arm** (Creator/Vanilla-Baseline, Kap. 6.1), kein Design-Objekt — Kap. 1–5 behandeln das OC2/OC3-Design, die 3-Arm-Logik lebt in Kap. 6.
 
 **Methodik-Transparenz (Review R1):** Der Vergleich ist kein „1-Variable-Experiment" im strengen Sinn — die getestete Variable ist ein **Bündel „Sub-Agent-Betriebskonfiguration"** (Modell-Zuordnung + allowAgents/Rollen-IDs + Delegation/Depth). Dieses Bündel wird bewusst als Einheit getestet (OC2 = Ist-Bündel, OC3 = Best-Practice-Bündel); eine Attribuierung auf einzelne Elemente ist daraus **nicht** ableitbar (Architect MAJOR-2). Alle übrigen Parameter (Infrastruktur, Provider, Secrets, Timeouts, Concurrency, Hardware) werden konstant gehalten.
 
@@ -67,7 +69,7 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 **A3-1: Creator-Style (Anti-Orchestrator)** — Single-Agent, keine Rollen, keine agents.list, Sub-Agents sparsam (Vorbild: Peter Gyang, [LinkedIn](https://www.linkedin.com/posts/petergyang_peter-openclaw-creators-ai-coding-workflow-activity-7423802347858092032-gJgH)).
 - Pro: minimal, billig, entspricht der persönlichen Empfehlung des OpenClaw-Creators.
 - Contra: Einzelmeinung gegen Mehrheits-Evidenz; für IaC4-Größe (Review-Gate, Autor≠Reviewer, Issue #37) ist mindestens eine Rollen-Trennung nötig; Vergleich mit OC2 hätte 2+ Variablen (Struktur UND Modell).
-- **Bewertung: verworfen für OC3** (zu großer Sprung, Sicherheits-Gate „Autor ≠ Reviewer" nicht abbildbar). Als mögliche OC1-Nachfolge notiert (OC1 = Vanilla-Baseline bleibt unverändert).
+- **Bewertung: verworfen für OC3** (zu großer Sprung, Sicherheits-Gate „Autor ≠ Reviewer" nicht abbildbar). **OC1 übernimmt diese Rolle seit 2026-08-01 als dritter Benchmark-Arm** (Creator/Vanilla-Baseline, Design 01 Kap. 6.1) — mit expliziten Konstanten, aber ohne Rollen-Agents.
 
 **A3-2: Peer-Spezialisten mit eigenen Channels** — 4 unabhängige Agents, je eigener Telegram-Bot/Channel-Binding (Vorbild: Claire Vo/Lenny: „nine agents", [Lenny's Newsletter](https://www.lennysnewsletter.com/p/openclaw-the-complete-guide-to-building); [docs.openclaw.ai/concepts/multi-agent](https://docs.openclaw.ai/concepts/multi-agent)).
 - Pro: dokumentiertes Muster (Bindings, isolierte Workspaces), klare Trennung.
@@ -121,7 +123,7 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 ### 4.4 Worst-Case & Rollback (P3, AGENTS.md)
 - **Worst-Case 1:** Delegation bricht (Depth-2-Fehler) → Orchestrator liefert nichts mehr, weil er alles delegiert und Kinder fehlschlagen. **Gegenmaßnahme:** `delegationMode` zurück auf `suggest`, `maxSpawnDepth` auf 1 (Config-Änderung, Deploy) — kein Container-Neuaufbau.
 - **Worst-Case 2:** Modell-Override inkonsistent (Instanz-Override vs. all.yml) → falsche Modelle deployt. **Gegenmaßnahme:** Render-Validierung im CI (bestehendes Skript) + BDD-Check `openclaw.bdd.ps1` (Health je Instanz).
-- **Worst-Case 3:** Template-Regression trifft OC1/OC2 (Anforderung 7 verletzt). **Gegenmaßnahme:** CI-Renderdiff (OC1/OC2-Output vorher/nachher muss identisch sein) als Pflicht-Check im Folge-Task.
+- **Worst-Case 3:** Template-Regression trifft Instanzen mit subagents-Feldern (Anforderung 7 verletzt). **Gegenmaßnahme:** Golden-File-Renderdiff (OC1 = committeter Referenz-Render, nur bei bewusster Änderung aktualisieren) + Absence-Assert (Instanzen ohne `subagents_defaults` dürfen keinen `subagents`-Key erhalten — schützt PROD + DEV-ohne-Feld) + Equality-Assert (DEV-OC2/OC3 `subagents_defaults` exakt gerendert). **Bewusste Scope-Entscheidung (Architect MINOR-5):** OC2 hat keinen Golden-File-Byte-Schutz — Regressionen, die nur Instanzen mit `subagents_defaults` betreffen, fallen für OC2 nicht als Renderdiff auf; abgedeckt durch Equality-Assert + Review. Ok als bewusste Grenze.
 - **Rollback-Pfad (korrigiert nach Review R1, Reviewer MAJOR-3):** `enabled: false` **entfernt den Container NICHT** — `tasks/main.yml` skippt die Instanz nur (`when: oc.enabled | default(false)`), es gibt **keinen Teardown-Task** im Repo. Rollback = **manuell** `docker compose -f /srv/openclaw/oc3/docker-compose.yml down` (Config-Volume bleibt erhalten → Re-Enable = alter Zustand). Optional: Teardown-Task in der Rolle als Folge-Task. Kein Prod-Risiko: OC3 läuft nur auf DEV-Target bis Benchmark-Abschluss (PROD-OC3 bleibt disabled).
 
 ---
@@ -146,7 +148,7 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 - Modelle **unverändert** lassen (Orchestrator/Engineer = flash, Architect/Reviewer = pro) — das IST die Kontrollgruppe; die Invertierung (B1) ist Teil des Vergleichs, nicht der Fix.
 - `allowAgents` bleibt ungesetzt (heutiges Verhalten: nur Requester-Agent) — dokumentiert als bewusste Kontrollgruppen-Eigenschaft (B2 bleibt im Vergleich sichtbar).
 - Pro: reproduzierbare Kontrollgruppe, gleiche Timeout-/Concurrency-Bedingungen wie OC3, nur die getesteten Variablen unterscheiden sich.
-- Contra: verlangt dieselbe per-Instanz-Template-Erweiterung wie OC3 (einmalige Arbeit, dann beide Instanzen bedienbar).
+- Contra: verlangt dieselbe per-Instanz-Template-Erweiterung wie OC3 (einmalige Arbeit, dann OC2/OC3 — und seit 2026-08-01 auch OC1 — bedienbar).
 - **Bewertung: gewählt.**
 
 **A2-3: OC2 auf Best-Practice nachrüsten (gleiche Deltas wie OC3).**
@@ -157,7 +159,7 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 ### 5.3 Empfehlung OC2 (Config-Delta)
 
 ```yaml
-# group_vars/vps-dev.yml – openclaw_instances, OC2-Eintrag erweitert (per-Instanz, Default-Verhalten für OC1 unverändert):
+# group_vars/vps-dev.yml – openclaw_instances, OC2-Eintrag erweitert; OC1 seit 2026-08-01 aktiver Arm mit expliziten Konstanten (Design 01 Kap. 6.1), PROD-Instanzen weiterhin ohne Felder (Default-Verhalten):
 - name: oc2
   enabled: true
   port: 18790
@@ -177,22 +179,27 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 ```
 
 ### 5.4 Worst-Case & Rollback
-- **Worst-Case:** Template-Änderung bricht OC2-Deploy → beide Instanzen betroffen. **Gegenmaßnahme:** Template-Erweiterung strikt additiv + per-Instanz (Default = heutiges Verhalten), Render-Validierung + BDD vor Deploy; Rollback = alten Pin zurück.
+- **Worst-Case:** Template-Änderung bricht Deploy → betroffene Instanzen (DEV OC1/OC2/OC3) rendern fehlerhaft. **Gegenmaßnahme:** Template-Erweiterung strikt additiv + per-Instanz (Default = heutiges Verhalten), Render-Validierung + **Golden-File-Renderdiff** (fängt auch OC1-Regressionen) + BDD vor Deploy; Rollback = alten Pin zurück.
 - **Rollback:** Config-Volume `/srv/openclaw/oc2/config` ist SSoT; ein Deploy mit alter Template-Version stellt den Ist-Zustand wieder her (ADR-025: Reinstall = Volume neu). `enabled: false` entfernt den Container nicht (s. 4.4).
 
 ---
 
-## 6. Benchmark-Protokoll (A/B, kontrolliert)
+## 6. Benchmark-Protokoll (3 Arme, kontrolliert)
 
-### 6.1 Design
-- **Getestete Variable (Bündel, s. Kap. 1):** Sub-Agent-Betriebskonfiguration (Modell-Zuordnung, allowAgents/Rollen-IDs, Delegation/Depth).
-- **Konstant gehalten:** LLM-Provider (deepseek), Infrastruktur (Docker-Rolle), Secrets-Konvention, Workflow, BDD-Suite, VPS-Hardware, Timeouts (900 s), Concurrency (4), maxChildrenPerAgent (5).
+### 6.1 Design (3 Arme — OC1-Baseline ergänzt, Harald 2026-08-01)
+- **Getestete Variable (Bündel, s. Kap. 1):** Sub-Agent-Betriebskonfiguration (Modell-Zuordnung, allowAgents/Rollen-IDs, Delegation/Depth, Vorhandensein von Rollen-Agents).
+- **Die 3 Arme (dokumentierte Community-Positionen):**
+  - **OC1 – Creator/Vanilla-Baseline:** kein `agents.list` (Single-Agent), `suggest`/Depth-1, keine Rollen-IDs (Peter-Gyang-These). Konstanten identisch zu OC2/OC3 (s. u.).
+  - **OC2 – DevOps-Team (Ist, Kontrollgruppe):** 4 Rollen-Agents, `suggest`/Depth-1, keine `allowAgents`.
+  - **OC3 – Best-Practice-Referenz:** 4 Rollen-Agents, `prefer`/Depth-2, `allowAgents` + Modell-Invertierung.
+  - **Variablen-Paare:** OC1↔OC2 = „Single-Agent vs. Rollen-Team" (bei sonst identischer Sub-Agent-Config); OC2↔OC3 = „Delegation/Depth/Modelle" (bei identischer Team-Struktur). OC1↔OC3 = kombinierter Unterschied.
+- **Konstant gehalten (alle 3 Arme):** LLM-Provider (deepseek), Infrastruktur (Docker-Rolle), Secrets-Konvention, Workflow, BDD-Suite, VPS-Hardware, Timeouts (900 s), Concurrency (4), maxChildrenPerAgent (5) — **OC1 erhält dafür explizit dieselben `subagents_defaults` wie OC2** (suggest/1/5/4/900), damit Timeout/Concurrency keine Variable zwischen den Armen sind (bewusste Abweichung vom Doku-Default 8/0, dokumentiert wie OC2).
 - **Dauer:** 14 Tage paralleler DEV-Betrieb (ab Freigabe), Auswertung danach.
 - **Blindheit (realistisch, Review R1):** Echte Blindheit ist bei Live-PR-Kommentaren nicht herstellbar (GitHub-Metadaten + Stil verraten die Instanz). Stattdessen: **Outputs instanzfremd erfassen** (getrennte Dateien ohne Instanz-Kennzeichnung), Adjudikation durch Harald anhand definierter Ground Truth, Auswertung deskriptiv (s. 6.4). Keine „Blindheit"-Behauptung im Protokoll.
-- **Ressourcen-Interferenz (Architect MINOR-4):** Beide Instanzen parallel auf 6 vCore/8 GB verrauschen Zykluszeit-Metriken → Tasks **zeitlich entzerren** (nicht gleichzeitig starten) + `docker stats` als Kovariate im Log.
+- **Ressourcen-Interferenz (Architect MINOR-4):** Drei Instanzen parallel auf 6 vCore/8 GB verrauschen Zykluszeit-Metriken → Tasks **zeitlich entzerren** (nicht gleichzeitig starten) + `docker stats` als Kovariate im Log (V5).
 
-### 6.2 Aufgaben (identisch je Instanz, rotierend, Worktree-Pflicht je Instanz — Issue #29)
-1. **T1 – PR-Review (Kern-Test):** **Diff-Snapshot als Datei** je Instanz ausrollen (nicht der Live-PR — beide Reviewer sehen sich sonst gegenseitig, Kontamination; Reviewer MAJOR-4). Seed-Defekte (bewusst eingebaute Fehler) als Ground Truth; Reviewer-Outputs in getrennten Dateien ablegen, Reihenfolge rotieren. Adjudikation: Harald oder Zweit-Reviewer gegen Ground-Truth-Liste.
+### 6.2 Aufgaben (identisch je Instanz OC1/OC2/OC3, rotierend, Worktree-Pflicht je Instanz — Issue #29)
+1. **T1 – PR-Review (Kern-Test):** **Diff-Snapshot als Datei** je Instanz ausrollen (nicht der Live-PR — die Reviewer der drei Arme sehen sich sonst gegenseitig, Kontamination; Reviewer MAJOR-4). Seed-Defekte (bewusst eingebaute Fehler) als Ground Truth; Reviewer-Outputs in getrennten Dateien ablegen, Reihenfolge rotieren. Adjudikation: Harald oder Zweit-Reviewer gegen Ground-Truth-Liste.
 2. **T2 – Architektur-Review:** gleiche ADR/Design-Frage (5W) durch Architect; Ground Truth = Konsens-Urteil aus IaC4-Methodik.
 3. **T3 – Implementierung:** gleiche, klar spezifizierte Aufgabe (z.B. „BDD-Fix nach Spezifikation") — **je Instanz getrennter Worktree/Branch** (Kollisionsgefahr, Issue #29); Ergebnis = Diff + Testlauf.
 4. **T4 – Such-/Recherche-Aufgabe:** gleiche Web-Recherche (Evidenzpflicht) — testet Tool-Nutzung; Ground Truth = Quellenqualität (offizielle Doku/Vendor-Docs).
@@ -209,14 +216,15 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 
 ### 6.4 Entscheidungskriterien (vorab festgelegt; deskriptiv, Review R1 MAJOR-3)
 **Kein Signifikanztest bei n=5** — der Schwellwert ist ein pragmatisches Abbruch-/Präferenzkriterium, kein statistischer Beleg. Auswertung deskriptiv; bei Bedarf n≥10 T1-Läufe als Verlängerung.
-1. **Qualität gewinnt über Kosten:** Instanz mit mehr echten Blockern (≥2 Differenz über ≥5 T1-Läufe, adjudiziert gegen Ground Truth) wird bevorzugt.
+1. **Qualität gewinnt über Kosten:** Instanz mit mehr echten Blockern (≥2 Differenz über ≥5 T1-Läufe, adjudiziert gegen Ground Truth) wird bevorzugt. **Paarweise Rangfolge OC1/OC2/OC3** (jeder gegen jeden), dann Gesamt-Ranking.
 2. Bei Qualitäts-Gleichstand: günstigere Instanz (frische Tokens).
 3. Bei Gleichstand in 1+2: Zykluszeit.
 4. **T2–T4 fließen als Zusatzbefunde ein** (nicht in die Rangfolge; dokumentiert pro Task) — Review R1 MINOR-4.
-5. **Abbruchkriterium:** OC3 scheitert in 3 aufeinanderfolgenden T1-Läufen schwer (Delegation/Depth-Fehler, unbrauchbare Outputs) → OC3 pausieren, Befund dokumentieren.
+5. **OC1-Sonderfall:** Gewinnt die Vanilla-Baseline (OC1) — **Schwellwert wie Regel 1** (≥2 echte Blocker-Differenz über ≥5 T1-Läufe, adjudiziert) — bestätigt die Creator-These empirisch; dann wird bewertet, ob der Mehraufwand von OC2/OC3 (Rollen, Depth) durch Qualitätsgewinn gerechtfertigt ist (Entscheidung Harald). **Gegenfall explizit:** Sind OC2=OC3 gleichauf und OC1 deutlich schlechter (≥2-Blocker-Differenz gegen beide), gilt die Creator-These als widerlegt und das Ranking entscheidet zwischen OC2/OC3 nach Kriterien 1–3.
+6. **Abbruchkriterium:** Eine Instanz scheitert in 3 aufeinanderfolgenden T1-Läufen schwer (Delegation/Depth-Fehler, unbrauchbare Outputs) → Instanz pausieren, Befund dokumentieren.
 
 ### 6.5 Auswertung & Übergang
-- Ergebnis → Entscheidung Harald → Gewinner-Konfiguration auf Produktiv-Instanz übernehmen (PROD-OC2 oder PROD-OC3), Verlierer-Instanz als Fallback (`enabled: false` + manueller Teardown, s. 4.4).
+- Ergebnis → Entscheidung Harald → Gewinner-Konfiguration auf Produktiv-Instanz übernehmen (PROD-OC1/OC2/OC3 je nach Ausgang), Verlierer-Instanzen als Fallback (`enabled: false` + manueller Teardown, s. 4.4).
 - Gap-Report (Methodik Schritt 8) als Issue/PR-Doku.
 
 ---

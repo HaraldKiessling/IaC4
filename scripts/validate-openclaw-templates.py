@@ -88,10 +88,14 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
         except Exception as ex:
             failures.append(f"{tf}/{oc['name']}: {ex}")
 
-# Golden-File-Renderdiff (RFC 4.4 Worst-Case 3, DoD Issue #63): OC1-Render (kanonische
-# JSON-Form) muss identisch zum committeten Referenz-Render bleiben – fängt semantische
-# Template-Regressionen (W2: reine Formatierungs-/Whitespace-Änderungen erfasst diese
-# kanonische Form bewusst nicht; Byte-Identität wird separat im Review verifiziert).
+# Golden-File-Renderdiff (Design 01 Kap. 4.4 Worst-Case 3, DoD Issue #63): OC1-Render
+# (kanonische JSON-Form) muss identisch zum committeten Referenz-Render bleiben – fängt
+# semantische Template-Regressionen. OC1 ist seit 2026-08-01 aktiver Benchmark-Arm
+# (Creator-Baseline, subagents_defaults explizit) – Golden-File wird nur bei BEWUSSTER
+# OC1-Änderung aktualisiert. Schutzumfang (Architect MINOR-4/5): Absence-Assert schuetzt
+# PROD-Instanzen + Instanzen ohne Feld (kein subagents-Key); Equality-Assert schuetzt
+# DEV-OC2/OC3 (subagents_defaults exakt gerendert); OC2 hat bewusst KEIN Golden-File
+# (Scope-Entscheidung, Design 01 Kap. 4.4 Worst-Case 3).
 GOLDEN = f'{ROOT}/../scripts/validate/golden/oc1-openclaw.json'
 try:
     with open(GOLDEN) as gf:
