@@ -62,4 +62,21 @@ Write-Host "  $($r10.Output -replace "`n", "`n  ")"
 Write-Host "`n[11] VPS serve status --json (Zertifikat-Felder):"
 $r11 = Invoke-SSH "sudo tailscale serve status --json | jq -c '.ServeConfig | {TCP, Web}' 2>/dev/null || sudo tailscale serve status --json | head -40" $VpsUser $VpsIp $SshKeyPath
 Write-Host "  $($r11.Output -replace "`n", "`n  ")"
+
+Write-Host "`n[12] Runner: Root + /dashboard/ + /dashboard (ohne Slash), mit Headern:"
+foreach ($path in @('/', '/dashboard/', '/dashboard')) {
+    $h = & curl -sk --connect-timeout 8 --resolve "${Fqdn}:443:${VpsIp}" -D - -o /dev/null "https://$Fqdn$path" 2>&1
+    $code = ($h -split "`n")[0].Trim()
+    $srv = ($h | Select-String -Pattern '^server:' | Select-Object -First 1).Line.Trim()
+    $loc = ($h | Select-String -Pattern '^location:' | Select-Object -First 1).Line.Trim()
+    Write-Host "  $path -> $code | $srv | $loc"
+}
+
+Write-Host "`n[13] VPS localhost:8080/dashboard/ (ohne Middleware -> 200 erwartet):"
+$r13 = Invoke-SSH "curl -s -o /dev/null -w 'code=%{http_code} ctype=%{content_type}' http://127.0.0.1:8080/dashboard/" $VpsUser $VpsIp $SshKeyPath
+Write-Host "  $($r13.Output)"
+
+Write-Host "`n[14] VPS serve status --json (roh, komplett):"
+$r14 = Invoke-SSH "sudo tailscale serve status --json" $VpsUser $VpsIp $SshKeyPath
+Write-Host "  $($r14.Output -replace "`n", "`n  ")"
 Write-Host "`n════ DIAGNOSE ENDE ════" -ForegroundColor Magenta
