@@ -123,7 +123,7 @@ Write-Host "`nScenario: Service-Ports sind von außen (Public-IP) nicht erreichb
 Given "DOCKER-USER-Regeln R10/R11 (interface-gebunden) sind aktiv"
 $ext = @()
 foreach ($port in @('80', '11434', '6333')) {
-    $code = & curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "http://$PublicIp:$port/" 2>&1
+    $code = & curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "http://${PublicIp}:$port/" 2>&1
     $ext += "$port=$($code.Trim())"
 }
 $extJoined = $ext -join ', '
@@ -134,10 +134,10 @@ Then-True "Kein HTTP-Response von außen (Timeout/Filtered): $extJoined" ($extJo
 Write-Host "`nScenario: Dashboard ist via HTTPS erreichbar (https://<fqdn>/dashboard/ → 200)" -ForegroundColor Yellow
 Given "Serve-Mounts /dashboard und /api → localhost:8080; Whitelist erlaubt Tailnet-CGNAT"
 $Fqdn = "$ExpectedHostname.$Tailnet.ts.net"
-$resp = & curl -sk --connect-timeout 8 -w '
-%{http_code}|%{content_type}' "https://$Fqdn/dashboard/" 2>&1
-$code = ($resp -split "\n")[-1].Split('|')[0].Trim()
-$ctype = ($resp -split "\n")[-1].Split('|')[1].Trim()
+$resp = & curl -sk --connect-timeout 8 -w "`n%{http_code}|%{content_type}" "https://$Fqdn/dashboard/" 2>&1
+$meta = ($resp -split "`n")[-1]
+$code = $meta.Split('|')[0].Trim()
+$ctype = $meta.Split('|')[1].Trim()
 When "HTTPS-GET auf https://$Fqdn/dashboard/ ausgeführt wird (Runner im Tailnet)"
 Then-True "HTTP 200 (war: $code)" ($code -eq '200') $code
 Then-True "Content-Type text/html (war: $ctype)" ($ctype -match 'text/html') $ctype
