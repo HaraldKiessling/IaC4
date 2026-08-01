@@ -11,13 +11,6 @@
     - /opt/traefik
     - /opt/traefik/config
 
-- name: Dashboard-Auth-Secret vorhanden? (Pflicht, GH-Secret TRAEFIK_DASHBOARD_AUTH)
-  ansible.builtin.assert:
-    that:
-      - "{{ traefik_dashboard_auth | length > 0 }}"
-      - "{{ ':' in traefik_dashboard_auth and traefik_dashboard_auth.split(':')[1][:4] in ['$2a$', '$2b$', '$2y$'] }}"
-    fail_msg: "TRAEFIK_DASHBOARD_AUTH fehlt oder falsches Format (user:<bcrypt-hash>, Prefix $2a$/$2b$/$2y$) - GH-Secret setzen (ADR-019)"
-
 - name: Traefik-Static-Config deployen (HTTP-only, kein ACME)
   ansible.builtin.template:
     src: traefik.yml.j2

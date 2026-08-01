@@ -1,5 +1,6 @@
-# Traefik Dynamic Config (ADR-019): Dashboard nur via EntryPoint :8080 + BasicAuth.
-# Credentials aus GH-Secret TRAEFIK_DASHBOARD_AUTH ("user:<bcrypt-hash>"), nie im Repo.
+# Traefik Dynamic Config (ADR-019): Dashboard nur via EntryPoint :8080.
+# Auth: IP-Allowlist (Tailscale-CGNAT + localhost) – IaC3-Muster (auth-tailscale-only),
+# kein Passwort (Nutzbarkeit im Browser; Schutz = Tailnet). BasicAuth bei Bedarf reaktivierbar.
 http:
   routers:
     dashboard:
@@ -8,10 +9,11 @@ http:
         - dashboard
       service: api@internal
       middlewares:
-        - dashboard-auth
+        - auth-tailscale-only
 
   middlewares:
-    dashboard-auth:
-      basicAuth:
-        users:
-          - "{{ traefik_dashboard_auth }}"
+    auth-tailscale-only:
+      ipWhiteList:
+        sourceRange:
+          - "100.64.0.0/10"
+          - "127.0.0.1/8"

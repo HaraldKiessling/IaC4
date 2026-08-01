@@ -57,12 +57,12 @@ $r = Invoke-SSH "sudo ss -tlnp | grep ':443 ' | grep -v tailscaled || echo NO_44
 When "ss -tlnp auf Port 443 geprüft wird (tailscaled ausgenommen)"
 Then-True "Kein 443-Listener außer tailscaled" ($r.Output -match 'NO_443') $r.Output
 
-# ── D6: Dashboard-Auth greift (ADR-019) ──
-Write-Host "`nScenario: Traefik-Dashboard verlangt Authentifizierung (ADR-019)" -ForegroundColor Yellow
-Given "dashboard-Router hat BasicAuth-Middleware"
+# ── D6: Dashboard erreichbar – Auth via Tailscale-IP-Allowlist (ADR-019, IaC3-Muster) ──
+Write-Host "`nScenario: Traefik-Dashboard antwortet (ADR-019, IP-Allowlist)" -ForegroundColor Yellow
+Given "dashboard-Router hat ipWhiteList-Middleware (100.64.0.0/10 + localhost)"
 $r = Invoke-SSH "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/dashboard/" $VpsUser $VpsIp $SshKeyPath
-When "das Dashboard ohne Credentials abgerufen wird"
-Then-True "HTTP 401 ohne Auth" ($r.Output.Trim() -eq '401') $r.Output
+When "das Dashboard lokal abgerufen wird"
+Then-True "HTTP 200 (localhost ist in Allowlist)" ($r.Output.Trim() -eq '200') $r.Output
 
 # ── D7: Firewall – UFW-CGNAT (R7-R9) + DOCKER-USER (R10/R11) ──
 Write-Host "`nScenario: Firewall-Regeln für Service-Ports (Firewall-Konzept R7-R11)" -ForegroundColor Yellow
@@ -130,10 +130,14 @@ $extJoined = $ext -join ', '
 When "die Public-IP-Ports vom Runner (Internet) abgerufen werden"
 Then-True "Kein HTTP-Response von außen (Timeout/Filtered): $extJoined" ($extJoined -notmatch '=(200|4\d\d|5\d\d)') $extJoined
 
-# ── D10: Dashboard via HTTPS über das Tailnet (ADR-019, Erwartung Harald 2026-08-01) ──
-Write-Host "`nScenario: Dashboard ist via HTTPS erreichbar (https://<fqdn>/dashboard/ → 401 ohne Auth)" -ForegroundColor Yellow
-Given "Serve-Mounts /dashboard und /api → localhost:8080 (Traefik dashboard-EntryPoint)"
+# ── D10: Dashboard via HTTPS über das Tailnet (Erwartung Harald 2026-08-01) ──
+Write-Host "`nScenario: Dashboard ist via HTTPS erreichbar (https://<fqdn>/dashboard/ → 200)" -ForegroundColor Yellow
+Given "Serve-Mounts /dashboard und /api → localhost:8080; Whitelist erlaubt Tailnet-CGNAT"
 $Fqdn = "$ExpectedHostname.$Tailnet.ts.net"
-$code = & curl -sk --connect-timeout 8 -o /dev/null -w '%{http_code}' "https://$Fqdn/dashboard/" 2>&1
+$resp = & curl -sk --connect-timeout 8 -w '
+%{http_code}|%{content_type}' "https://$Fqdn/dashboard/" 2>&1
+$code = ($resp -split "\n")[-1].Split('|')[0].Trim()
+$ctype = ($resp -split "\n")[-1].Split('|')[1].Trim()
 When "HTTPS-GET auf https://$Fqdn/dashboard/ ausgeführt wird (Runner im Tailnet)"
-Then-True "HTTP 401 ohne Auth (war: $code)" ($code.Trim() -eq '401') $code
+Then-True "HTTP 200 (war: $code)" ($code -eq '200') $code
+Then-True "Content-Type text/html (war: $ctype)" ($ctype -match 'text/html') $ctype
