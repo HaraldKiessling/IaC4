@@ -11,7 +11,7 @@
     state: directory
     mode: '0755'
 
-- name: Pro Instanz: Verzeichnisse, Config, Compose, Start, Health, Serve
+- name: "Pro Instanz: Verzeichnisse, Config, Compose, Start, Health, Serve"
   ansible.builtin.include_tasks: instance.yml
   loop: "{{ openclaw_instances }}"
   loop_control:
