@@ -39,6 +39,18 @@ foreach ($inst in $Instances.Split(',')) {
     Then-True "Health-Body enthaelt ok" ($respJoined -match '"ok"') $respJoined
 }
 
+# ── O5: Ressourcen-Kovariate je aktiver Instanz (V5, RFC 01 Kap. 6.3, F4) ──
+# Benchmark-Fairness: CPU/RAM-Werte landen im BDD-Log, damit Ressourcen-Interferenz
+# (3 Instanzen parallel auf 6 vCore/8 GB) als Kovariate auswertbar ist.
+foreach ($inst in $Instances.Split(',')) {
+    $inst = $inst.Trim()
+    Write-Host "`nScenario: Instanz $inst – Ressourcen-Kovariate (docker stats)" -ForegroundColor Yellow
+    Given "Container openclaw-$inst laeuft; docker stats liefert CPU/RAM"
+    $r = Invoke-SSH "docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' openclaw-$inst" $VpsUser $VpsIp $SshKeyPath
+    When "docker stats fuer openclaw-$inst abgefragt wird"
+    Then-True "Kovariate im Log: $($r.Output.Trim())" ($r.Output -match 'openclaw-') $r.Output
+}
+
 # ── O2: Ports von aussen (Public-IP) dicht ──
 Write-Host "`nScenario: Gateway-Ports sind von aussen nicht erreichbar" -ForegroundColor Yellow
 Given "DOCKER-USER + UFW: Gateway-Ports nur localhost + TS-Serve (tailnet only)"
