@@ -32,7 +32,7 @@ foreach ($inst in $Instances.Split(',')) {
     Given "Gateway-Container openclaw-$inst laeuft; TS-Serve terminiert TLS auf $port"
     $resp = & curl -sk --connect-timeout 8 --resolve "${Fqdn}:${port}:${VpsIp}" -w "`n%{http_code}" "https://${Fqdn}:${port}/health" 2>&1
     $code = ($resp -split "`n")[-1].Trim()
-    When "HTTPS-GET auf https://$Fqdn:$port/health ausgefuehrt wird (Runner im Tailnet)"
+    When "HTTPS-GET auf https://${Fqdn}:${port}/health ausgefuehrt wird (Runner im Tailnet)"
     Then-True "HTTP 200 (war: $code)" ($code -eq '200') $code
     Then-True "Health-Body enthaelt ok" ($resp -match '"ok"') $resp
 }
