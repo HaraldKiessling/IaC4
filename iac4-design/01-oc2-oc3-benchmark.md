@@ -69,7 +69,7 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 **A3-1: Creator-Style (Anti-Orchestrator)** — Single-Agent, keine Rollen, keine agents.list, Sub-Agents sparsam (Vorbild: Peter Gyang, [LinkedIn](https://www.linkedin.com/posts/petergyang_peter-openclaw-creators-ai-coding-workflow-activity-7423802347858092032-gJgH)).
 - Pro: minimal, billig, entspricht der persönlichen Empfehlung des OpenClaw-Creators.
 - Contra: Einzelmeinung gegen Mehrheits-Evidenz; für IaC4-Größe (Review-Gate, Autor≠Reviewer, Issue #37) ist mindestens eine Rollen-Trennung nötig; Vergleich mit OC2 hätte 2+ Variablen (Struktur UND Modell).
-- **Bewertung: verworfen für OC3** (zu großer Sprung, Sicherheits-Gate „Autor ≠ Reviewer" nicht abbildbar). Als mögliche OC1-Nachfolge notiert (OC1 = Vanilla-Baseline bleibt unverändert).
+- **Bewertung: verworfen für OC3** (zu großer Sprung, Sicherheits-Gate „Autor ≠ Reviewer" nicht abbildbar). **OC1 übernimmt diese Rolle seit 2026-08-01 als dritter Benchmark-Arm** (Creator/Vanilla-Baseline, Design 01 Kap. 6.1) — mit expliziten Konstanten, aber ohne Rollen-Agents.
 
 **A3-2: Peer-Spezialisten mit eigenen Channels** — 4 unabhängige Agents, je eigener Telegram-Bot/Channel-Binding (Vorbild: Claire Vo/Lenny: „nine agents", [Lenny's Newsletter](https://www.lennysnewsletter.com/p/openclaw-the-complete-guide-to-building); [docs.openclaw.ai/concepts/multi-agent](https://docs.openclaw.ai/concepts/multi-agent)).
 - Pro: dokumentiertes Muster (Bindings, isolierte Workspaces), klare Trennung.
@@ -123,7 +123,7 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 ### 4.4 Worst-Case & Rollback (P3, AGENTS.md)
 - **Worst-Case 1:** Delegation bricht (Depth-2-Fehler) → Orchestrator liefert nichts mehr, weil er alles delegiert und Kinder fehlschlagen. **Gegenmaßnahme:** `delegationMode` zurück auf `suggest`, `maxSpawnDepth` auf 1 (Config-Änderung, Deploy) — kein Container-Neuaufbau.
 - **Worst-Case 2:** Modell-Override inkonsistent (Instanz-Override vs. all.yml) → falsche Modelle deployt. **Gegenmaßnahme:** Render-Validierung im CI (bestehendes Skript) + BDD-Check `openclaw.bdd.ps1` (Health je Instanz).
-- **Worst-Case 3:** Template-Regression trifft OC1/OC2 (Anforderung 7 verletzt). **Gegenmaßnahme:** CI-Renderdiff (OC1/OC2-Output vorher/nachher muss identisch sein) als Pflicht-Check im Folge-Task.
+- **Worst-Case 3:** Template-Regression trifft Instanzen mit subagents-Feldern (Anforderung 7 verletzt). **Gegenmaßnahme:** Golden-File-Renderdiff (OC1 = committeter Referenz-Render, nur bei bewusster Änderung aktualisieren) + Absence-Assert (Instanzen ohne `subagents_defaults` dürfen keinen `subagents`-Key erhalten — schützt PROD + DEV-ohne-Feld) + Equality-Assert (DEV-OC2/OC3 `subagents_defaults` exakt gerendert). **Bewusste Scope-Entscheidung (Architect MINOR-5):** OC2 hat keinen Golden-File-Byte-Schutz — Regressionen, die nur Instanzen mit `subagents_defaults` betreffen, fallen für OC2 nicht als Renderdiff auf; abgedeckt durch Equality-Assert + Review. Ok als bewusste Grenze.
 - **Rollback-Pfad (korrigiert nach Review R1, Reviewer MAJOR-3):** `enabled: false` **entfernt den Container NICHT** — `tasks/main.yml` skippt die Instanz nur (`when: oc.enabled | default(false)`), es gibt **keinen Teardown-Task** im Repo. Rollback = **manuell** `docker compose -f /srv/openclaw/oc3/docker-compose.yml down` (Config-Volume bleibt erhalten → Re-Enable = alter Zustand). Optional: Teardown-Task in der Rolle als Folge-Task. Kein Prod-Risiko: OC3 läuft nur auf DEV-Target bis Benchmark-Abschluss (PROD-OC3 bleibt disabled).
 
 ---
@@ -159,7 +159,7 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 ### 5.3 Empfehlung OC2 (Config-Delta)
 
 ```yaml
-# group_vars/vps-dev.yml – openclaw_instances, OC2-Eintrag erweitert (per-Instanz, Default-Verhalten für OC1 unverändert):
+# group_vars/vps-dev.yml – openclaw_instances, OC2-Eintrag erweitert; OC1 seit 2026-08-01 aktiver Arm mit expliziten Konstanten (Design 01 Kap. 6.1), PROD-Instanzen weiterhin ohne Felder (Default-Verhalten):
 - name: oc2
   enabled: true
   port: 18790
@@ -196,10 +196,10 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 - **Konstant gehalten (alle 3 Arme):** LLM-Provider (deepseek), Infrastruktur (Docker-Rolle), Secrets-Konvention, Workflow, BDD-Suite, VPS-Hardware, Timeouts (900 s), Concurrency (4), maxChildrenPerAgent (5) — **OC1 erhält dafür explizit dieselben `subagents_defaults` wie OC2** (suggest/1/5/4/900), damit Timeout/Concurrency keine Variable zwischen den Armen sind (bewusste Abweichung vom Doku-Default 8/0, dokumentiert wie OC2).
 - **Dauer:** 14 Tage paralleler DEV-Betrieb (ab Freigabe), Auswertung danach.
 - **Blindheit (realistisch, Review R1):** Echte Blindheit ist bei Live-PR-Kommentaren nicht herstellbar (GitHub-Metadaten + Stil verraten die Instanz). Stattdessen: **Outputs instanzfremd erfassen** (getrennte Dateien ohne Instanz-Kennzeichnung), Adjudikation durch Harald anhand definierter Ground Truth, Auswertung deskriptiv (s. 6.4). Keine „Blindheit"-Behauptung im Protokoll.
-- **Ressourcen-Interferenz (Architect MINOR-4):** Beide Instanzen parallel auf 6 vCore/8 GB verrauschen Zykluszeit-Metriken → Tasks **zeitlich entzerren** (nicht gleichzeitig starten) + `docker stats` als Kovariate im Log.
+- **Ressourcen-Interferenz (Architect MINOR-4):** Drei Instanzen parallel auf 6 vCore/8 GB verrauschen Zykluszeit-Metriken → Tasks **zeitlich entzerren** (nicht gleichzeitig starten) + `docker stats` als Kovariate im Log (V5).
 
 ### 6.2 Aufgaben (identisch je Instanz OC1/OC2/OC3, rotierend, Worktree-Pflicht je Instanz — Issue #29)
-1. **T1 – PR-Review (Kern-Test):** **Diff-Snapshot als Datei** je Instanz ausrollen (nicht der Live-PR — beide Reviewer sehen sich sonst gegenseitig, Kontamination; Reviewer MAJOR-4). Seed-Defekte (bewusst eingebaute Fehler) als Ground Truth; Reviewer-Outputs in getrennten Dateien ablegen, Reihenfolge rotieren. Adjudikation: Harald oder Zweit-Reviewer gegen Ground-Truth-Liste.
+1. **T1 – PR-Review (Kern-Test):** **Diff-Snapshot als Datei** je Instanz ausrollen (nicht der Live-PR — die Reviewer der drei Arme sehen sich sonst gegenseitig, Kontamination; Reviewer MAJOR-4). Seed-Defekte (bewusst eingebaute Fehler) als Ground Truth; Reviewer-Outputs in getrennten Dateien ablegen, Reihenfolge rotieren. Adjudikation: Harald oder Zweit-Reviewer gegen Ground-Truth-Liste.
 2. **T2 – Architektur-Review:** gleiche ADR/Design-Frage (5W) durch Architect; Ground Truth = Konsens-Urteil aus IaC4-Methodik.
 3. **T3 – Implementierung:** gleiche, klar spezifizierte Aufgabe (z.B. „BDD-Fix nach Spezifikation") — **je Instanz getrennter Worktree/Branch** (Kollisionsgefahr, Issue #29); Ergebnis = Diff + Testlauf.
 4. **T4 – Such-/Recherche-Aufgabe:** gleiche Web-Recherche (Evidenzpflicht) — testet Tool-Nutzung; Ground Truth = Quellenqualität (offizielle Doku/Vendor-Docs).
@@ -220,7 +220,7 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 2. Bei Qualitäts-Gleichstand: günstigere Instanz (frische Tokens).
 3. Bei Gleichstand in 1+2: Zykluszeit.
 4. **T2–T4 fließen als Zusatzbefunde ein** (nicht in die Rangfolge; dokumentiert pro Task) — Review R1 MINOR-4.
-5. **OC1-Sonderfall:** Gewinnt die Vanilla-Baseline (OC1) — bestätigt die Creator-These empirisch; dann wird bewertet, ob der Mehraufwand von OC2/OC3 (Rollen, Depth) durch Qualitätsgewinn gerechtfertigt ist (Entscheidung Harald).
+5. **OC1-Sonderfall:** Gewinnt die Vanilla-Baseline (OC1) — **Schwellwert wie Regel 1** (≥2 echte Blocker-Differenz über ≥5 T1-Läufe, adjudiziert) — bestätigt die Creator-These empirisch; dann wird bewertet, ob der Mehraufwand von OC2/OC3 (Rollen, Depth) durch Qualitätsgewinn gerechtfertigt ist (Entscheidung Harald). **Gegenfall explizit:** Sind OC2=OC3 gleichauf und OC1 deutlich schlechter (≥2-Blocker-Differenz gegen beide), gilt die Creator-These als widerlegt und das Ranking entscheidet zwischen OC2/OC3 nach Kriterien 1–3.
 6. **Abbruchkriterium:** Eine Instanz scheitert in 3 aufeinanderfolgenden T1-Läufen schwer (Delegation/Depth-Fehler, unbrauchbare Outputs) → Instanz pausieren, Befund dokumentieren.
 
 ### 6.5 Auswertung & Übergang
