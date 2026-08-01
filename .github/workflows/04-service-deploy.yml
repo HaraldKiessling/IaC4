@@ -3,7 +3,6 @@
 #   Ein Workflow mit Playbook-Selektion: docker-traefik | services
 #   Reihenfolge (Operator-Verantwortung, ADR-024): 1. docker-traefik, 2. services
 #   Vorbedingung: Workflow 03 (Baseline) gelaufen, VPS via Tailscale erreichbar.
-#   Pflicht-Secret fuer Traefik (ADR-019): TRAEFIK_DASHBOARD_AUTH ("user:<bcrypt-hash>")
 #   Generierung: htpasswd -nbB <user> <passwort>  ->  user:$2y$05$...
 # =============================================================================
 name: "04 – Service-Deploy (Docker/Traefik/Ollama, ADR-024)"
@@ -38,7 +37,6 @@ jobs:
     env:
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
-      TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
       CODE_SERVER_PASSWORD: ${{ secrets.CODE_SERVER_PASSWORD }}
       CODE_SERVER_SUDO_PASSWORD: ${{ secrets.CODE_SERVER_SUDO_PASSWORD }}
 
@@ -57,11 +55,6 @@ jobs:
           [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt"; FAIL=1; }
           [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt"; FAIL=1; }
           [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
-          if [ "${{ inputs.playbook }}" = "docker-traefik" ] && [ -z "$TRAEFIK_DASHBOARD_AUTH" ]; then
-            echo "❌ Secret TRAEFIK_DASHBOARD_AUTH fehlt (Pflicht für Traefik, ADR-019)"
-            echo "   Generierung: htpasswd -nbB <user> <passwort>  (Format: user:<bcrypt-hash>)"
-            FAIL=1
-          fi
           if [ "${{ inputs.playbook }}" = "services" ] && { [ -z "$CODE_SERVER_PASSWORD" ] || [ -z "$CODE_SERVER_SUDO_PASSWORD" ]; }; then
             echo "❌ Secrets CODE_SERVER_PASSWORD/CODE_SERVER_SUDO_PASSWORD fehlen (Pflicht für services-Lauf, K2-2)"
             FAIL=1

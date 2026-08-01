@@ -1,17 +1,12 @@
-# Traefik Dynamic Config (ADR-019): Dashboard nur via EntryPoint :8080 + BasicAuth.
-# Credentials aus GH-Secret TRAEFIK_DASHBOARD_AUTH ("user:<bcrypt-hash>"), nie im Repo.
+# Traefik Dynamic Config (ADR-019): Dashboard via Serve (Root-Mount) + Host-Rule.
+# Serve strippt Mount-Prefixe -> KEIN /dashboard-Serve-Mount; Root "/" -> localhost:80 (IaC3-Muster).
+# Router: Host(<fqdn>) + PathPrefix(/api|/dashboard) auf web (+ dashboard fuer Direktzugriff).
+# Schutz: UFW R7/R8 (80/8080 CGNAT-only) + Serve tailnet only; keine Middleware (Traefik-v3-Bug #10653).
 http:
   routers:
     dashboard:
-      rule: "PathPrefix(`/api`) || PathPrefix(`/dashboard`)"
+      rule: "Host(`{{ traefik_fqdn }}`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
       entryPoints:
+        - web
         - dashboard
       service: api@internal
-      middlewares:
-        - dashboard-auth
-
-  middlewares:
-    dashboard-auth:
-      basicAuth:
-        users:
-          - "{{ traefik_dashboard_auth }}"

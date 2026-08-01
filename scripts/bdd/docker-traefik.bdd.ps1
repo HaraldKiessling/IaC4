@@ -9,6 +9,8 @@ param(
     [Parameter(Mandatory)][string]$VpsUser,
     [Parameter(Mandatory)][string]$SshKeyPath,
     [Parameter(Mandatory)][string]$PublicIp,
+    [Parameter(Mandatory)][string]$ExpectedHostname,
+    [Parameter(Mandatory)][string]$Tailnet,
     [string]$DockerNetwork = "traefik-network",
     [string]$OllamaModel = "nomic-embed-text"
 )
@@ -25,7 +27,7 @@ When "docker version abgefragt wird"
 Then-True "Docker-Server antwortet" ($r.ExitCode -eq 0 -and $r.Output -match '^\d+\.\d+') $r.Output
 $r = Invoke-SSH "docker compose version" $VpsUser $VpsIp $SshKeyPath
 When "docker compose version abgefragt wird"
-Then-True "Compose-Plugin vorhanden" ($r.ExitCode -eq 0 -and $r.Output -match 'v2') $r.Output
+Then-True "Compose-Plugin vorhanden" ($r.ExitCode -eq 0 -and $r.Output -match 'v\d+(\.\d+)*') $r.Output
 
 # ── D2: deploy-user NICHT in docker-Gruppe (ADR-016) ──
 Write-Host "`nScenario: deploy-user hat keine docker-Gruppen-Mitgliedschaft (ADR-016)" -ForegroundColor Yellow
@@ -55,21 +57,22 @@ $r = Invoke-SSH "sudo ss -tlnp | grep ':443 ' | grep -v tailscaled || echo NO_44
 When "ss -tlnp auf Port 443 geprüft wird (tailscaled ausgenommen)"
 Then-True "Kein 443-Listener außer tailscaled" ($r.Output -match 'NO_443') $r.Output
 
-# ── D6: Dashboard-Auth greift (ADR-019) ──
-Write-Host "`nScenario: Traefik-Dashboard verlangt Authentifizierung (ADR-019)" -ForegroundColor Yellow
-Given "dashboard-Router hat BasicAuth-Middleware"
-$r = Invoke-SSH "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/dashboard/" $VpsUser $VpsIp $SshKeyPath
-When "das Dashboard ohne Credentials abgerufen wird"
-Then-True "HTTP 401 ohne Auth" ($r.Output.Trim() -eq '401') $r.Output
+# ── D6: Dashboard erreichbar – Auth via Tailscale-IP-Allowlist (ADR-019, IaC3-Muster) ──
+Write-Host "`nScenario: Traefik-Dashboard antwortet (ADR-019, IP-Allowlist)" -ForegroundColor Yellow
+Given "Router: Host(fqdn) && PathPrefix(/api|/dashboard) auf web+dashboard (IaC3-Muster)"
+$Fqdn = "$ExpectedHostname.$Tailnet"
+$r = Invoke-SSH "curl -s -o /dev/null -w '%{http_code}' -H 'Host: $Fqdn' http://127.0.0.1:8080/dashboard/" $VpsUser $VpsIp $SshKeyPath
+When "das Dashboard lokal mit Host-Header abgerufen wird"
+Then-True "HTTP 200 (war: $($r.Output.Trim()))" ($r.Output.Trim() -eq '200') $r.Output
 
 # ── D7: Firewall – UFW-CGNAT (R7-R9) + DOCKER-USER (R10/R11) ──
 Write-Host "`nScenario: Firewall-Regeln für Service-Ports (Firewall-Konzept R7-R11)" -ForegroundColor Yellow
 Given "Firewall-Konzept R7-R9 (UFW) und R10/R11 (DOCKER-USER, Docker-published Ports)"
 $r = Invoke-SSH "sudo ufw status verbose" $VpsUser $VpsIp $SshKeyPath
 When "ufw status verbose abgefragt wird"
-Then-True "Port 80 CGNAT-Allow" ($r.Output -match '80/tcp\s+ALLOW\s+FROM\s+100\.64\.0\.0/10') $r.Output
-Then-True "Port 8080 CGNAT-Allow" ($r.Output -match '8080/tcp\s+ALLOW\s+FROM\s+100\.64\.0\.0/10') $r.Output
-Then-True "Port 11434 CGNAT-Allow" ($r.Output -match '11434/tcp\s+ALLOW\s+FROM\s+100\.64\.0\.0/10') $r.Output
+Then-True "Port 80 CGNAT-Allow" ($r.Output -match '80/tcp\s+ALLOW IN\s+100\.64\.0\.0/10') $r.Output
+Then-True "Port 8080 CGNAT-Allow" ($r.Output -match '8080/tcp\s+ALLOW IN\s+100\.64\.0\.0/10') $r.Output
+Then-True "Port 11434 CGNAT-Allow" ($r.Output -match '11434/tcp\s+ALLOW IN\s+100\.64\.0\.0/10') $r.Output
 $r = Invoke-SSH "sudo iptables -S DOCKER-USER" $VpsUser $VpsIp $SshKeyPath
 When "iptables -S DOCKER-USER abgefragt wird"
 Then-True "DOCKER-USER: CGNAT-ACCEPT für 80/8080/11434/6333/6334" ($r.Output -match '100\.64\.0\.0/10.*80,8080,11434,6333,6334.*ACCEPT') $r.Output
@@ -81,6 +84,8 @@ Given "HTTPS-Certificates im Tailnet aktiviert (IaC3-Bestand)"
 $r = Invoke-SSH "sudo tailscale serve status" $VpsUser $VpsIp $SshKeyPath
 When "tailscale serve status abgefragt wird"
 Then-True "Serve-Route auf localhost:80 vorhanden" ($r.Output -match 'localhost:80') $r.Output
+Then-True "KEIN /dashboard-Mount (Serve strippt Prefixe -> Host-Rule-Ansatz)" ($r.Output -notmatch '/dashboard') $r.Output
+Then-True "KEIN /api-Mount (Serve strippt Prefixe)" ($r.Output -notmatch '\|-- /api') $r.Output
 
 # ── O1: Ollama-Container läuft, API antwortet (ADR-021) ──
 Write-Host "`nScenario: Ollama-API ist erreichbar (ADR-021)" -ForegroundColor Yellow
@@ -125,3 +130,17 @@ foreach ($port in @('80', '11434', '6333')) {
 $extJoined = $ext -join ', '
 When "die Public-IP-Ports vom Runner (Internet) abgerufen werden"
 Then-True "Kein HTTP-Response von außen (Timeout/Filtered): $extJoined" ($extJoined -notmatch '=(200|4\d\d|5\d\d)') $extJoined
+
+# ── D10: Dashboard via HTTPS über das Tailnet (Erwartung Harald 2026-08-01) ──
+Write-Host "`nScenario: Dashboard ist via HTTPS erreichbar (https://<fqdn>/dashboard/ → 200)" -ForegroundColor Yellow
+Given "Serve Root-Mount / → localhost:80; Router Host-Rule matcht (IaC3-Muster)"
+# TS_TAILNET enthaelt bereits ".ts.net" (GitHub-Secret) -> FQDN robust bauen
+if ($Tailnet -match '\.ts\.net$') { $Fqdn = "$ExpectedHostname.$Tailnet" } else { $Fqdn = "$ExpectedHostname.$Tailnet.ts.net" }
+# MagicDNS ist auf GH-Runnern nicht verfuegbar -> --resolve auf die Tailscale-IP (VpsIp)
+$resp = & curl -sk --connect-timeout 8 --resolve "${Fqdn}:443:${VpsIp}" -w "`n%{http_code}|%{content_type}" "https://$Fqdn/dashboard/" 2>&1
+$meta = ($resp -split "`n")[-1]
+$code = $meta.Split('|')[0].Trim()
+$ctype = $meta.Split('|')[1].Trim()
+When "HTTPS-GET auf https://$Fqdn/dashboard/ ausgeführt wird (Runner im Tailnet)"
+Then-True "HTTP 200 (war: $code)" ($code -eq '200') $code
+Then-True "Content-Type text/html (war: $ctype)" ($ctype -match 'text/html') $ctype

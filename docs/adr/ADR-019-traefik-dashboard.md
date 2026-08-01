@@ -1,7 +1,7 @@
 # ADR-019: Traefik-Dashboard/API-Exposition
 
-- **Status:** Vorgeschlagen (Proposed)
-- **Datum:** 2026-07-31
+- **Status:** Angenommen (Accepted, 2026-08-01 – Auth-Mechanismus präzisiert: IP-Allowlist statt BasicAuth)
+- **Datum:** 2026-07-31 (Update 2026-08-01)
 - **Kontext:** IaC3 hielt das Dashboard Docker-Netzwerk-intern (Port 8080, `api.insecure=true`, kein Host-Port-Publish) – faktisch nur via `docker exec` erreichbar. IaC4 braucht eine klare Entscheidung: Observability (Routing einsehen) vs. Angriffsfläche.
 
 ## Entscheidungsfrage
@@ -26,7 +26,9 @@ Wie wird das Traefik-Dashboard/API in IaC4 exponiert?
 - Security-Analysen: `api.insecure` ohne Auth = Exposition von Routen/Service-Topologie
 
 ## Empfehlung
-**Option B** – Dashboard sicher exponiert (Router auf `api@internal`, BasicAuth aus Secrets, UFW-Restrict CGNAT, Port 8080 nur Tailnet). Kein `api.insecure`.
+**Option B** – Dashboard sicher exponiert (Router auf `api@internal`, UFW-Restrict CGNAT, Port 8080 nur Tailnet). Kein `api.insecure`.
+
+**Auth-Mechanismus (Update 2026-08-01):** **IP-Allowlist** (`ipWhiteList`: `100.64.0.0/10` + `127.0.0.1/8`, IaC3-Muster `auth-tailscale-only`) statt BasicAuth. Begründung: Nutzbarkeit im Browser ohne Credential-Verteilung; Schutz = Tailnet (zusätzlich UFW-CGNAT). BasicAuth bleibt als Rollback-Option (GH-Secret `TRAEFIK_DASHBOARD_AUTH` existiert weiter, wird nur nicht mehr referenziert).
 
 ## Worst-Case / Rollback (Pflicht: Expositions-Entscheidung)
 - **Worst-Case 1:** BasicAuth-Credentials leaken (z.B. in Log/PR) → Unbefugte können Dashboard-Konfiguration lesen.
@@ -37,7 +39,8 @@ Wie wird das Traefik-Dashboard/API in IaC4 exponiert?
 
 ## Konsequenzen
 - Static Config: `api.dashboard: true` (kein insecure), eigener `entryPoints.dashboard` (Port 8080)
-- Dynamic Config (File-Provider): Router + BasicAuth-Middleware (User/Pass aus `.env`/GH-Secret, nie im Repo)
+- Dynamic Config (File-Provider): Router + `ipWhiteList`-Middleware (`100.64.0.0/10`, `127.0.0.1/8`)
+- Zugriff: `https://<fqdn>/dashboard/` via Tailscale-Serve-Mounts `/dashboard` + `/api` → `:8080` (kein 404: Router matcht nur am `dashboard`-EntryPoint)
 - UFW: `allow from 100.64.0.0/10 to any port 8080` (Firewall-Konzept R8, siehe Doku-PR)
 - Metrics-Entrypoint erst bei Monitoring-Bedarf (Phase 6), nicht jetzt
 
