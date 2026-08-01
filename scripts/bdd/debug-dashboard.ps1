@@ -20,7 +20,7 @@ Write-Host "  $($dns -join ' ')"
 
 Write-Host "`n[2] Runner curl -v https mit --resolve (TLS/Connect):"
 $v = & curl -sv --connect-timeout 8 --resolve "${Fqdn}:443:${VpsIp}" -o /dev/null "https://$Fqdn/dashboard/" 2>&1
-$v | Select-String -Pattern 'Trying|Connected|SSL connection|HTTP/|refused|timed out|Could not|error|alert' | ForEach-Object { Write-Host "  $($_.Line.Trim())" }
+$v | Select-String -Pattern 'Trying|Connected|SSL connection|HTTP/|refused|timed out|Could not|error|alert' | ForEach-Object { if ($_.Line) { Write-Host "  $($_.Line.Trim())" } }
 
 Write-Host "`n[2b] Tailscale-API: httpsCertsEnabled? (Tailnet-weit)"
 $api = & curl -sS --max-time 15 "https://api.tailscale.com/api/v2/tailnet/$env:TS_TAILNET/dns/config" -H "Authorization: Bearer $env:TS_TOKEN" 2>&1
@@ -68,8 +68,10 @@ foreach ($path in @('/', '/dashboard/', '/dashboard')) {
     $h = @(& curl -sk --connect-timeout 8 --resolve "${Fqdn}:443:${VpsIp}" -D - -o /dev/null "https://$Fqdn$path" 2>&1)
     if ($h.Count -eq 0) { $h = @('(keine Antwort)') }
     $code = ($h -join "`n" -split "`n")[0].Trim()
-    $srv = ($h | Select-String -Pattern '^server:' | Select-Object -First 1).Line.Trim()
-    $loc = ($h | Select-String -Pattern '^location:' | Select-Object -First 1).Line.Trim()
+    $srvM = $h | Select-String -Pattern '^server:' | Select-Object -First 1
+    $locM = $h | Select-String -Pattern '^location:' | Select-Object -First 1
+    $srv = if ($srvM) { $srvM.Line.Trim() } else { '-' }
+    $loc = if ($locM) { $locM.Line.Trim() } else { '-' }
     Write-Host "  $path -> $code | $srv | $loc"
 }
 
