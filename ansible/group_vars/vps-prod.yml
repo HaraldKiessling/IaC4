@@ -29,7 +29,7 @@ openclaw_instances:
     websearch_api_key_env: "PROD_OC2_WEBSEARCH_API_KEY"
     gateway_token_env: "PROD_OC2_GATEWAY_TOKEN"
     telegram_bot_token_env: "PROD_OC2_TELEGRAM_BOT_TOKEN"
-    agents: [Orchestrator, Architekt, "Engineer Pro", Reviewer]
+    agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
   - name: oc3
     enabled: false
     port: 18791

@@ -87,9 +87,9 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 
 | # | Szenario | Then-Assertion |
 | --- | --- | --- |
-| O1 | Health je aktiver Instanz via HTTPS (TS-Serve-TLS) | Runner → `https://<fqdn>:<port>/` → HTTP 200 (oc1:18789, oc2:18790) |
+| O1 | Health je aktiver Instanz via HTTPS (TS-Serve-TLS) | Runner → `https://<fqdn>:<port>/health` → HTTP 200 + Body `"ok"` (oc1:18789, oc2:18790) |
 | O2 | Gateway-Ports von außen dicht | Runner → `http://<Public-IP>:18789/18790/18791` → kein HTTP-Response |
-| O3 | `openclaw.json` (SSoT) je Instanz vorhanden | `/srv/openclaw/<name>/config/openclaw.json` existiert |
+| O3 | `openclaw.json` (SSoT) je Instanz vorhanden + JSON-valid | Existenz + `python3 -m json.tool` (Exit 0) |
 | O4 | Geplante Instanz nicht deployed | `docker ps` → kein Container `openclaw-oc3` (enabled=false) |
 
 ### Geplant (sobald Services deployt sind)

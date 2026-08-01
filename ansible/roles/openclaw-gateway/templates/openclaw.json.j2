@@ -52,8 +52,9 @@
   "tools": {
     "web": {
       "search": {
-        "provider": "perplexity"
-      }
+{% if oc_websearch_api_key | default('') | length > 0 %}        "provider": "perplexity"
+{% else %}        "provider": "none"
+{% endif %}      }
     }
   },
   "models": {

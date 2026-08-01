@@ -35,6 +35,7 @@ jobs:
 
       - name: OpenClaw-Templates rendern + validieren (K2-3)
         run: |
+          python3 -m pip install --quiet pyyaml jinja2
           python3 scripts/validate-openclaw-templates.py
 
       - name: Check arc42 Living Docs (hart)

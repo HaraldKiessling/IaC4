@@ -44,7 +44,7 @@ openclaw_agent_models:
   Orchestrator:
     primary: "deepseek/deepseek-v4-flash"
     fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
-  Architekt:
+  Architect:   # RFC-0040/IaC3-Konvention (N3); ID wird "architect"
     primary: "deepseek/deepseek-v4-pro"
     fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
   "Engineer Pro":

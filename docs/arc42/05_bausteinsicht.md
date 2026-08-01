@@ -16,7 +16,9 @@ IaC4
 │   ├── 00-generate-ssh-key.yml              → SSH-Key-Paar generieren
 │   ├── 01-tailscale-terraform.yml           → Tailscale OAuth + ACLs (Terraform Plan/Apply)
 │   ├── 02-tailscale-bootstrap.yml           → Phase 2a+2b (via Public-IP, schliesst SSH)
-│   └── 03-baseline-deploy.yml               → Phase 1 (via Tailscale-IP)
+│   ├── 03-baseline-deploy.yml               → Phase 1 (via Tailscale-IP)
+│   ├── 04-service-deploy.yml              → Phase 2c-2e Services (Selektor, ADR-024)
+│   └── 04-bdd-tests.yml                   → Post-Deploy-Verifikation (BDD)
 ├── Terraform (Tailscale OAuth-Client)
 │   └── oauth-client.tf                      → Erzeugt Client (tag:ci)
 ├── Docker Compose (Services)
