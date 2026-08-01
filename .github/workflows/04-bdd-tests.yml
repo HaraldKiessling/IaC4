@@ -108,4 +108,4 @@ jobs:
             -PublicIp "$PUBLIC_IP" \
             -ExpectedHostname "vps-${{ inputs.target }}" \
             -Instances "${{ inputs.target == 'dev' && 'oc1,oc2,oc3' || 'oc1,oc2' }}" \
-            -DisabledInstances "${{ inputs.target == 'dev' && '' || 'oc3' }}"
+            -DisabledInstances "${{ inputs.target == 'prod' && 'oc3' || '' }}"

@@ -88,8 +88,10 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
         except Exception as ex:
             failures.append(f"{tf}/{oc['name']}: {ex}")
 
-# Golden-File-Renderdiff (RFC 4.4 Worst-Case 3, DoD Issue #63): OC1 muss byte-identisch
-# zum committeten Referenz-Render bleiben – fängt Byte-/Whitespace-Regressionen.
+# Golden-File-Renderdiff (RFC 4.4 Worst-Case 3, DoD Issue #63): OC1-Render (kanonische
+# JSON-Form) muss identisch zum committeten Referenz-Render bleiben – fängt semantische
+# Template-Regressionen (W2: reine Formatierungs-/Whitespace-Änderungen erfasst diese
+# kanonische Form bewusst nicht; Byte-Identität wird separat im Review verifiziert).
 GOLDEN = f'{ROOT}/../scripts/validate/golden/oc1-openclaw.json'
 try:
     with open(GOLDEN) as gf:
