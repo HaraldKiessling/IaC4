@@ -12,7 +12,9 @@ param(
     [string]$OAuthClientId = $env:TS_CLIENT_ID,
     [string]$OAuthClientSecret = $env:TS_CLIENT_SECRET,
     [Parameter(Mandatory)][string]$ExpectedHostname,
-    [string]$ExpectedTz = "Europe/Berlin"
+    [string]$ExpectedTz = "Europe/Berlin",
+    [string]$Instances = "oc1,oc2,oc3",
+    [string]$DisabledInstances = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,7 +30,7 @@ Write-Host "Start: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')`n"
 & "$PSScriptRoot/system-baseline.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -ExpectedTz $ExpectedTz
 & "$PSScriptRoot/docker-traefik.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -PublicIp $PublicIp -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet
 & "$PSScriptRoot/qdrant.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet
-& "$PSScriptRoot/openclaw.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -PublicIp $PublicIp -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet
+& "$PSScriptRoot/openclaw.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -PublicIp $PublicIp -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet -Instances $Instances -DisabledInstances $DisabledInstances
 
 Write-Host "`n═══ Zusammenfassung ═══" -ForegroundColor Cyan
 Write-Host "  ✅ Bestanden: $global:BDD_PASS"

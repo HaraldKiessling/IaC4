@@ -36,7 +36,7 @@ Wie wird das OpenClaw-Gateway auf dem IaC4-VPS betrieben — und wie werden mehr
 
 ## Konsequenzen
 - Rolle `openclaw-gateway`: Container-Deploy pro Instanz (Compose-Template, openclaw.json.j2, Health-Wait, Serve-Task)
-- Instanz-Struktur: OC1 (Default, WebUI+Telegram+Memory+WebSearch+LLM), OC2 (zusätzlich Agents orchestrator/architect/reviewer/engineer), OC3 (geplant, disabled)
+- Instanz-Struktur: OC1 (Default, WebUI+Telegram+Memory+WebSearch+LLM), OC2 (zusätzlich Agents orchestrator/architect/reviewer/engineer), OC3 (DEV: aktiv als Best-Practice-Referenz seit 2026-08-01, RFC 01-oc2-oc3-benchmark; PROD: disabled bis Benchmark-Abschluss)
 - Secrets je Instanz als GH-Secrets (`OC<n>_TELEGRAM_BOT_TOKEN`, `OC<n>_LLM_API_KEY`, `OC<n>_WEBSEARCH_API_KEY`); Workflow reicht sie als env durch
 - Kein Host-Node/pnpm mehr; alte native Rolle ersetzt
 - BDD: `openclaw.bdd.ps1` (Health je Instanz via HTTPS, Ports von außen dicht, Serve-Routen)
