@@ -1,11 +1,11 @@
-# Design: OpenClaw-Instanz-Benchmark OC2 vs. OC3
+# Design: OpenClaw-Instanz-Benchmark OC1–OC3 (OC2 vs. OC3, mit OC1-Creator-Baseline)
 
 - **Status:** Vorgeschlagen — Review abgeschlossen: R1 (Architect + Reviewer) eingearbeitet, R2 = ✅ FREIGABE (Reviewer), externer Architect-Review (IaC3-Workspace) = ✅ APPROVE, Befunde N1–N5 eingearbeitet
 - **Datum:** 2026-08-01
 - **Autor:** ✨ Nova (Orchestrator)
 - **Review R1:** 🏗️ Architect (APPROVED MIT BEFUNDEN, 4 MAJOR/7 MINOR) + 🔍 Reviewer (KEINE FREIGABE, 0 Blocker/4 MAJOR/7 MINOR) — Befunde verifiziert und vollständig eingearbeitet (2026-08-01)
 - **Bezug:** ADR-025 (Multi-Instanz OC1-OC3), `docs/workflows/methodology.md`, Migrationsplan Phase 5
-- **Ziel:** Evidenzbasiertes Design für OC3 („Future Purpose") **und** Vervollständigung von OC2 („DevOps Team"), plus Benchmark-Protokoll für einen kontrollierten A/B-Vergleich.
+- **Ziel:** Evidenzbasiertes Design für OC3 („Future Purpose") **und** Vervollständigung von OC2 („DevOps Team"), plus Benchmark-Protokoll für einen kontrollierten Vergleich — **erweitert um OC1 als dritten Arm** (Harald 2026-08-01): Vanilla/Creator-Baseline, testet die These des OpenClaw-Creators (Peter Gyang: „ein einzelner Agent reicht, keine komplexen Orchestratoren").
 
 ---
 
@@ -184,14 +184,19 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 
 ## 6. Benchmark-Protokoll (A/B, kontrolliert)
 
-### 6.1 Design
-- **Getestete Variable (Bündel, s. Kap. 1):** Sub-Agent-Betriebskonfiguration (Modell-Zuordnung, allowAgents/Rollen-IDs, Delegation/Depth).
-- **Konstant gehalten:** LLM-Provider (deepseek), Infrastruktur (Docker-Rolle), Secrets-Konvention, Workflow, BDD-Suite, VPS-Hardware, Timeouts (900 s), Concurrency (4), maxChildrenPerAgent (5).
+### 6.1 Design (3 Arme — OC1-Baseline ergänzt, Harald 2026-08-01)
+- **Getestete Variable (Bündel, s. Kap. 1):** Sub-Agent-Betriebskonfiguration (Modell-Zuordnung, allowAgents/Rollen-IDs, Delegation/Depth, Vorhandensein von Rollen-Agents).
+- **Die 3 Arme (dokumentierte Community-Positionen):**
+  - **OC1 – Creator/Vanilla-Baseline:** kein `agents.list` (Single-Agent), `suggest`/Depth-1, keine Rollen-IDs (Peter-Gyang-These). Konstanten identisch zu OC2/OC3 (s. u.).
+  - **OC2 – DevOps-Team (Ist, Kontrollgruppe):** 4 Rollen-Agents, `suggest`/Depth-1, keine `allowAgents`.
+  - **OC3 – Best-Practice-Referenz:** 4 Rollen-Agents, `prefer`/Depth-2, `allowAgents` + Modell-Invertierung.
+  - **Variablen-Paare:** OC1↔OC2 = „Single-Agent vs. Rollen-Team" (bei sonst identischer Sub-Agent-Config); OC2↔OC3 = „Delegation/Depth/Modelle" (bei identischer Team-Struktur). OC1↔OC3 = kombinierter Unterschied.
+- **Konstant gehalten (alle 3 Arme):** LLM-Provider (deepseek), Infrastruktur (Docker-Rolle), Secrets-Konvention, Workflow, BDD-Suite, VPS-Hardware, Timeouts (900 s), Concurrency (4), maxChildrenPerAgent (5) — **OC1 erhält dafür explizit dieselben `subagents_defaults` wie OC2** (suggest/1/5/4/900), damit Timeout/Concurrency keine Variable zwischen den Armen sind (bewusste Abweichung vom Doku-Default 8/0, dokumentiert wie OC2).
 - **Dauer:** 14 Tage paralleler DEV-Betrieb (ab Freigabe), Auswertung danach.
 - **Blindheit (realistisch, Review R1):** Echte Blindheit ist bei Live-PR-Kommentaren nicht herstellbar (GitHub-Metadaten + Stil verraten die Instanz). Stattdessen: **Outputs instanzfremd erfassen** (getrennte Dateien ohne Instanz-Kennzeichnung), Adjudikation durch Harald anhand definierter Ground Truth, Auswertung deskriptiv (s. 6.4). Keine „Blindheit"-Behauptung im Protokoll.
 - **Ressourcen-Interferenz (Architect MINOR-4):** Beide Instanzen parallel auf 6 vCore/8 GB verrauschen Zykluszeit-Metriken → Tasks **zeitlich entzerren** (nicht gleichzeitig starten) + `docker stats` als Kovariate im Log.
 
-### 6.2 Aufgaben (identisch je Instanz, rotierend, Worktree-Pflicht je Instanz — Issue #29)
+### 6.2 Aufgaben (identisch je Instanz OC1/OC2/OC3, rotierend, Worktree-Pflicht je Instanz — Issue #29)
 1. **T1 – PR-Review (Kern-Test):** **Diff-Snapshot als Datei** je Instanz ausrollen (nicht der Live-PR — beide Reviewer sehen sich sonst gegenseitig, Kontamination; Reviewer MAJOR-4). Seed-Defekte (bewusst eingebaute Fehler) als Ground Truth; Reviewer-Outputs in getrennten Dateien ablegen, Reihenfolge rotieren. Adjudikation: Harald oder Zweit-Reviewer gegen Ground-Truth-Liste.
 2. **T2 – Architektur-Review:** gleiche ADR/Design-Frage (5W) durch Architect; Ground Truth = Konsens-Urteil aus IaC4-Methodik.
 3. **T3 – Implementierung:** gleiche, klar spezifizierte Aufgabe (z.B. „BDD-Fix nach Spezifikation") — **je Instanz getrennter Worktree/Branch** (Kollisionsgefahr, Issue #29); Ergebnis = Diff + Testlauf.
@@ -209,14 +214,15 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 
 ### 6.4 Entscheidungskriterien (vorab festgelegt; deskriptiv, Review R1 MAJOR-3)
 **Kein Signifikanztest bei n=5** — der Schwellwert ist ein pragmatisches Abbruch-/Präferenzkriterium, kein statistischer Beleg. Auswertung deskriptiv; bei Bedarf n≥10 T1-Läufe als Verlängerung.
-1. **Qualität gewinnt über Kosten:** Instanz mit mehr echten Blockern (≥2 Differenz über ≥5 T1-Läufe, adjudiziert gegen Ground Truth) wird bevorzugt.
+1. **Qualität gewinnt über Kosten:** Instanz mit mehr echten Blockern (≥2 Differenz über ≥5 T1-Läufe, adjudiziert gegen Ground Truth) wird bevorzugt. **Paarweise Rangfolge OC1/OC2/OC3** (jeder gegen jeden), dann Gesamt-Ranking.
 2. Bei Qualitäts-Gleichstand: günstigere Instanz (frische Tokens).
 3. Bei Gleichstand in 1+2: Zykluszeit.
 4. **T2–T4 fließen als Zusatzbefunde ein** (nicht in die Rangfolge; dokumentiert pro Task) — Review R1 MINOR-4.
-5. **Abbruchkriterium:** OC3 scheitert in 3 aufeinanderfolgenden T1-Läufen schwer (Delegation/Depth-Fehler, unbrauchbare Outputs) → OC3 pausieren, Befund dokumentieren.
+5. **OC1-Sonderfall:** Gewinnt die Vanilla-Baseline (OC1) — bestätigt die Creator-These empirisch; dann wird bewertet, ob der Mehraufwand von OC2/OC3 (Rollen, Depth) durch Qualitätsgewinn gerechtfertigt ist (Entscheidung Harald).
+6. **Abbruchkriterium:** Eine Instanz scheitert in 3 aufeinanderfolgenden T1-Läufen schwer (Delegation/Depth-Fehler, unbrauchbare Outputs) → Instanz pausieren, Befund dokumentieren.
 
 ### 6.5 Auswertung & Übergang
-- Ergebnis → Entscheidung Harald → Gewinner-Konfiguration auf Produktiv-Instanz übernehmen (PROD-OC2 oder PROD-OC3), Verlierer-Instanz als Fallback (`enabled: false` + manueller Teardown, s. 4.4).
+- Ergebnis → Entscheidung Harald → Gewinner-Konfiguration auf Produktiv-Instanz übernehmen (PROD-OC1/OC2/OC3 je nach Ausgang), Verlierer-Instanzen als Fallback (`enabled: false` + manueller Teardown, s. 4.4).
 - Gap-Report (Methodik Schritt 8) als Issue/PR-Doku.
 
 ---
