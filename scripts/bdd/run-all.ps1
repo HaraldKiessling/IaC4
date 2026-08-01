@@ -29,7 +29,6 @@ Write-Host "Start: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')`n"
 & "$PSScriptRoot/docker-traefik.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -PublicIp $PublicIp -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet
 & "$PSScriptRoot/qdrant.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet
 & "$PSScriptRoot/openclaw.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -PublicIp $PublicIp -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet
-& "$PSScriptRoot/debug-oc1.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath
 
 Write-Host "`n═══ Zusammenfassung ═══" -ForegroundColor Cyan
 Write-Host "  ✅ Bestanden: $global:BDD_PASS"
