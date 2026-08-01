@@ -41,10 +41,18 @@ openclaw_image: "ghcr.io/openclaw/openclaw"
 openclaw_image_version: "2026.7.1"          # Pin (ADR-017); Update = Variable + Deploy. GHCR-Tag bei Deploy verifizieren
 # Agent-Modell-Matrix (Stand 2026-08-01, bisherige Instanz) – je Instanz referenzierbar
 openclaw_agent_models:
-  Orchestrator: {primary: "deepseek/deepseek-v4-flash", fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]}
-  Architekt:    {primary: "deepseek/deepseek-v4-pro",    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]}
-  "Engineer Pro": {primary: "deepseek/deepseek-v4-flash", fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]}
-  Reviewer:     {primary: "deepseek/deepseek-v4-pro",    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]}
+  Orchestrator:
+    primary: "deepseek/deepseek-v4-flash"
+    fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+  Architekt:
+    primary: "deepseek/deepseek-v4-pro"
+    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+  "Engineer Pro":
+    primary: "deepseek/deepseek-v4-flash"
+    fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+  Reviewer:
+    primary: "deepseek/deepseek-v4-pro"
+    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
 
 # Instanz-Definitionen je Target: group_vars/vps-dev.yml (DEV_-Secrets) und vps-prod.yml (PROD_-Secrets)
 
