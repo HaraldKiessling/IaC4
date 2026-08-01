@@ -59,3 +59,9 @@
   when: "'localhost:6333' not in serve_status.stdout"
   register: serve_set
   changed_when: serve_set.rc == 0
+
+- name: "Tailscale Serve – TCP-Forward 6334 → tcp://localhost:6334 (gRPC, WG-verschluesselt)"
+  ansible.builtin.command: tailscale serve --bg --tcp=6334 tcp://localhost:6334
+  when: "'tcp://localhost:6334' not in serve_status.stdout"
+  register: serve_set_grpc
+  changed_when: serve_set_grpc.rc == 0

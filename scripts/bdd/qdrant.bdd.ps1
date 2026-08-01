@@ -51,3 +51,10 @@ When "GET /collections/$Collection lokal abgefragt wird"
 Then-True "Collection ist vorhanden (HTTP 200)" ($r.ExitCode -eq 0 -and $r.Output -match '"status"\s*:\s*"ok"') $r.Output
 Then-True "Vektor-Dimension 3072" ($r.Output -match '3072') $r.Output
 Then-True "Distance Cosine" ($r.Output -match 'Cosine') $r.Output
+
+# ── Q5: gRPC-Port 6334 via TS-TCP-Forward erreichbar (WG-verschluesselt) ──
+Write-Host "`nScenario: gRPC-Port 6334 ist ueber das Tailnet erreichbar (TCP-Forward)" -ForegroundColor Yellow
+Given "Tailscale Serve forwardet tcp://localhost:6334 (gRPC, kein TLS – WG schuetzt)"
+$r = & timeout 5 bash -c "echo > /dev/tcp/${VpsIp}/6334" 2>&1
+When "eine TCP-Verbindung vom Runner zu ${VpsIp}:6334 aufgebaut wird"
+Then-True "TCP-Connect erfolgreich (Exit 0)" ($LASTEXITCODE -eq 0) $r
