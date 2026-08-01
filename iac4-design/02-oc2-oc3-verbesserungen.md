@@ -81,13 +81,13 @@
 
 ## 4. Empfehlung (Reihenfolge)
 
-1. **PR-Bündel 1 (sofort, nach #64-Merge):** V1 (Healthcheck) + V3 (Teardown) — beide rollen-nah, beide schließen Betriebs-/Rollback-Lücken. **Konfliktanalyse (Review):** `docker-compose.yml.j2` und `tasks/main.yml` sind **nicht** in PR #64 (`dac8bcd`) — Bündel 1 ist konfliktfrei. V2 (`openclaw.json.j2`), V4 (`openclaw.bdd.ps1`/`run-all.ps1`) und V5 (`04-bdd-tests.yml`) **überlappen mit PR-#64-Dateien** → bewusst nach #64-Merge sequenziert.
-2. **PR-Bündel 2 (nach Bündel 1):** V2 (Token-Divergenz, erst DEV-Test) + V4 (Provider-Smoke) — Config-Konsistenz + Laufzeit-Verifikation.
-3. **PR-Bündel 3 (parallel, Docs):** V5 (Kovariate im BDD-Log) + V6 (Backup-Konzept) — Benchmark-Fairness + Dauerhaftigkeit.
+1. **PR-Bündel 1 (sofort, nach #64-Merge):** V1 (Selbstheilung, optional) + V3 (Teardown) — beide rollen-nah, schließen Betriebs-/Rollback-Lücken. **Konfliktanalyse (Review):** `docker-compose.yml.j2` und `tasks/main.yml` sind **nicht** in PR #64 (`dac8bcd`) — Bündel 1 ist konfliktfrei. V2 (`openclaw.json.j2`) und V5 (`04-bdd-tests.yml`) **überlappen mit PR-#64-Dateien** → bewusst nach #64-Merge sequenziert.
+2. **PR-Bündel 2 (nach Bündel 1):** V2 (Token-Divergenz, erst DEV-Test auf OC1) — Config-Konsistenz (Evidenz A+C).
+3. **PR-Bündel 3 (parallel):** V5 (Kovariate im BDD-Log) — Benchmark-Fairness (Evidenz B, deine Entscheidung F4).
 
-**Begründung:** V1/V3 zuerst, weil sie die zwei realen Betriebsrisiken schließen (Hänger-Downtime, manueller Rollback), die aus IaC3-Vorfällen direkt ableitbar sind. V2 braucht einen DEV-Test (Image-Verhalten ENV vs. Config), V4 kostet Requests (bewusst klein halten).
+**Begründung:** V1/V3 zuerst, weil sie Betriebs-/Rollback-Lücken schließen — V3 hat Evidenz A+B (freigegebene RFC-01-Entscheidung), V1 ist Fakt (A) mit optionalem Charakter. V2 braucht einen DEV-Test (Image-Verhalten ENV vs. Config, belegt: ENV gewinnt).
 
-**Benchmark-Neutralität (Review MINOR-6):** V1–V4 und V6 sind **symmetrisch für OC2/OC3** (gleiche Rolle/Templates/BDD für beide Instanzen) und damit benchmark-neutral — sie müssen **vor T1-Start** gemerged sein, damit sie nicht als Confound in die Benchmark-Läufe hineinwirken. V5 (Kovariate) ist der einzige direkte Benchmark-Beitrag (RFC 01 Kap. 6.3).
+**Benchmark-Neutralität (Review MINOR-6):** V1–V3 sind **symmetrisch für OC2/OC3** (gleiche Rolle/Templates/BDD für beide Instanzen) und damit benchmark-neutral — sie müssen **vor T1-Start** gemerged sein, damit sie nicht als Confound in die Benchmark-Läufe hineinwirken. V5 (Kovariate) ist der einzige direkte Benchmark-Beitrag (RFC 01 Kap. 6.3).
 
 ---
 
