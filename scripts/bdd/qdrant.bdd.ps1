@@ -15,7 +15,8 @@ param(
 
 . "$PSScriptRoot/bdd-lib.ps1"
 
-$Fqdn = "$ExpectedHostname.$Tailnet.ts.net"
+# TS_TAILNET enthaelt bereits ".ts.net" (GitHub-Secret) -> FQDN robust bauen
+if ($Tailnet -match '\.ts\.net$') { $Fqdn = "$ExpectedHostname.$Tailnet" } else { $Fqdn = "$ExpectedHostname.$Tailnet.ts.net" }
 $Base = "https://${Fqdn}:6333"
 
 Write-Host "Feature: Qdrant (Phase 2d) – Target: $Fqdn" -ForegroundColor Cyan
