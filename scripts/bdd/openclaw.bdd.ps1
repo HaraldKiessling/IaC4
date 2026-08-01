@@ -30,11 +30,12 @@ foreach ($inst in $Instances.Split(',')) {
     $port = $instPorts[$inst]
     Write-Host "`nScenario: Instanz $inst – Health via HTTPS (TS-TLS, Port $port)" -ForegroundColor Yellow
     Given "Gateway-Container openclaw-$inst laeuft; TS-Serve terminiert TLS auf $port"
-    $resp = & curl -sk --connect-timeout 8 --resolve "${Fqdn}:${port}:${VpsIp}" -w "`n%{http_code}" "https://$Fqdn:$port/health" 2>&1
-    $code = ($resp -split "`n")[-1].Trim()
-    When "HTTPS-GET auf https://$Fqdn:$port/health ausgefuehrt wird (Runner im Tailnet)"
+    $resp = @(& curl -sk --connect-timeout 8 --resolve "${Fqdn}:${port}:${VpsIp}" -w "`n%{http_code}" "https://${Fqdn}:${port}/health" 2>&1)
+    $respJoined = $resp -join "`n"
+    $code = ($respJoined -split "`n")[-1].Trim()
+    When "HTTPS-GET auf https://${Fqdn}:${port}/health ausgefuehrt wird (Runner im Tailnet)"
     Then-True "HTTP 200 (war: $code)" ($code -eq '200') $code
-    Then-True "Health-Body enthaelt ok" ($resp -match '"ok"') $resp
+    Then-True "Health-Body enthaelt ok" ($respJoined -match '"ok"') $respJoined
 }
 
 # ── O2: Ports von aussen (Public-IP) dicht ──
@@ -43,7 +44,7 @@ Given "DOCKER-USER + UFW: Gateway-Ports nur localhost + TS-Serve (tailnet only)"
 $ports = @('18789', '18790', '18791')
 $ext = @()
 foreach ($port in $ports) {
-    $code = & curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "http://$PublicIp:$port/" 2>&1
+    $code = & curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "http://${PublicIp}:${port}/" 2>&1
     & timeout 3 bash -c "echo > /dev/tcp/$PublicIp/$port" 2>$null
     $tcp = if ($LASTEXITCODE -eq 0) { 'OPEN' } else { 'closed' }
     $ext += "$port=$($code.Trim())/$tcp"

@@ -45,6 +45,7 @@
     mode: '0600'
     owner: '1000'
     group: '1000'
+  register: _oc_cfg
 
 - name: "{{ oc.name }}: docker-compose.yml deployen (gepinnt, ADR-017)"
   ansible.builtin.template:
@@ -57,6 +58,13 @@
     project_src: "{{ openclaw_data_root }}/{{ oc.name }}"
     state: present
     pull: always
+
+- name: "{{ oc.name }}: Container neu starten (Config geaendert – Mount-Change triggert kein Recreate)"
+  community.docker.docker_compose_v2:
+    project_src: "{{ openclaw_data_root }}/{{ oc.name }}"
+    state: present
+    restarted: true
+  when: _oc_cfg.changed
 
 - name: "{{ oc.name }}: Auf Health warten (localhost:{{ oc.port }}/health)"
   ansible.builtin.uri:
