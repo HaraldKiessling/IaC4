@@ -16,4 +16,6 @@
   loop: "{{ openclaw_instances }}"
   loop_control:
     loop_var: oc
-  when: oc.enabled | default(false)
+  when:
+    - oc.enabled | default(false)
+    - openclaw_instance_filter == 'all' or oc.name == openclaw_instance_filter

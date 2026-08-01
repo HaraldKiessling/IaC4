@@ -26,6 +26,16 @@ on:
           - docker-traefik
           - services
           - openclaw
+      instance:
+        description: 'OpenClaw-Instanz (nur playbook=openclaw): all | oc1 | oc2 | oc3'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - oc1
+          - oc2
+          - oc3
 
 permissions:
   contents: read
@@ -40,18 +50,42 @@ jobs:
       SSH_KEY: ${{ secrets.SSH_KEY }}
       CODE_SERVER_PASSWORD: ${{ secrets.CODE_SERVER_PASSWORD }}
       CODE_SERVER_SUDO_PASSWORD: ${{ secrets.CODE_SERVER_SUDO_PASSWORD }}
-      OC1_TELEGRAM_BOT_TOKEN: ${{ secrets.OC1_TELEGRAM_BOT_TOKEN }}
-      OC1_LLM_API_KEY: ${{ secrets.OC1_LLM_API_KEY }}
-      OC1_WEBSEARCH_API_KEY: ${{ secrets.OC1_WEBSEARCH_API_KEY }}
-      OC2_TELEGRAM_BOT_TOKEN: ${{ secrets.OC2_TELEGRAM_BOT_TOKEN }}
-      OC2_LLM_API_KEY: ${{ secrets.OC2_LLM_API_KEY }}
-      OC2_WEBSEARCH_API_KEY: ${{ secrets.OC2_WEBSEARCH_API_KEY }}
-      OC1_LLM_PROVIDER: ${{ secrets.OC1_LLM_PROVIDER }}
-      OC2_LLM_PROVIDER: ${{ secrets.OC2_LLM_PROVIDER }}
-      OC1_GOOGLE_API_KEY: ${{ secrets.OC1_GOOGLE_API_KEY }}
-      OC2_GOOGLE_API_KEY: ${{ secrets.OC2_GOOGLE_API_KEY }}
-      OC1_GATEWAY_TOKEN: ${{ secrets.OC1_GATEWAY_TOKEN }}
-      OC2_GATEWAY_TOKEN: ${{ secrets.OC2_GATEWAY_TOKEN }}
+      DEV_OC1_LLM_PROVIDER: ${{ secrets.DEV_OC1_LLM_PROVIDER }}
+      DEV_OC1_LLM_API_KEY: ${{ secrets.DEV_OC1_LLM_API_KEY }}
+      DEV_OC1_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC1_WEBSEARCH_API_KEY }}
+      DEV_OC1_GOOGLE_API_KEY: ${{ secrets.DEV_OC1_GOOGLE_API_KEY }}
+      DEV_OC1_GATEWAY_TOKEN: ${{ secrets.DEV_OC1_GATEWAY_TOKEN }}
+      DEV_OC1_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC1_TELEGRAM_BOT_TOKEN }}
+      DEV_OC2_LLM_PROVIDER: ${{ secrets.DEV_OC2_LLM_PROVIDER }}
+      DEV_OC2_LLM_API_KEY: ${{ secrets.DEV_OC2_LLM_API_KEY }}
+      DEV_OC2_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC2_WEBSEARCH_API_KEY }}
+      DEV_OC2_GOOGLE_API_KEY: ${{ secrets.DEV_OC2_GOOGLE_API_KEY }}
+      DEV_OC2_GATEWAY_TOKEN: ${{ secrets.DEV_OC2_GATEWAY_TOKEN }}
+      DEV_OC2_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC2_TELEGRAM_BOT_TOKEN }}
+      DEV_OC3_LLM_PROVIDER: ${{ secrets.DEV_OC3_LLM_PROVIDER }}
+      DEV_OC3_LLM_API_KEY: ${{ secrets.DEV_OC3_LLM_API_KEY }}
+      DEV_OC3_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC3_WEBSEARCH_API_KEY }}
+      DEV_OC3_GOOGLE_API_KEY: ${{ secrets.DEV_OC3_GOOGLE_API_KEY }}
+      DEV_OC3_GATEWAY_TOKEN: ${{ secrets.DEV_OC3_GATEWAY_TOKEN }}
+      DEV_OC3_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC3_TELEGRAM_BOT_TOKEN }}
+      PROD_OC1_LLM_PROVIDER: ${{ secrets.PROD_OC1_LLM_PROVIDER }}
+      PROD_OC1_LLM_API_KEY: ${{ secrets.PROD_OC1_LLM_API_KEY }}
+      PROD_OC1_WEBSEARCH_API_KEY: ${{ secrets.PROD_OC1_WEBSEARCH_API_KEY }}
+      PROD_OC1_GOOGLE_API_KEY: ${{ secrets.PROD_OC1_GOOGLE_API_KEY }}
+      PROD_OC1_GATEWAY_TOKEN: ${{ secrets.PROD_OC1_GATEWAY_TOKEN }}
+      PROD_OC1_TELEGRAM_BOT_TOKEN: ${{ secrets.PROD_OC1_TELEGRAM_BOT_TOKEN }}
+      PROD_OC2_LLM_PROVIDER: ${{ secrets.PROD_OC2_LLM_PROVIDER }}
+      PROD_OC2_LLM_API_KEY: ${{ secrets.PROD_OC2_LLM_API_KEY }}
+      PROD_OC2_WEBSEARCH_API_KEY: ${{ secrets.PROD_OC2_WEBSEARCH_API_KEY }}
+      PROD_OC2_GOOGLE_API_KEY: ${{ secrets.PROD_OC2_GOOGLE_API_KEY }}
+      PROD_OC2_GATEWAY_TOKEN: ${{ secrets.PROD_OC2_GATEWAY_TOKEN }}
+      PROD_OC2_TELEGRAM_BOT_TOKEN: ${{ secrets.PROD_OC2_TELEGRAM_BOT_TOKEN }}
+      PROD_OC3_LLM_PROVIDER: ${{ secrets.PROD_OC3_LLM_PROVIDER }}
+      PROD_OC3_LLM_API_KEY: ${{ secrets.PROD_OC3_LLM_API_KEY }}
+      PROD_OC3_WEBSEARCH_API_KEY: ${{ secrets.PROD_OC3_WEBSEARCH_API_KEY }}
+      PROD_OC3_GOOGLE_API_KEY: ${{ secrets.PROD_OC3_GOOGLE_API_KEY }}
+      PROD_OC3_GATEWAY_TOKEN: ${{ secrets.PROD_OC3_GATEWAY_TOKEN }}
+      PROD_OC3_TELEGRAM_BOT_TOKEN: ${{ secrets.PROD_OC3_TELEGRAM_BOT_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -72,9 +106,14 @@ jobs:
             echo "❌ Secrets CODE_SERVER_PASSWORD/CODE_SERVER_SUDO_PASSWORD fehlen (Pflicht für services-Lauf, K2-2)"
             FAIL=1
           fi
-          if [ "${{ inputs.playbook }}" = "openclaw" ] && { [ -z "$OC1_LLM_API_KEY" ] || [ -z "$OC2_LLM_API_KEY" ]; }; then
-            echo "❌ Secrets OC1/OC2_LLM_API_KEY fehlen (Pflicht für openclaw-Lauf; Telegram/WebSearch/Token optional)"
-            FAIL=1
+          if [ "${{ inputs.playbook }}" = "openclaw" ]; then
+            T="${{ inputs.target }}"
+            eval "K1=\$${T}_OC1_LLM_API_KEY"
+            eval "K2=\$${T}_OC2_LLM_API_KEY"
+            if [ -z "$K1" ] || [ -z "$K2" ]; then
+              echo "❌ Secrets ${T}_OC1/OC2_LLM_API_KEY fehlen (Pflicht für openclaw-Lauf; Telegram/WebSearch/Token optional)"
+              FAIL=1
+            fi
           fi
           [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
           echo "✅ Vorbedingungen ok"
@@ -155,7 +194,7 @@ jobs:
           *) echo "❌ Unbekanntes Playbook"; exit 1 ;;
           esac
           echo "▶️  Playbook: $PB (target: ${{ inputs.target }})"
-          ansible-playbook "playbooks/$PB" -i /tmp/inventory
+          ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}
 
       - name: Post-Deploy Check (SSH via Tailscale)
         run: |
