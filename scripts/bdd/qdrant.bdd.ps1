@@ -41,7 +41,7 @@ Write-Host "`nScenario: Health-Endpoint /healthz ist ok" -ForegroundColor Yellow
 Given "Qdrant-Container laeuft mit production.yaml (HTTP intern)"
 $r = Invoke-SSH "curl -s http://localhost:6333/healthz" $VpsUser $VpsIp $SshKeyPath
 When "GET /healthz lokal abgefragt wird"
-Then-True "Antwort enthaelt status ok" ($r.Output -match '"status"\s*:\s*"ok"') $r.Output
+Then-True "Health-Check bestanden (Qdrant 1.18: 'healthz check passed')" ($r.ExitCode -eq 0 -and $r.Output -match 'healthz check passed') $r.Output
 
 # ── Q4: Collection zoocode-3072d existiert (3072d, Cosine) ──
 Write-Host "`nScenario: Collection $Collection existiert (3072d, Cosine)" -ForegroundColor Yellow

@@ -78,7 +78,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | --- | --- | --- |
 | Q1 | HTTPS 6333 antwortet (TS-TLS-Terminierung) | Runner → `curl -sk --resolve <fqdn>:6333:<ts-ip> https://<fqdn>:6333/` → HTTP 200 |
 | Q2 | Zertifikat passt zum MagicDNS-Namen | Runner → `openssl s_client -connect <ts-ip>:6333` → Subject enthält `<fqdn>` (Tailscale-CA) |
-| Q3 | Health-Endpoint ok (Qdrant intern HTTP) | `GET http://localhost:6333/healthz` → `{"status":"ok"}` (nicht `/health` → 404) |
+| Q3 | Health-Endpoint ok (Qdrant intern HTTP) | `GET http://localhost:6333/healthz` → 200, Body `healthz check passed` (nicht `/health` → 404) |
 | Q4 | Collection `zoocode-3072d` existiert (RFC 0034b/#195) | `GET /collections/zoocode-3072d` → status ok, `3072`, `Cosine` |
 | Q5 | gRPC-Port 6334 erreichbar (TS-TCP-Forward) | Runner → TCP-Connect `100.x:6334` erfolgreich (WireGuard-verschlüsselt, kein TLS) |
 
