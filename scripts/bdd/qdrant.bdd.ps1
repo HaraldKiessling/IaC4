@@ -32,9 +32,10 @@ Then-True "HTTP 200 ueber TLS (war: $code)" ($code.Trim() -eq '200') $code
 # ── Q2: Zertifikat passt zum MagicDNS-Namen (Tailscale-CA, Terminierung durch TS) ──
 Write-Host "`nScenario: TLS-Zertifikat ist fuer $Fqdn ausgestellt" -ForegroundColor Yellow
 Given "Tailscale stellt Zertifikate nur fuer eigene MagicDNS-Namen aus"
-$r = & openssl s_client -connect "${VpsIp}:6333" -servername $Fqdn 2>&1 | openssl x509 -noout -subject 2>&1
+$r = @(& openssl s_client -connect "${VpsIp}:6333" -servername $Fqdn 2>&1 | openssl x509 -noout -subject 2>&1)
+$rJoined = $r -join "`n"
 When "das Server-Zertifikat vom Runner inspiziert wird"
-Then-True "Subject enthaelt $Fqdn" ($r -match [regex]::Escape($Fqdn)) $r
+Then-True "Subject enthaelt $Fqdn" ($rJoined -match [regex]::Escape($Fqdn)) $rJoined
 
 # ── Q3: Health-Endpoint /healthz liefert ok (Qdrant intern HTTP) ──
 Write-Host "`nScenario: Health-Endpoint /healthz ist ok" -ForegroundColor Yellow
