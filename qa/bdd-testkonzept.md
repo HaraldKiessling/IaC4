@@ -31,7 +31,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | 2a+2b | `02-tailscale-bootstrap.yml` | ✅ ja (Tailscale-Join, tag:ia4, SSH-Restrict) | `tailscale-bootstrap.bdd.ps1` |
 | 1 | `03-baseline-deploy.yml` | ✅ ja (System-Baseline) | `system-baseline.bdd.ps1` |
 | 2c | `03-docker-traefik.yml` | ❌ nein (Deploy Phase 4 offen); Feature implementiert (PR ADR-015..024) | `docker-traefik.bdd.ps1` (D1-D8) |
-| 2d | `04-services.yml` (ollama, qdrant, code-server) | ❌ nein (Deploy Phase 4 offen); Ollama-Feature implementiert | `docker-traefik.bdd.ps1` (O1-O3) |
+| 2d | `04-services.yml` (ollama, qdrant; code-server deaktiviert bis Abnahme) | ❌ nein (Deploy Phase 4 offen); Ollama- **und** Qdrant-Feature implementiert | `docker-traefik.bdd.ps1` (O1-O3), `qdrant.bdd.ps1` (Q1-Q4) |
 | 2e | Phase-3-Workflow (geplant) | ❌ nein (OpenClaw) | `openclaw.bdd.ps1` (geplant) |
 
 ## 4. Testkatalog (Features & Szenarien)
@@ -72,8 +72,16 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | O3 | Embedding schnell (ADR-023) | `POST /api/embeddings` < 2s (Pre-Warm-Wirkung) |
 | D9 | Service-Ports von außen NICHT erreichbar (Wirkungs-Check, K1-1) | Runner → `http://<Public-IP>:80/11434/6333` → kein HTTP-Response (Timeout/Filtered) |
 
+### Feature: Qdrant (`qdrant.bdd.ps1`, implementiert 2026-08-01)
+
+| # | Szenario | Then-Assertion |
+| --- | --- | --- |
+| Q1 | HTTPS 6333 antwortet (TS-TLS-Terminierung) | Runner (im Tailnet) → `curl -sk https://<fqdn>:6333/` → HTTP 200 |
+| Q2 | Zertifikat passt zum MagicDNS-Namen | `openssl s_client` → Subject enthält `<fqdn>` (Tailscale-CA) |
+| Q3 | Health-Endpoint ok | `GET https://localhost:6333/healthz` → `{"status":"ok"}` (nicht `/health` → 404) |
+| Q4 | Collection `zoocode-3072d` existiert (RFC 0034b/#195) | `GET /collections/zoocode-3072d` → status ok, `3072`, `Cosine` |
+
 ### Geplant (sobald Services deployt sind)
-- **Qdrant:** `GET :6333/health` → `{"status":"ok"}`
 - **CodeServer:** HTTP 200 auf Hostname, Passwort-Auth greift (401 ohne / 200 mit)
 - **OpenClaw:** Gateway `/health` → `{"ok":true}`, Agents erreichbar
 

@@ -1,0 +1,27 @@
+# Qdrant Storage-Konfiguration – IaC4
+# Tuning übernommen aus IaC3 (RFC 0011 v0.2, prod-Bestand)
+# TLS-Terminierung: Tailscale-Zertifikat (MagicDNS) → HTTPS auf 6333
+# Siehe: https://qdrant.tech/documentation/guides/configuration/
+
+service:
+  enable_tls: true
+
+tls:
+  cert: /qdrant/tls/tls.crt
+  key: /qdrant/tls/tls.key
+
+storage:
+  optimizers:
+    default_segment_number: 2  # Fuer VPS mit 2-4 Kernen optimiert
+  performance:
+    max_search_threads: 2      # Thread-Limit fuer Suchanfragen
+  hnsw:
+    m: 16                      # HNSW-Graph-Parameter (Default: 16)
+    ef_construct: 100          # Index-Qualitaet (Default: 100)
+    full_scan_threshold: 10000 # Ab dieser Groesse wird HNSW verwendet
+
+# gRPC-Port für High-Performance Vector-Searches
+grpc_port: 6334
+
+# Logging auf Warnungen reduzieren
+log_level: WARN

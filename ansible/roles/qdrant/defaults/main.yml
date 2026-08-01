@@ -1,2 +1,10 @@
+---
 # Fallback (SSoT: group_vars/all.yml)
 docker_network: "traefik-network"
+
+# Qdrant (ADR-011) – gepinnt (prod-Referenz war v1.12.0; DEV läuft seit 2026-07-31 auf v1.18.3)
+qdrant_version: "v1.18.3"
+qdrant_collection: "zoocode-3072d"   # RFC 0034b / #195 (prod-SSoT), 3072d/Cosine
+qdrant_collection_size: 3072
+qdrant_collection_distance: Cosine
+qdrant_cert_dir: /opt/qdrant/certs

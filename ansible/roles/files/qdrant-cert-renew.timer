@@ -1,0 +1,9 @@
+[Unit]
+Description=Monatliche Erneuerung des Tailscale-Zertifikats für Qdrant
+
+[Timer]
+OnCalendar=*-*-15 04:30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

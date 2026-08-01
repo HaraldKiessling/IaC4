@@ -1,0 +1,11 @@
+[Unit]
+Description=Erneuert das Tailscale-Zertifikat für Qdrant (90-Tage-Gültigkeit)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/qdrant-cert-renew.sh
+
+[Install]
+WantedBy=multi-user.target
