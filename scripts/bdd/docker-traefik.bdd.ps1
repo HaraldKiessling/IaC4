@@ -119,7 +119,7 @@ Write-Host "`nScenario: Service-Ports sind von außen (Public-IP) nicht erreichb
 Given "DOCKER-USER-Regeln R10/R11 (interface-gebunden) sind aktiv"
 $ext = @()
 foreach ($port in @('80', '11434', '6333')) {
-    $code = & curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "http://$PublicIp:$port/" 2>&1
+    $code = & curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "http://${PublicIp}:$port/" 2>&1
     $ext += "$port=$($code.Trim())"
 }
 $extJoined = $ext -join ', '
