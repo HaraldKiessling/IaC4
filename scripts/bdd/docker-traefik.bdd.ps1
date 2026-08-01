@@ -59,10 +59,11 @@ Then-True "Kein 443-Listener außer tailscaled" ($r.Output -match 'NO_443') $r.O
 
 # ── D6: Dashboard erreichbar – Auth via Tailscale-IP-Allowlist (ADR-019, IaC3-Muster) ──
 Write-Host "`nScenario: Traefik-Dashboard antwortet (ADR-019, IP-Allowlist)" -ForegroundColor Yellow
-Given "Schutz: UFW R8 (8080 CGNAT-only) + Serve tailnet only (keine Middleware, Traefik-v3-Bug)"
-$code = & curl -s --connect-timeout 8 -o /dev/null -w '%{http_code}' "http://$VpsIp:8080/dashboard/" 2>&1
-When "das Dashboard vom Runner ueber die Tailscale-IP abgerufen wird"
-Then-True "HTTP 200 (war: $code)" ($code.Trim() -eq '200') $code
+Given "Router: Host(fqdn) && PathPrefix(/api|/dashboard) auf web+dashboard (IaC3-Muster)"
+$Fqdn = "$ExpectedHostname.$Tailnet"
+$r = Invoke-SSH "curl -s -o /dev/null -w '%{http_code}' -H 'Host: $Fqdn' http://127.0.0.1:8080/dashboard/" $VpsUser $VpsIp $SshKeyPath
+When "das Dashboard lokal mit Host-Header abgerufen wird"
+Then-True "HTTP 200 (war: $($r.Output.Trim()))" ($r.Output.Trim() -eq '200') $r.Output
 
 # ── D7: Firewall – UFW-CGNAT (R7-R9) + DOCKER-USER (R10/R11) ──
 Write-Host "`nScenario: Firewall-Regeln für Service-Ports (Firewall-Konzept R7-R11)" -ForegroundColor Yellow
@@ -132,7 +133,7 @@ Then-True "Kein HTTP-Response von außen (Timeout/Filtered): $extJoined" ($extJo
 
 # ── D10: Dashboard via HTTPS über das Tailnet (Erwartung Harald 2026-08-01) ──
 Write-Host "`nScenario: Dashboard ist via HTTPS erreichbar (https://<fqdn>/dashboard/ → 200)" -ForegroundColor Yellow
-Given "Serve-Mounts /dashboard und /api → localhost:8080; Whitelist erlaubt Tailnet-CGNAT"
+Given "Serve Root-Mount / → localhost:80; Router Host-Rule matcht (IaC3-Muster)"
 # TS_TAILNET enthaelt bereits ".ts.net" (GitHub-Secret) -> FQDN robust bauen
 if ($Tailnet -match '\.ts\.net$') { $Fqdn = "$ExpectedHostname.$Tailnet" } else { $Fqdn = "$ExpectedHostname.$Tailnet.ts.net" }
 # MagicDNS ist auf GH-Runnern nicht verfuegbar -> --resolve auf die Tailscale-IP (VpsIp)

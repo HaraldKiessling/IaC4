@@ -58,6 +58,15 @@
   retries: 10
   delay: 3
 
+- name: Tailscale-FQDN ermitteln (MagicDNS-Name, fuer Host-Rule)
+  ansible.builtin.command: tailscale status --json
+  register: _ts_status
+  changed_when: false
+
+- name: FQDN als Fakt setzen
+  ansible.builtin.set_fact:
+    traefik_fqdn: "{{ (_ts_status.stdout | from_json).Self.DNSName | trim('.') }}"
+
 - name: "Tailscale Serve aktivieren (ADR-018: HTTPS 443 → localhost:80)"
   ansible.builtin.shell: tailscale serve status
   register: serve_status
@@ -70,14 +79,16 @@
   register: serve_set
   changed_when: serve_set.rc == 0
 
-- name: "Tailscale Serve – Dashboard-Pfad (ADR-019: nur EntryPoint :8080; HTTPS /dashboard → :8080)"
-  ansible.builtin.command: tailscale serve --bg --set-path /dashboard http://localhost:8080
-  when: "'/dashboard' not in serve_status.stdout"
-  register: serve_set_dash
-  changed_when: serve_set_dash.rc == 0
+# Serve strippt Mount-Prefixe beim Proxy (Tailscale-Doku) -> /dashboard-Mount lieferte "/" an Traefik -> 404.
+# Dashboard laeuft stattdessen ueber den Root-Mount "/" -> localhost:80 mit Host-Rule (IaC3-Muster).
+- name: "Tailscale Serve – /dashboard-Mount entfernen (Strip-Problem, Host-Rule-Ansatz)"
+  ansible.builtin.command: tailscale serve --bg --set-path /dashboard off
+  when: "'/dashboard' in serve_status.stdout"
+  register: serve_off_dash
+  changed_when: serve_off_dash.rc == 0
 
-- name: "Tailscale Serve – API-Pfad (Dashboard-Daten /api → :8080)"
-  ansible.builtin.command: tailscale serve --bg --set-path /api http://localhost:8080
-  when: "'/api' not in serve_status.stdout"
-  register: serve_set_api
-  changed_when: serve_set_api.rc == 0
+- name: "Tailscale Serve – /api-Mount entfernen (Strip-Problem, Host-Rule-Ansatz)"
+  ansible.builtin.command: tailscale serve --bg --set-path /api off
+  when: "'/api' in serve_status.stdout"
+  register: serve_off_api
+  changed_when: serve_off_api.rc == 0
