@@ -9,6 +9,8 @@ param(
     [Parameter(Mandatory)][string]$VpsUser,
     [Parameter(Mandatory)][string]$SshKeyPath,
     [Parameter(Mandatory)][string]$PublicIp,
+    [Parameter(Mandatory)][string]$ExpectedHostname,
+    [Parameter(Mandatory)][string]$Tailnet,
     [string]$DockerNetwork = "traefik-network",
     [string]$OllamaModel = "nomic-embed-text"
 )
@@ -81,6 +83,8 @@ Given "HTTPS-Certificates im Tailnet aktiviert (IaC3-Bestand)"
 $r = Invoke-SSH "sudo tailscale serve status" $VpsUser $VpsIp $SshKeyPath
 When "tailscale serve status abgefragt wird"
 Then-True "Serve-Route auf localhost:80 vorhanden" ($r.Output -match 'localhost:80') $r.Output
+Then-True "Serve-Mount /dashboard → localhost:8080" ($r.Output -match '/dashboard') $r.Output
+Then-True "Serve-Mount /api → localhost:8080" ($r.Output -match '/api') $r.Output
 
 # ── O1: Ollama-Container läuft, API antwortet (ADR-021) ──
 Write-Host "`nScenario: Ollama-API ist erreichbar (ADR-021)" -ForegroundColor Yellow
@@ -125,3 +129,11 @@ foreach ($port in @('80', '11434', '6333')) {
 $extJoined = $ext -join ', '
 When "die Public-IP-Ports vom Runner (Internet) abgerufen werden"
 Then-True "Kein HTTP-Response von außen (Timeout/Filtered): $extJoined" ($extJoined -notmatch '=(200|4\d\d|5\d\d)') $extJoined
+
+# ── D10: Dashboard via HTTPS über das Tailnet (ADR-019, Erwartung Harald 2026-08-01) ──
+Write-Host "`nScenario: Dashboard ist via HTTPS erreichbar (https://<fqdn>/dashboard/ → 401 ohne Auth)" -ForegroundColor Yellow
+Given "Serve-Mounts /dashboard und /api → localhost:8080 (Traefik dashboard-EntryPoint)"
+$Fqdn = "$ExpectedHostname.$Tailnet.ts.net"
+$code = & curl -sk --connect-timeout 8 -o /dev/null -w '%{http_code}' "https://$Fqdn/dashboard/" 2>&1
+When "HTTPS-GET auf https://$Fqdn/dashboard/ ausgeführt wird (Runner im Tailnet)"
+Then-True "HTTP 401 ohne Auth (war: $code)" ($code.Trim() -eq '401') $code

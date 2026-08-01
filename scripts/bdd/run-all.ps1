@@ -26,7 +26,7 @@ Write-Host "Start: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')`n"
 & "$PSScriptRoot/tailscale-bootstrap.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath `
     -PublicIp $PublicIp -Tailnet $Tailnet -OAuthClientId $OAuthClientId -OAuthClientSecret $OAuthClientSecret -ExpectedHostname $ExpectedHostname
 & "$PSScriptRoot/system-baseline.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -ExpectedTz $ExpectedTz
-& "$PSScriptRoot/docker-traefik.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -PublicIp $PublicIp
+& "$PSScriptRoot/docker-traefik.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -PublicIp $PublicIp -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet
 
 Write-Host "`n═══ Zusammenfassung ═══" -ForegroundColor Cyan
 Write-Host "  ✅ Bestanden: $global:BDD_PASS"

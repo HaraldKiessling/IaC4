@@ -76,3 +76,15 @@
   when: "'localhost:80' not in serve_status.stdout"
   register: serve_set
   changed_when: serve_set.rc == 0
+
+- name: "Tailscale Serve – Dashboard-Pfad (ADR-019: nur EntryPoint :8080; HTTPS /dashboard → :8080)"
+  ansible.builtin.command: tailscale serve --bg --set-path /dashboard http://localhost:8080
+  when: "'/dashboard' not in serve_status.stdout"
+  register: serve_set_dash
+  changed_when: serve_set_dash.rc == 0
+
+- name: "Tailscale Serve – API-Pfad (Dashboard-Daten /api → :8080)"
+  ansible.builtin.command: tailscale serve --bg --set-path /api http://localhost:8080
+  when: "'/api' not in serve_status.stdout"
+  register: serve_set_api
+  changed_when: serve_set_api.rc == 0
