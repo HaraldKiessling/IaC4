@@ -10,7 +10,8 @@ param(
 )
 . "$PSScriptRoot/bdd-lib.ps1"
 
-$Fqdn = "$ExpectedHostname.$Tailnet.ts.net"
+# TS_TAILNET enthaelt bereits ".ts.net" (GitHub-Secret) -> FQDN robust bauen
+if ($Tailnet -match '\.ts\.net$') { $Fqdn = "$ExpectedHostname.$Tailnet" } else { $Fqdn = "$ExpectedHostname.$Tailnet.ts.net" }
 Write-Host "`n════ DIAGNOSE Dashboard ($Fqdn) ════" -ForegroundColor Magenta
 
 Write-Host "`n[1] Runner-DNS (MagicDNS):"

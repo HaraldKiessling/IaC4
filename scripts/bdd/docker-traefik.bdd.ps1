@@ -133,7 +133,8 @@ Then-True "Kein HTTP-Response von außen (Timeout/Filtered): $extJoined" ($extJo
 # ── D10: Dashboard via HTTPS über das Tailnet (Erwartung Harald 2026-08-01) ──
 Write-Host "`nScenario: Dashboard ist via HTTPS erreichbar (https://<fqdn>/dashboard/ → 200)" -ForegroundColor Yellow
 Given "Serve-Mounts /dashboard und /api → localhost:8080; Whitelist erlaubt Tailnet-CGNAT"
-$Fqdn = "$ExpectedHostname.$Tailnet.ts.net"
+# TS_TAILNET enthaelt bereits ".ts.net" (GitHub-Secret) -> FQDN robust bauen
+if ($Tailnet -match '\.ts\.net$') { $Fqdn = "$ExpectedHostname.$Tailnet" } else { $Fqdn = "$ExpectedHostname.$Tailnet.ts.net" }
 # MagicDNS ist auf GH-Runnern nicht verfuegbar -> --resolve auf die Tailscale-IP (VpsIp)
 $resp = & curl -sk --connect-timeout 8 --resolve "${Fqdn}:443:${VpsIp}" -w "`n%{http_code}|%{content_type}" "https://$Fqdn/dashboard/" 2>&1
 $meta = ($resp -split "`n")[-1]
