@@ -16,9 +16,9 @@
     project_src: /opt/qdrant
     state: present
 
-- name: Auf Qdrant warten
+- name: Auf Qdrant warten (readiness)
   ansible.builtin.uri:
-    url: http://localhost:6333/health
+    url: http://localhost:6333/readyz
     status_code: 200
   register: result
   until: result.status == 200
