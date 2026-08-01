@@ -1,4 +1,4 @@
-# RFC: OpenClaw-Instanz-Benchmark OC2 vs. OC3
+# Design: OpenClaw-Instanz-Benchmark OC2 vs. OC3
 
 - **Status:** Vorgeschlagen — Review abgeschlossen: R1 (Architect + Reviewer) eingearbeitet, R2 = ✅ FREIGABE (Reviewer), externer Architect-Review (IaC3-Workspace) = ✅ APPROVE, Befunde N1–N5 eingearbeitet
 - **Datum:** 2026-08-01
@@ -224,7 +224,7 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 ## 7. Offene Fragen an Harald
 
 1. **OC3-Secrets (Stand 2026-08-01 15:40 UTC — korrigiert nach Review R1):** `DEV_OC3_GATEWAY_TOKEN`, `DEV_OC3_WEBSEARCH_API_KEY`, `DEV_OC3_TELEGRAM_BOT_TOKEN` **existieren bereits** (verifiziert via `gh secret list`). Offen: Telegram-Bot für OC3 validieren (BotFather-Token-Test). Hinweis: `DEV_OC3_GATEWAY_TOKEN` ist **Deploy-Pflicht** (hartes `assert` in `instance.yml`), nicht optional.
-2. **Template-Erweiterung** (per-Instanz-`subagents_defaults`/`agent_models`, Render-Validierung, BDD, Preis-Config, optional Teardown-Task): als separates PR nach RFC-Freigabe — Empfehlung bestätigt? (Review R1: deckt sich mit MINOR-6 „Operationalisierung".)
+2. **Template-Erweiterung** (per-Instanz-`subagents_defaults`/`agent_models`, Render-Validierung, BDD, Preis-Config, optional Teardown-Task): als separates PR nach Design-Freigabe — Empfehlung bestätigt? (Review R1: deckt sich mit MINOR-6 „Operationalisierung".)
 3. **PROD-OC3** bleibt bis Benchmark-Abschluss `enabled: false` — bestätigt?
 4. **VPS-Ressourcen:** 3 Gateways parallel auf DEV (6 vCore/8 GB). Empfehlung (Review R1 MINOR-4): OC3-Start erst nach OC1/OC2-Health-Check, Tasks zeitlich entzerrt, `docker stats` im BDD-Log als Kovariate. OK?
 5. **Ground Truth T1:** Seed-Defekte (bewusst eingebaute Fehler in Diff-Snapshots) ok — oder adjudiziert Harald echte PRs nachträglich? (Aufwand: Seed-Defekte = 30 Min. Setup, sauberere Metrik.)

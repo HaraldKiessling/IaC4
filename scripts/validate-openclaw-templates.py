@@ -42,7 +42,7 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             for a in oc['agents']:
                 aid = a.lower().replace(' ', '-')
                 assert any(x.get('id') == aid for x in d['agents'].get('list', [])), f"agent id {aid} fehlt"
-            # OC2/OC3-Benchmark (RFC 01-oc2-oc3-benchmark): per-Instanz-Conditionals
+            # OC2/OC3-Benchmark (Design 01-oc2-oc3-benchmark): per-Instanz-Conditionals
             if 'subagents_defaults' not in oc:
                 # Byte-Identitäts-Garantie: Instanzen ohne Konfiguration bekommen KEINEN subagents-Key
                 assert 'subagents' not in d['agents']['defaults'], f"{oc['name']}: subagents-Key unerwartet (Byte-Identität verletzt)"
