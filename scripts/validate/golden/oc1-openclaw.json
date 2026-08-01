@@ -1,0 +1,53 @@
+{
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "allowTailscale": true,
+      "token": "tok"
+    },
+    "controlUi": {
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "http://127.0.0.1:18789"
+      ]
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/home/node/.openclaw/workspace"
+    }
+  },
+  "memory": {
+    "backend": "qmd"
+  },
+  "plugins": {
+    "entries": {
+      "perplexity": {
+        "enabled": false
+      }
+    }
+  },
+  "tools": {
+    "web": {
+      "search": {
+        "provider": "none"
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "ollama": {
+        "api": "ollama",
+        "baseUrl": "http://ollama:11434"
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": false
+    }
+  }
+}

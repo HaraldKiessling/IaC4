@@ -56,13 +56,13 @@ openclaw_instances:
         fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
       Architect:
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+        fallbacks: ["deepseek/deepseek-v4-pro"]   # RFC 4.3 exakt (Architect MINOR-1)
       "Engineer Pro":
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+        fallbacks: ["deepseek/deepseek-v4-pro"]   # RFC 4.3 exakt (Architect MINOR-1)
       Reviewer:
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+        fallbacks: ["deepseek/deepseek-v4-pro"]   # RFC 4.3 exakt (Architect MINOR-1)
     # Orchestrator-Pattern (RFC B3): Depth-2-Delegation + echte Rollen-IDs (B2)
     subagents_defaults:
       delegationMode: "prefer"

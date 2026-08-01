@@ -64,6 +64,7 @@ foreach ($inst in $Instances.Split(',')) {
 }
 
 # ── O4: Nicht aktive Instanz nicht deployed (Default leer; PROD: oc3) ──
+if (-not [string]::IsNullOrWhiteSpace($DisabledInstances)) {
 foreach ($inst in $DisabledInstances.Split(',')) {
     $inst = $inst.Trim()
     Write-Host "`nScenario: Instanz $inst – nicht deployed (geplant)" -ForegroundColor Yellow
@@ -71,4 +72,5 @@ foreach ($inst in $DisabledInstances.Split(',')) {
     $r = Invoke-SSH "sudo docker ps --filter name=^openclaw-$inst$ --format '{{.Names}}'" $VpsUser $VpsIp $SshKeyPath
     When "docker ps fuer openclaw-$inst abgefragt wird"
     Then-True "Kein Container openclaw-$inst" ($r.Output -notmatch 'openclaw') $r.Output
+}
 }

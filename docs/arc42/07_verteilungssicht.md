@@ -26,7 +26,7 @@
 | Qdrant | localhost + Tailscale | Tailscale ACL |
 | Code-Server | Tailscale (Traefik-Route) | Traefik-ForwardAuth |
 | OpenClaw OC1/OC2 | Tailscale via Serve-TLS (18789/18790) | Gateway-Token + Tailscale ACL |
-| OpenClaw OC3 | – (geplant, nicht deployed) | – |
+| OpenClaw OC3 | DEV: aktiv (Best-Practice-Referenz, Benchmark – RFC 01-oc2-oc3-benchmark); PROD: geplant (disabled bis Benchmark-Abschluss) | Port 18791 |
 
 ## SSH-Transition (zeitlich)
 | Phase | SSH-Zugriff | Via | Dauer |

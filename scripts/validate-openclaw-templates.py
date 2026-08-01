@@ -7,7 +7,7 @@ import jinja2
 
 ROOT = 'ansible'
 gv_all = yaml.safe_load(open(f'{ROOT}/group_vars/all.yml'))
-env = jinja2.Environment()
+env = jinja2.Environment(trim_blocks=True, lstrip_blocks=True, keep_trailing_newline=True)
 SRC = open(f'{ROOT}/roles/openclaw-gateway/templates/openclaw.json.j2').read()
 COMPOSE = open(f'{ROOT}/roles/openclaw-gateway/templates/docker-compose.yml.j2').read()
 
@@ -20,7 +20,7 @@ def fake_lookup(name, *a, **kw):
     return ''  # ohne Secrets rendern (leere Keys) – Struktur-Validierung
 
 def render(oc, target):
-    e = jinja2.Environment()
+    e = jinja2.Environment(trim_blocks=True, lstrip_blocks=True, keep_trailing_newline=True)
     e.globals['lookup'] = fake_lookup
     t = e.from_string(SRC)
     ctx = dict(oc=oc, openclaw_agent_models=gv_all['openclaw_agent_models'],
@@ -59,6 +59,8 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                     a = next(x for x in d['agents']['list'] if x['id'] == eid)
                     assert a['model']['primary'] == mdl['primary'], \
                         f"{oc['name']}/{eid}: primary {a['model']['primary']} != {mdl['primary']}"
+                    assert a['model']['fallbacks'] == mdl['fallbacks'], \
+                        f"{oc['name']}/{eid}: fallbacks {a['model']['fallbacks']} != {mdl['fallbacks']}"
             if oc.get('subagents_tools_deny'):
                 assert d['tools']['subagents']['tools']['deny'] == oc['subagents_tools_deny'], \
                     f"{oc['name']}: tools.subagents.deny falsch"
@@ -86,8 +88,22 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
         except Exception as ex:
             failures.append(f"{tf}/{oc['name']}: {ex}")
 
+# Golden-File-Renderdiff (RFC 4.4 Worst-Case 3, DoD Issue #63): OC1 muss byte-identisch
+# zum committeten Referenz-Render bleiben – fängt Byte-/Whitespace-Regressionen.
+GOLDEN = f'{ROOT}/../scripts/validate/golden/oc1-openclaw.json'
+try:
+    with open(GOLDEN) as gf:
+        golden = gf.read()
+    dev = yaml.safe_load(open(f'{ROOT}/group_vars/vps-dev.yml'))
+    oc1 = next(oc for oc in dev['openclaw_instances'] if oc['name'] == 'oc1')
+    current = json.dumps(render(oc1, dev), indent=2, ensure_ascii=False) + '\n'
+    if current != golden:
+        failures.append("Golden-File-Renderdiff: OC1-Render weicht byte-genau ab (Template-Regression)")
+except FileNotFoundError:
+    failures.append(f"Golden-File fehlt: {GOLDEN}")
+
 if failures:
     print("FEHLER:")
     [print(" -", f) for f in failures]
     sys.exit(1)
-print("Alle openclaw-Templates validiert (dev+prod, alle Instanzen)")
+print("Alle openclaw-Templates validiert (dev+prod, alle Instanzen, inkl. Golden-File-Renderdiff)")
