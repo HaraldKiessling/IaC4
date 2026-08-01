@@ -2,10 +2,13 @@
   "gateway": {
     "mode": "local",
     "port": {{ oc.port }},
-    "bind": "loopback",
+    "bind": "lan",
     "auth": {
       "mode": "token",
       "allowTailscale": true
+{% if oc_gateway_token | default('') | length > 0 %},
+      "token": "{{ oc_gateway_token }}"
+{% endif %}
     },
     "controlUi": {
       "allowedOrigins": ["http://localhost:{{ oc.port }}", "http://127.0.0.1:{{ oc.port }}"]
@@ -13,7 +16,7 @@
   },
   "agents": {
     "defaults": {
-      "workspace": "/home/node/workspace"
+      "workspace": "/home/node/.openclaw/workspace"
     }
 {% if oc.agents | length > 0 %},
     "list": [
@@ -36,21 +39,37 @@
         "enabled": true,
         "config": {
           "webSearch": {
-            "apiKey": "{{ oc.websearch_api_key }}"
+            "apiKey": "{{ oc_websearch_api_key }}"
           }
         }
       }
     }
   },
-  "providers": {
-    "{{ oc.llm_provider }}": {
-      "apiKey": "{{ oc.llm_api_key }}"
+  "tools": {
+    "web": {
+      "search": {
+        "provider": "perplexity"
+      }
     }
+  },
+  "providers": {
+    "{{ oc_llm_provider }}": {
+      "apiKey": "{{ oc_llm_api_key }}"
+    }
+{% if oc_google_api_key | default('') | length > 0 %},
+    "google": {
+      "apiKey": "{{ oc_google_api_key }}"
+    }
+{% endif %}
   },
   "channels": {
     "telegram": {
+{% if oc_telegram_bot_token | default('') | length > 0 %}
       "enabled": true,
-      "botToken": "{{ oc.telegram_bot_token }}"
+      "botToken": "{{ oc_telegram_bot_token }}"
+{% else %}
+      "enabled": false
+{% endif %}
     }
   }
 }

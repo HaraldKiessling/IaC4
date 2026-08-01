@@ -51,26 +51,32 @@ openclaw_instances:
     enabled: true
     port: 18789
     label: "OC1 – Default Gateway (out of box)"
-    llm_provider: "{{ lookup('env', 'OC1_LLM_PROVIDER') | default('anthropic', true) }}"
-    llm_api_key: "{{ lookup('env', 'OC1_LLM_API_KEY') | default('', true) }}"
-    websearch_api_key: "{{ lookup('env', 'OC1_WEBSEARCH_API_KEY') | default('', true) }}"
-    telegram_bot_token: "{{ lookup('env', 'OC1_TELEGRAM_BOT_TOKEN') | default('', true) }}"
+    llm_provider_env: "OC1_LLM_PROVIDER"        # Auflösung in der Rolle (set_fact)
+    llm_api_key_env: "OC1_LLM_API_KEY"
+    websearch_api_key_env: "OC1_WEBSEARCH_API_KEY"
+    google_api_key_env: "OC1_GOOGLE_API_KEY"    # optional: Fallback-Modell google/gemini
+    gateway_token_env: "OC1_GATEWAY_TOKEN"      # optional: stabiler Auth-Token (Reviewer B4)
+    telegram_bot_token_env: "OC1_TELEGRAM_BOT_TOKEN"
     agents: []                               # OC1: Default, keine speziellen Agents
   - name: oc2
     enabled: true
     port: 18790
     label: "OC2 – DevOps Team (4 Agents)"
-    llm_provider: "{{ lookup('env', 'OC2_LLM_PROVIDER') | default('anthropic', true) }}"
-    llm_api_key: "{{ lookup('env', 'OC2_LLM_API_KEY') | default('', true) }}"
-    websearch_api_key: "{{ lookup('env', 'OC2_WEBSEARCH_API_KEY') | default('', true) }}"
-    telegram_bot_token: "{{ lookup('env', 'OC2_TELEGRAM_BOT_TOKEN') | default('', true) }}"
+    llm_provider_env: "OC2_LLM_PROVIDER"        # Auflösung in der Rolle (set_fact)
+    llm_api_key_env: "OC2_LLM_API_KEY"
+    websearch_api_key_env: "OC2_WEBSEARCH_API_KEY"
+    google_api_key_env: "OC2_GOOGLE_API_KEY"    # optional: Fallback-Modell google/gemini
+    gateway_token_env: "OC2_GATEWAY_TOKEN"      # optional: stabiler Auth-Token (Reviewer B4)
+    telegram_bot_token_env: "OC2_TELEGRAM_BOT_TOKEN"
     agents: [Orchestrator, Architekt, "Engineer Pro", Reviewer]
   - name: oc3
     enabled: false                            # nur geplant (Harald 2026-08-01)
     port: 18791
     label: "OC3 – Future Purpose (geplant)"
-    llm_provider: "{{ lookup('env', 'OC3_LLM_PROVIDER') | default('anthropic', true) }}"
-    llm_api_key: "{{ lookup('env', 'OC3_LLM_API_KEY') | default('', true) }}"
-    websearch_api_key: "{{ lookup('env', 'OC3_WEBSEARCH_API_KEY') | default('', true) }}"
-    telegram_bot_token: "{{ lookup('env', 'OC3_TELEGRAM_BOT_TOKEN') | default('', true) }}"
+    llm_provider_env: "OC3_LLM_PROVIDER"        # Auflösung in der Rolle (set_fact)
+    llm_api_key_env: "OC3_LLM_API_KEY"
+    websearch_api_key_env: "OC3_WEBSEARCH_API_KEY"
+    google_api_key_env: "OC3_GOOGLE_API_KEY"    # optional: Fallback-Modell google/gemini
+    gateway_token_env: "OC3_GATEWAY_TOKEN"      # optional: stabiler Auth-Token (Reviewer B4)
+    telegram_bot_token_env: "OC3_TELEGRAM_BOT_TOKEN"
     agents: []

@@ -1,21 +1,34 @@
 ---
 # Einzelne OpenClaw-Instanz (oc = loop_var)
 
-- name: "{{ oc.name }}: Verzeichnisse anlegen"
+- name: "{{ oc.name }}: Verzeichnisse anlegen (uid 1000 = node-User im Image, Reviewer B3)"
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     mode: '0755'
+    owner: '1000'
+    group: '1000'
   loop:
     - "{{ openclaw_data_root }}/{{ oc.name }}"
     - "{{ openclaw_data_root }}/{{ oc.name }}/config"
     - "{{ openclaw_data_root }}/{{ oc.name }}/workspace"
+
+- name: "{{ oc.name }}: Secrets aus env aufloesen (set_fact, fuer Jinja-Conditionals)"
+  ansible.builtin.set_fact:
+    oc_llm_provider: "{{ lookup('env', oc.llm_provider_env) | default('deepseek', true) }}"
+    oc_llm_api_key: "{{ lookup('env', oc.llm_api_key_env) | default('', true) }}"
+    oc_websearch_api_key: "{{ lookup('env', oc.websearch_api_key_env) | default('', true) }}"
+    oc_google_api_key: "{{ lookup('env', oc.google_api_key_env) | default('', true) }}"
+    oc_gateway_token: "{{ lookup('env', oc.gateway_token_env) | default('', true) }}"
+    oc_telegram_bot_token: "{{ lookup('env', oc.telegram_bot_token_env) | default('', true) }}"
 
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
   ansible.builtin.template:
     src: openclaw.json.j2
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/config/openclaw.json"
     mode: '0600'
+    owner: '1000'
+    group: '1000'
 
 - name: "{{ oc.name }}: docker-compose.yml deployen (gepinnt, ADR-017)"
   ansible.builtin.template:
@@ -38,12 +51,6 @@
   retries: 12
   delay: 5
 
-- name: "{{ oc.name }}: Perplexity-Plugin installieren (idempotent, WebSearch)"
-  ansible.builtin.shell: |
-    docker exec openclaw-{{ oc.name }} openclaw plugins list 2>/dev/null | grep -q perplexity || \
-      docker exec openclaw-{{ oc.name }} openclaw plugins install @openclaw/perplexity-plugin
-  register: _oc_plugin
-  changed_when: _oc_plugin.stdout | length > 0
   when: oc.websearch_api_key | default('') | length > 0
 
 - name: "{{ oc.name }}: Tailscale Serve-Status (Idempotenz)"

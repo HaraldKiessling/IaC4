@@ -46,6 +46,12 @@ jobs:
       OC2_TELEGRAM_BOT_TOKEN: ${{ secrets.OC2_TELEGRAM_BOT_TOKEN }}
       OC2_LLM_API_KEY: ${{ secrets.OC2_LLM_API_KEY }}
       OC2_WEBSEARCH_API_KEY: ${{ secrets.OC2_WEBSEARCH_API_KEY }}
+      OC1_LLM_PROVIDER: ${{ secrets.OC1_LLM_PROVIDER }}
+      OC2_LLM_PROVIDER: ${{ secrets.OC2_LLM_PROVIDER }}
+      OC1_GOOGLE_API_KEY: ${{ secrets.OC1_GOOGLE_API_KEY }}
+      OC2_GOOGLE_API_KEY: ${{ secrets.OC2_GOOGLE_API_KEY }}
+      OC1_GATEWAY_TOKEN: ${{ secrets.OC1_GATEWAY_TOKEN }}
+      OC2_GATEWAY_TOKEN: ${{ secrets.OC2_GATEWAY_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +70,10 @@ jobs:
           [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
           if [ "${{ inputs.playbook }}" = "services" ] && { [ -z "$CODE_SERVER_PASSWORD" ] || [ -z "$CODE_SERVER_SUDO_PASSWORD" ]; }; then
             echo "❌ Secrets CODE_SERVER_PASSWORD/CODE_SERVER_SUDO_PASSWORD fehlen (Pflicht für services-Lauf, K2-2)"
+            FAIL=1
+          fi
+          if [ "${{ inputs.playbook }}" = "openclaw" ] && { [ -z "$OC1_LLM_API_KEY" ] || [ -z "$OC2_LLM_API_KEY" ]; }; then
+            echo "❌ Secrets OC1/OC2_LLM_API_KEY fehlen (Pflicht für openclaw-Lauf; Telegram/WebSearch/Token optional)"
             FAIL=1
           fi
           [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }

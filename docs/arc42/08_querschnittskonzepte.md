@@ -15,8 +15,8 @@
 | TAILSCALE_OAUTH_CLIENT_ID | GH Actions Secret | OAuth-Client-ID |
 | TAILSCALE_OAUTH_CLIENT_SECRET | GH Actions Secret | OAuth-Client-Secret |
 | TAILSCALE_TAILNET | GH Actions Secret | Tailnet-Name |
-| OPENCLAW_LLM_API_KEY | GH Actions Secret | API-Key (noch zu setzen) |
-| OPENCLAW_WEBSEARCH_API_KEY | GH Actions Secret | API-Key (noch zu setzen) |
+| OC<n>_LLM_API_KEY | GH Actions Secret | API-Key (noch zu setzen) |
+| OC<n>_WEBSEARCH_API_KEY | GH Actions Secret | API-Key (noch zu setzen) |
 
 **Nicht in diesem Repo:** Telegram-Bot-Tokens, Ollama-Keys (später)
 

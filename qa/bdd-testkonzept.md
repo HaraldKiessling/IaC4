@@ -33,7 +33,6 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | 2c | `03-docker-traefik.yml` | ❌ nein (Deploy Phase 4 offen); Feature implementiert (PR ADR-015..024) | `docker-traefik.bdd.ps1` (D1-D8) |
 | 2d | `04-services.yml` (ollama, qdrant; code-server deaktiviert bis Abnahme) | ❌ nein (Deploy Phase 4 offen); Ollama- **und** Qdrant-Feature implementiert | `docker-traefik.bdd.ps1` (O1-O3), `qdrant.bdd.ps1` (Q1-Q4) |
 | 2e | `05-openclaw.yml` (openclaw-gateway, Container-Multi-Instanz ADR-025) | ❌ nein (Deploy offen); Feature implementiert | `openclaw.bdd.ps1` (O1-O4) |
-| 2e | Phase-3-Workflow (geplant) | ❌ nein (OpenClaw) | `openclaw.bdd.ps1` (geplant) |
 
 ## 4. Testkatalog (Features & Szenarien)
 

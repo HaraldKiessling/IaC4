@@ -42,11 +42,13 @@ $ports = @('18789', '18790', '18791')
 $ext = @()
 foreach ($port in $ports) {
     $code = & curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "http://$PublicIp:$port/" 2>&1
-    $ext += "$port=$($code.Trim())"
+    & timeout 3 bash -c "echo > /dev/tcp/$PublicIp/$port" 2>$null
+    $tcp = if ($LASTEXITCODE -eq 0) { 'OPEN' } else { 'closed' }
+    $ext += "$port=$($code.Trim())/$tcp"
 }
 $extJoined = $ext -join ', '
 When "die Public-IP-Ports vom Runner (Internet) abgerufen werden"
-Then-True "Kein HTTP-Response von aussen (Timeout/Filtered): $extJoined" ($extJoined -notmatch '=(200|4\d\d|5\d\d)') $extJoined
+Then-True "Kein HTTP-Response und TCP dicht: $extJoined" ($extJoined -notmatch '=(200|4\d\d|5\d\d)' -and $extJoined -notmatch 'OPEN') $extJoined
 
 # ── O3: Instanz-Konfiguration (openclaw.json) existiert je aktiver Instanz ──
 foreach ($inst in $Instances.Split(',')) {
