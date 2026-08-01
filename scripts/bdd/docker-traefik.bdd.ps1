@@ -84,8 +84,8 @@ Given "HTTPS-Certificates im Tailnet aktiviert (IaC3-Bestand)"
 $r = Invoke-SSH "sudo tailscale serve status" $VpsUser $VpsIp $SshKeyPath
 When "tailscale serve status abgefragt wird"
 Then-True "Serve-Route auf localhost:80 vorhanden" ($r.Output -match 'localhost:80') $r.Output
-Then-True "Serve-Mount /dashboard → localhost:8080" ($r.Output -match '/dashboard') $r.Output
-Then-True "Serve-Mount /api → localhost:8080" ($r.Output -match '/api') $r.Output
+Then-True "KEIN /dashboard-Mount (Serve strippt Prefixe -> Host-Rule-Ansatz)" ($r.Output -notmatch '/dashboard') $r.Output
+Then-True "KEIN /api-Mount (Serve strippt Prefixe)" ($r.Output -notmatch '\|-- /api') $r.Output
 
 # ── O1: Ollama-Container läuft, API antwortet (ADR-021) ──
 Write-Host "`nScenario: Ollama-API ist erreichbar (ADR-021)" -ForegroundColor Yellow
