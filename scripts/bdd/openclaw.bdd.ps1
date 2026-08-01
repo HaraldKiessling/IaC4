@@ -2,7 +2,8 @@
 # Feature: OpenClaw-Gateways (Phase 2e, ADR-025 revidiert) – Docker-Container, Multi-Instanz
 # Verifiziert: Health je Instanz via HTTPS (TS-Serve-TLS), Ports von außen dicht,
 # openclaw.json je Instanz (SSoT), Instanz-Liste (DEV: OC1-OC3 aktiv; PROD: OC3 disabled,
-# Design 01-oc2-oc3-benchmark – Instanzen je Target via run-all.ps1/Workflow gesteuert).
+# Design 01-oc2-oc3-benchmark – Instanzen je Target via run-all.ps1/Workflow gesteuert),
+# O5: Ressourcen-Kovariate (docker stats, V5/Design 01 Kap. 6.3).
 # MagicDNS fehlt auf GH-Runnern -> --resolve auf die Tailscale-IP (VpsIp).
 param(
     [Parameter(Mandatory)][string]$VpsIp,
@@ -37,6 +38,19 @@ foreach ($inst in $Instances.Split(',')) {
     When "HTTPS-GET auf https://${Fqdn}:${port}/health ausgefuehrt wird (Runner im Tailnet)"
     Then-True "HTTP 200 (war: $code)" ($code -eq '200') $code
     Then-True "Health-Body enthaelt ok" ($respJoined -match '"ok"') $respJoined
+}
+
+# ── O5: Ressourcen-Kovariate je aktiver Instanz (V5, Design 01 Kap. 6.3, F4) ──
+# Benchmark-Fairness: CPU/RAM-Werte landen im BDD-Log, damit Ressourcen-Interferenz
+# (3 Instanzen parallel auf 6 vCore/8 GB) als Kovariate auswertbar ist.
+foreach ($inst in $Instances.Split(',')) {
+    $inst = $inst.Trim()
+    Write-Host "`nScenario: Instanz $inst – Ressourcen-Kovariate (docker stats)" -ForegroundColor Yellow
+    Given "Container openclaw-$inst laeuft; docker stats liefert CPU/RAM"
+    # Docker via sudo (ADR-016: deploy-user bewusst nicht in docker-Gruppe; Muster O3/O4)
+    $r = Invoke-SSH "sudo docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}' openclaw-$inst" $VpsUser $VpsIp $SshKeyPath
+    When "docker stats fuer openclaw-$inst abgefragt wird"
+    Then-True "Kovariate im Log: $($r.Output.Trim())" ($r.ExitCode -eq 0 -and $r.Output -match 'openclaw-oc\d+\|\d+') $r.Output
 }
 
 # ── O2: Ports von aussen (Public-IP) dicht ──
