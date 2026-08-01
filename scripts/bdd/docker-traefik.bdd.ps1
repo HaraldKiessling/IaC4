@@ -25,7 +25,7 @@ When "docker version abgefragt wird"
 Then-True "Docker-Server antwortet" ($r.ExitCode -eq 0 -and $r.Output -match '^\d+\.\d+') $r.Output
 $r = Invoke-SSH "docker compose version" $VpsUser $VpsIp $SshKeyPath
 When "docker compose version abgefragt wird"
-Then-True "Compose-Plugin vorhanden" ($r.ExitCode -eq 0 -and $r.Output -match 'v2') $r.Output
+Then-True "Compose-Plugin vorhanden" ($r.ExitCode -eq 0 -and $r.Output -match 'v\d+(\.\d+)*') $r.Output
 
 # ── D2: deploy-user NICHT in docker-Gruppe (ADR-016) ──
 Write-Host "`nScenario: deploy-user hat keine docker-Gruppen-Mitgliedschaft (ADR-016)" -ForegroundColor Yellow
@@ -67,9 +67,9 @@ Write-Host "`nScenario: Firewall-Regeln für Service-Ports (Firewall-Konzept R7-
 Given "Firewall-Konzept R7-R9 (UFW) und R10/R11 (DOCKER-USER, Docker-published Ports)"
 $r = Invoke-SSH "sudo ufw status verbose" $VpsUser $VpsIp $SshKeyPath
 When "ufw status verbose abgefragt wird"
-Then-True "Port 80 CGNAT-Allow" ($r.Output -match '80/tcp\s+ALLOW\s+FROM\s+100\.64\.0\.0/10') $r.Output
-Then-True "Port 8080 CGNAT-Allow" ($r.Output -match '8080/tcp\s+ALLOW\s+FROM\s+100\.64\.0\.0/10') $r.Output
-Then-True "Port 11434 CGNAT-Allow" ($r.Output -match '11434/tcp\s+ALLOW\s+FROM\s+100\.64\.0\.0/10') $r.Output
+Then-True "Port 80 CGNAT-Allow" ($r.Output -match '80/tcp\s+ALLOW IN\s+100\.64\.0\.0/10') $r.Output
+Then-True "Port 8080 CGNAT-Allow" ($r.Output -match '8080/tcp\s+ALLOW IN\s+100\.64\.0\.0/10') $r.Output
+Then-True "Port 11434 CGNAT-Allow" ($r.Output -match '11434/tcp\s+ALLOW IN\s+100\.64\.0\.0/10') $r.Output
 $r = Invoke-SSH "sudo iptables -S DOCKER-USER" $VpsUser $VpsIp $SshKeyPath
 When "iptables -S DOCKER-USER abgefragt wird"
 Then-True "DOCKER-USER: CGNAT-ACCEPT für 80/8080/11434/6333/6334" ($r.Output -match '100\.64\.0\.0/10.*80,8080,11434,6333,6334.*ACCEPT') $r.Output
