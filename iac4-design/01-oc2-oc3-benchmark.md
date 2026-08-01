@@ -1,4 +1,4 @@
-# Design: OpenClaw-Instanz-Benchmark OC1–OC3 (OC2 vs. OC3, mit OC1-Creator-Baseline)
+# Design: OpenClaw-Instanz-Benchmark OC1–OC3 (OC2 vs. OC3 als Kernvergleich, OC1 = Creator-Baseline-Arm; Design-Entscheidungen Kap. 1–5 betreffen OC2/OC3, OC1 ist Benchmark-Objekt)
 
 - **Status:** Vorgeschlagen — Review abgeschlossen: R1 (Architect + Reviewer) eingearbeitet, R2 = ✅ FREIGABE (Reviewer), externer Architect-Review (IaC3-Workspace) = ✅ APPROVE, Befunde N1–N5 eingearbeitet
 - **Datum:** 2026-08-01
@@ -148,7 +148,7 @@ Die Befunde stammen aus der Config-Analyse (2026-08-01) und den Session-Token-Me
 - Modelle **unverändert** lassen (Orchestrator/Engineer = flash, Architect/Reviewer = pro) — das IST die Kontrollgruppe; die Invertierung (B1) ist Teil des Vergleichs, nicht der Fix.
 - `allowAgents` bleibt ungesetzt (heutiges Verhalten: nur Requester-Agent) — dokumentiert als bewusste Kontrollgruppen-Eigenschaft (B2 bleibt im Vergleich sichtbar).
 - Pro: reproduzierbare Kontrollgruppe, gleiche Timeout-/Concurrency-Bedingungen wie OC3, nur die getesteten Variablen unterscheiden sich.
-- Contra: verlangt dieselbe per-Instanz-Template-Erweiterung wie OC3 (einmalige Arbeit, dann beide Instanzen bedienbar).
+- Contra: verlangt dieselbe per-Instanz-Template-Erweiterung wie OC3 (einmalige Arbeit, dann OC2/OC3 — und seit 2026-08-01 auch OC1 — bedienbar).
 - **Bewertung: gewählt.**
 
 **A2-3: OC2 auf Best-Practice nachrüsten (gleiche Deltas wie OC3).**
