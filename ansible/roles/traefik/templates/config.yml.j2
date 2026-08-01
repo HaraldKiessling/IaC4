@@ -1,5 +1,5 @@
 # Traefik Dynamic Config (ADR-019): Dashboard nur via EntryPoint :8080.
-# Auth: IP-Allowlist (Tailscale-CGNAT + localhost) – IaC3-Muster (auth-tailscale-only),
+# Auth: IP-Allowlist (Tailscale-CGNAT) – IaC3-Muster (auth-tailscale-only),
 # kein Passwort (Nutzbarkeit im Browser; Schutz = Tailnet). BasicAuth bei Bedarf reaktivierbar.
 http:
   routers:
@@ -13,7 +13,6 @@ http:
 
   middlewares:
     auth-tailscale-only:
-      ipWhiteList:
+      ipAllowList:
         sourceRange:
           - "100.64.0.0/10"
-          - "127.0.0.1/8"

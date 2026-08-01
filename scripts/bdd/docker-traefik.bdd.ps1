@@ -59,10 +59,10 @@ Then-True "Kein 443-Listener außer tailscaled" ($r.Output -match 'NO_443') $r.O
 
 # ── D6: Dashboard erreichbar – Auth via Tailscale-IP-Allowlist (ADR-019, IaC3-Muster) ──
 Write-Host "`nScenario: Traefik-Dashboard antwortet (ADR-019, IP-Allowlist)" -ForegroundColor Yellow
-Given "dashboard-Router hat ipWhiteList-Middleware (100.64.0.0/10 + localhost)"
-$r = Invoke-SSH "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/dashboard/" $VpsUser $VpsIp $SshKeyPath
-When "das Dashboard lokal abgerufen wird"
-Then-True "HTTP 200 (localhost ist in Allowlist)" ($r.Output.Trim() -eq '200') $r.Output
+Given "dashboard-Router hat ipAllowList-Middleware (100.64.0.0/10)"
+$r = Invoke-SSH "curl -s -o /dev/null -w '%{http_code}' http://$VpsIp:8080/dashboard/" $VpsUser $VpsIp $SshKeyPath
+When "das Dashboard ueber die Tailscale-IP abgerufen wird"
+Then-True "HTTP 200 (CGNAT in Allowlist)" ($r.Output.Trim() -eq '200') $r.Output
 
 # ── D7: Firewall – UFW-CGNAT (R7-R9) + DOCKER-USER (R10/R11) ──
 Write-Host "`nScenario: Firewall-Regeln für Service-Ports (Firewall-Konzept R7-R11)" -ForegroundColor Yellow
@@ -134,7 +134,8 @@ Then-True "Kein HTTP-Response von außen (Timeout/Filtered): $extJoined" ($extJo
 Write-Host "`nScenario: Dashboard ist via HTTPS erreichbar (https://<fqdn>/dashboard/ → 200)" -ForegroundColor Yellow
 Given "Serve-Mounts /dashboard und /api → localhost:8080; Whitelist erlaubt Tailnet-CGNAT"
 $Fqdn = "$ExpectedHostname.$Tailnet.ts.net"
-$resp = & curl -sk --connect-timeout 8 -w "`n%{http_code}|%{content_type}" "https://$Fqdn/dashboard/" 2>&1
+# MagicDNS ist auf GH-Runnern nicht verfuegbar -> --resolve auf die Tailscale-IP (VpsIp)
+$resp = & curl -sk --connect-timeout 8 --resolve "${Fqdn}:443:${VpsIp}" -w "`n%{http_code}|%{content_type}" "https://$Fqdn/dashboard/" 2>&1
 $meta = ($resp -split "`n")[-1]
 $code = $meta.Split('|')[0].Trim()
 $ctype = $meta.Split('|')[1].Trim()
