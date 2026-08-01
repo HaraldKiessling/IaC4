@@ -65,8 +65,9 @@ Write-Host "  $($r11.Output -replace "`n", "`n  ")"
 
 Write-Host "`n[12] Runner: Root + /dashboard/ + /dashboard (ohne Slash), mit Headern:"
 foreach ($path in @('/', '/dashboard/', '/dashboard')) {
-    $h = & curl -sk --connect-timeout 8 --resolve "${Fqdn}:443:${VpsIp}" -D - -o /dev/null "https://$Fqdn$path" 2>&1
-    $code = ($h -split "`n")[0].Trim()
+    $h = @(& curl -sk --connect-timeout 8 --resolve "${Fqdn}:443:${VpsIp}" -D - -o /dev/null "https://$Fqdn$path" 2>&1)
+    if ($h.Count -eq 0) { $h = @('(keine Antwort)') }
+    $code = ($h -join "`n" -split "`n")[0].Trim()
     $srv = ($h | Select-String -Pattern '^server:' | Select-Object -First 1).Line.Trim()
     $loc = ($h | Select-String -Pattern '^location:' | Select-Object -First 1).Line.Trim()
     Write-Host "  $path -> $code | $srv | $loc"
