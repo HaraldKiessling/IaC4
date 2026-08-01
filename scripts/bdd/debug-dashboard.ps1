@@ -45,4 +45,20 @@ Write-Host "`n[7] Gerenderte Traefik-Config auf VPS:"
 $r5 = Invoke-SSH "sudo cat /opt/traefik/config/config.yml" $VpsUser $VpsIp $SshKeyPath
 Write-Host "  $($r5.Output -replace "`n", "`n  ")"
 
+
+Write-Host "`n[8] VPS tailscale version:"
+$r8 = Invoke-SSH "tailscale version" $VpsUser $VpsIp $SshKeyPath
+Write-Host "  $($r8.Output -replace "`n", " | ")"
+
+Write-Host "`n[9] VPS tailscaled-Log (cert/serve/error, letzte 30):"
+$r9 = Invoke-SSH "sudo journalctl -u tailscaled --since '30 min ago' --no-pager 2>/dev/null | grep -iE 'cert|serve|tls|error' | tail -15" $VpsUser $VpsIp $SshKeyPath
+Write-Host "  $($r9.Output -replace "`n", "`n  ")"
+
+Write-Host "`n[10] VPS manueller tailscale cert-Versuch (FQDN):"
+$r10 = Invoke-SSH "sudo tailscale cert --cert-file=/tmp/ts-test.crt --key-file=/tmp/ts-test.key $Fqdn; echo EXIT=\$?" $VpsUser $VpsIp $SshKeyPath
+Write-Host "  $($r10.Output -replace "`n", "`n  ")"
+
+Write-Host "`n[11] VPS serve status --json (Zertifikat-Felder):"
+$r11 = Invoke-SSH "sudo tailscale serve status --json | jq -c '.ServeConfig | {TCP, Web}' 2>/dev/null || sudo tailscale serve status --json | head -40" $VpsUser $VpsIp $SshKeyPath
+Write-Host "  $($r11.Output -replace "`n", "`n  ")"
 Write-Host "`n════ DIAGNOSE ENDE ════" -ForegroundColor Magenta
