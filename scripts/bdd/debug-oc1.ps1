@@ -18,7 +18,7 @@ $r = Invoke-SSH "sudo docker logs openclaw-oc1 --tail 60 2>&1" $VpsUser $VpsIp $
 Write-Host "  $($r.Output -replace "`n", "`n  ")"
 
 Write-Host "`n[3] Config-Struktur (Werte maskiert):"
-$r = Invoke-SSH "sudo python3 -c \"import json;d=json.load(open('/srv/openclaw/oc1/config/openclaw.json'));print(json.dumps(d,indent=1)[:2000])\" 2>&1" $VpsUser $VpsIp $SshKeyPath
+$r = Invoke-SSH "sudo cat /srv/openclaw/oc1/config/openclaw.json | python3 -m json.tool | head -60" $VpsUser $VpsIp $SshKeyPath
 $masked = $r.Output -replace '(?i)(apiKey|token|botToken)\s*:\s*"[^"]{4}[^"]*"', '$1: "****(maskiert)"'
 Write-Host "  $($masked -replace "`n", "`n  ")"
 
