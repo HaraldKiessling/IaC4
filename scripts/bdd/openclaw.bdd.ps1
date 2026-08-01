@@ -1,7 +1,8 @@
 #!/usr/bin/env pwsh
 # Feature: OpenClaw-Gateways (Phase 2e, ADR-025 revidiert) – Docker-Container, Multi-Instanz
 # Verifiziert: Health je Instanz via HTTPS (TS-Serve-TLS), Ports von außen dicht,
-# openclaw.json je Instanz (SSoT), Instanz-Liste (OC1/OC2 aktiv, OC3 geplant).
+# openclaw.json je Instanz (SSoT), Instanz-Liste (DEV: OC1-OC3 aktiv; PROD: OC3 disabled,
+# RFC 01-oc2-oc3-benchmark – Instanzen je Target via run-all.ps1/Workflow gesteuert).
 # MagicDNS fehlt auf GH-Runnern -> --resolve auf die Tailscale-IP (VpsIp).
 param(
     [Parameter(Mandatory)][string]$VpsIp,
@@ -68,7 +69,7 @@ if (-not [string]::IsNullOrWhiteSpace($DisabledInstances)) {
 foreach ($inst in $DisabledInstances.Split(',')) {
     $inst = $inst.Trim()
     Write-Host "`nScenario: Instanz $inst – nicht deployed (geplant)" -ForegroundColor Yellow
-    Given "enabled=false in openclaw_instances (PROD: oc3 bleibt disabled, RFC F3)"
+    Given "enabled=false in openclaw_instances (PROD: oc3 bleibt disabled bis Benchmark-Abschluss, RFC 01-oc2-oc3-benchmark Kap. 4.4)"
     $r = Invoke-SSH "sudo docker ps --filter name=^openclaw-$inst$ --format '{{.Names}}'" $VpsUser $VpsIp $SshKeyPath
     When "docker ps fuer openclaw-$inst abgefragt wird"
     Then-True "Kein Container openclaw-$inst" ($r.Output -notmatch 'openclaw') $r.Output
