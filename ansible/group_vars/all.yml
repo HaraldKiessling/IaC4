@@ -19,6 +19,13 @@ ollama_mem_reserve: 2G
 ollama_num_parallel: 2        # ADR-022: parallele Embedding-Requests
 ollama_keep_alive: "24h"      # ADR-022: Modell bleibt geladen (Zoo-Indexing-Fix)
 
+# Qdrant (ADR-011) – gepinnt, TLS via Tailscale-Zertifikat (MagicDNS), HTTPS auf 6333
+qdrant_version: "v1.18.3"           # Pin (DEV-Bestand 2026-08-01; prod-Upgrade bei Migration statt Downgrade)
+qdrant_collection: "zoocode-3072d"  # RFC 0034b / #195 (prod-SSoT), 3072d/Cosine
+qdrant_collection_size: 3072
+qdrant_collection_distance: Cosine
+qdrant_cert_dir: /opt/qdrant/certs
+
 # Code-Server – Zugangsdaten (MÜSSEN via Extra-Vars oder GH Secrets gesetzt werden)
 code_server_password: "{{ lookup('env', 'CODE_SERVER_PASSWORD') }}"
 code_server_sudo_password: "{{ lookup('env', 'CODE_SERVER_SUDO_PASSWORD') }}"

@@ -6,4 +6,4 @@
   roles:
     - ollama
     - qdrant
-    - code-server
+    # - code-server   # DEAKTIVIERT (2026-08-01): Rolle noch nicht definiert/abgenommen – kein Deploy bis Freigabe

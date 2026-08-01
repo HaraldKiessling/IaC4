@@ -1,11 +1,20 @@
 ---
-- name: Qdrant-Verzeichnis anlegen
+# Qdrant (ADR-011) – gepinnt, HTTP-only; TLS-Terminierung via Tailscale Serve auf 6333
+# (Entscheidung Harald 2026-08-01: NUR Tailscale terminiert TLS, Qdrant bleibt HTTP)
+
+- name: Qdrant-Verzeichnisse anlegen
   ansible.builtin.file:
     path: /opt/qdrant
     state: directory
     mode: '0755'
 
-- name: Qdrant docker-compose.yml deployen ({{ docker_network }})
+- name: Qdrant config.yaml deployen (Tuning aus IaC3 RFC 0011, kein TLS)
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /opt/qdrant/config.yaml
+    mode: '0644'
+
+- name: Qdrant docker-compose.yml deployen (gepinnt, traefik-network)
   ansible.builtin.template:
     src: docker-compose.yml.j2
     dest: /opt/qdrant/docker-compose.yml
@@ -16,26 +25,43 @@
     project_src: /opt/qdrant
     state: present
 
-- name: Auf Qdrant warten
+- name: Auf Qdrant warten (HTTP /healthz; /health existiert nicht → 404)
   ansible.builtin.uri:
-    url: http://localhost:6333/health
+    url: "http://localhost:6333/healthz"
     status_code: 200
-  register: result
-  until: result.status == 200
+  register: _qdrant_health
+  until: _qdrant_health.status == 200
   retries: 10
   delay: 3
 
-- name: Gemini-Embedding-Collection anlegen
+- name: Collection {{ qdrant_collection }} anlegen (idempotent, 3072d/Cosine)
   ansible.builtin.uri:
-    url: http://localhost:6333/collections
+    url: "http://localhost:6333/collections/{{ qdrant_collection }}"
     method: PUT
     headers:
       Content-Type: application/json
     body_format: json
     body:
-      name: embeddings
       vectors:
-        size: 3072
-        distance: Cosine
+        size: "{{ qdrant_collection_size }}"
+        distance: "{{ qdrant_collection_distance }}"
     status_code: 200
-  failed_when: false  # Existiert bereits? Dann ignorieren
+  failed_when: false   # existiert bereits → kein Fehler
+
+- name: Tailscale Serve-Status abfragen (idempotenz)
+  ansible.builtin.shell: tailscale serve status
+  register: serve_status
+  changed_when: false
+  failed_when: false
+
+- name: "Tailscale Serve aktivieren – HTTPS 6333 → localhost:6333 (TS-TLS-Terminierung)"
+  ansible.builtin.command: tailscale serve --bg --https=6333 http://localhost:6333
+  when: "'localhost:6333' not in serve_status.stdout"
+  register: serve_set
+  changed_when: serve_set.rc == 0
+
+- name: "Tailscale Serve – TCP-Forward 6334 → tcp://localhost:6334 (gRPC, WG-verschluesselt)"
+  ansible.builtin.command: tailscale serve --bg --tcp=6334 tcp://localhost:6334
+  when: "'tcp://localhost:6334' not in serve_status.stdout"
+  register: serve_set_grpc
+  changed_when: serve_set_grpc.rc == 0
