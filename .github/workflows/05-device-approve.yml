@@ -49,7 +49,7 @@ jobs:
 
       - name: Tailscale-OAuth-Token + VPS-IP ermitteln
         run: |
-          TS_TOKEN=*** -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
             --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
             "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
           NODE="vps-${{ inputs.target }}"
