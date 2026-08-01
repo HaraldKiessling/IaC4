@@ -82,4 +82,12 @@ Write-Host "  $($r13.Output)"
 Write-Host "`n[14] VPS serve status --json (roh, komplett):"
 $r14 = Invoke-SSH "sudo tailscale serve status --json" $VpsUser $VpsIp $SshKeyPath
 Write-Host "  $($r14.Output -replace "`n", "`n  ")"
+
+Write-Host "`n[15] Runner -> http://<ts-ip>:8080/dashboard/ (ohne TLS, ueber Tailnet):"
+$c15 = & curl -s --connect-timeout 8 -o /dev/null -w 'code=%{http_code}' "http://$VpsIp:8080/dashboard/" 2>&1
+Write-Host "  $c15"
+
+Write-Host "`n[16] Runner https://<fqdn>/dashboard/ Body (erste 150 Zeichen):"
+$b16 = & curl -sk --connect-timeout 8 --resolve "${Fqdn}:443:${VpsIp}" "https://$Fqdn/dashboard/" 2>&1
+if ($b16) { Write-Host "  $($b16.ToString().Substring(0, [Math]::Min(150, $b16.ToString().Length)) -replace "`n", ' ')" } else { Write-Host "  (leer)" }
 Write-Host "`n════ DIAGNOSE ENDE ════" -ForegroundColor Magenta
