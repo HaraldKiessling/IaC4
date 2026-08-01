@@ -42,6 +42,26 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             for a in oc['agents']:
                 aid = a.lower().replace(' ', '-')
                 assert any(x.get('id') == aid for x in d['agents'].get('list', [])), f"agent id {aid} fehlt"
+            # OC2/OC3-Benchmark (RFC 01-oc2-oc3-benchmark): per-Instanz-Conditionals
+            if 'subagents_defaults' not in oc:
+                # Byte-Identitäts-Garantie: Instanzen ohne Konfiguration bekommen KEINEN subagents-Key
+                assert 'subagents' not in d['agents']['defaults'], f"{oc['name']}: subagents-Key unerwartet (Byte-Identität verletzt)"
+            else:
+                assert d['agents']['defaults'].get('subagents') == oc['subagents_defaults'], \
+                    f"{oc['name']}: subagents_defaults nicht gerendert"
+            if oc.get('subagents_allow_agents'):
+                orch = next(x for x in d['agents']['list'] if x['id'] == 'orchestrator')
+                assert orch.get('subagents', {}).get('allowAgents') == oc['subagents_allow_agents'], \
+                    f"{oc['name']}: allowAgents fehlt/falsch (nur Orchestrator)"
+            if 'agent_models' in oc:
+                for aid, mdl in oc['agent_models'].items():
+                    eid = aid.lower().replace(' ', '-')
+                    a = next(x for x in d['agents']['list'] if x['id'] == eid)
+                    assert a['model']['primary'] == mdl['primary'], \
+                        f"{oc['name']}/{eid}: primary {a['model']['primary']} != {mdl['primary']}"
+            if oc.get('subagents_tools_deny'):
+                assert d['tools']['subagents']['tools']['deny'] == oc['subagents_tools_deny'], \
+                    f"{oc['name']}: tools.subagents.deny falsch"
             e2 = jinja2.Environment()
             e2.globals['lookup'] = fake_lookup
             yaml.safe_load(e2.from_string(COMPOSE).render(

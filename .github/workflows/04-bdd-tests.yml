@@ -106,4 +106,6 @@ jobs:
             -VpsUser "$VPS_USER" \
             -SshKeyPath ~/.ssh/id_ed25519 \
             -PublicIp "$PUBLIC_IP" \
-            -ExpectedHostname "vps-${{ inputs.target }}"
+            -ExpectedHostname "vps-${{ inputs.target }}" \
+            -Instances "${{ inputs.target == 'dev' && 'oc1,oc2,oc3' || 'oc1,oc2' }}" \
+            -DisabledInstances "${{ inputs.target == 'dev' && '' || 'oc3' }}"

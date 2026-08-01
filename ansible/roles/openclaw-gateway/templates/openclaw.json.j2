@@ -1,3 +1,7 @@
+{% set am = oc.agent_models | default(openclaw_agent_models, true) %}
+{% set subagents_defaults = oc.subagents_defaults | default({}, true) %}
+{% set allow_agents = oc.subagents_allow_agents | default([], true) %}
+{% set subagents_deny = oc.subagents_tools_deny | default([], true) %}
 {
   "gateway": {
     "mode": "local",
@@ -17,16 +21,24 @@
   "agents": {
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace"
+{% if subagents_defaults %},
+      "subagents": {{ subagents_defaults | tojson }}
+{% endif %}
     }
 {% if oc.agents | length > 0 %},
     "list": [
-{% for a in oc.agents %}      {
-        "id": "{{ a | lower | replace(' ', '-') }}",
+{% for a in oc.agents %}{% set agent_id = a | lower | replace(' ', '-') %}      {
+        "id": "{{ agent_id }}",
         "name": "{{ a }}",
         "model": {
-          "primary": "{{ openclaw_agent_models[a].primary }}",
-          "fallbacks": {{ openclaw_agent_models[a].fallbacks | tojson }}
+          "primary": "{{ am[a].primary }}",
+          "fallbacks": {{ am[a].fallbacks | tojson }}
         }
+{% if allow_agents and agent_id == 'orchestrator' %},
+        "subagents": {
+          "allowAgents": {{ allow_agents | tojson }}
+        }
+{% endif %}
       }{{ "," if not loop.last else "" }}
 {% endfor %}    ]
 {% endif %}
@@ -56,6 +68,13 @@
 {% else %}        "provider": "none"
 {% endif %}      }
     }
+{% if subagents_deny %},
+    "subagents": {
+      "tools": {
+        "deny": {{ subagents_deny | tojson }}
+      }
+    }
+{% endif %}
   },
   "models": {
     "providers": {
