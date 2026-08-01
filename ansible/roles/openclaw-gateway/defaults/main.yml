@@ -1,0 +1,6 @@
+---
+# Fallback (SSoT: group_vars/all.yml)
+openclaw_image: "ghcr.io/openclaw/openclaw"
+openclaw_image_version: "latest"
+openclaw_instances: []
+openclaw_data_root: /srv/openclaw

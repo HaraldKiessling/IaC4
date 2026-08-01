@@ -1,7 +1,7 @@
 # =============================================================================
-# 04 – Service-Deploy (Phase 2c/2d, ADR-024)
-#   Ein Workflow mit Playbook-Selektion: docker-traefik | services
-#   Reihenfolge (Operator-Verantwortung, ADR-024): 1. docker-traefik, 2. services
+# 04 – Service-Deploy (Phase 2c/2d/2e, ADR-024)
+#   Ein Workflow mit Playbook-Selektion: docker-traefik | services | openclaw
+#   Reihenfolge (Operator-Verantwortung, ADR-024): 1. docker-traefik, 2. services, 3. openclaw
 #   Vorbedingung: Workflow 03 (Baseline) gelaufen, VPS via Tailscale erreichbar.
 #   Generierung: htpasswd -nbB <user> <passwort>  ->  user:$2y$05$...
 # =============================================================================
@@ -19,12 +19,13 @@ on:
           - dev
           - prod
       playbook:
-        description: 'Playbook (Reihenfolge: 1. docker-traefik, 2. services)'
+        description: 'Playbook (Reihenfolge: 1. docker-traefik, 2. services, 3. openclaw)'
         required: true
         type: choice
         options:
           - docker-traefik
           - services
+          - openclaw
 
 permissions:
   contents: read
@@ -39,6 +40,12 @@ jobs:
       SSH_KEY: ${{ secrets.SSH_KEY }}
       CODE_SERVER_PASSWORD: ${{ secrets.CODE_SERVER_PASSWORD }}
       CODE_SERVER_SUDO_PASSWORD: ${{ secrets.CODE_SERVER_SUDO_PASSWORD }}
+      OC1_TELEGRAM_BOT_TOKEN: ${{ secrets.OC1_TELEGRAM_BOT_TOKEN }}
+      OC1_LLM_API_KEY: ${{ secrets.OC1_LLM_API_KEY }}
+      OC1_WEBSEARCH_API_KEY: ${{ secrets.OC1_WEBSEARCH_API_KEY }}
+      OC2_TELEGRAM_BOT_TOKEN: ${{ secrets.OC2_TELEGRAM_BOT_TOKEN }}
+      OC2_LLM_API_KEY: ${{ secrets.OC2_LLM_API_KEY }}
+      OC2_WEBSEARCH_API_KEY: ${{ secrets.OC2_WEBSEARCH_API_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -134,7 +141,8 @@ jobs:
           case "${{ inputs.playbook }}" in
             docker-traefik) PB="03-docker-traefik.yml" ;;
             services)       PB="04-services.yml" ;;
-            *) echo "❌ Unbekanntes Playbook"; exit 1 ;;
+            openclaw) PB="05-openclaw.yml" ;;
+          *) echo "❌ Unbekanntes Playbook"; exit 1 ;;
           esac
           echo "▶️  Playbook: $PB (target: ${{ inputs.target }})"
           ansible-playbook "playbooks/$PB" -i /tmp/inventory

@@ -32,6 +32,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | 1 | `03-baseline-deploy.yml` | ✅ ja (System-Baseline) | `system-baseline.bdd.ps1` |
 | 2c | `03-docker-traefik.yml` | ❌ nein (Deploy Phase 4 offen); Feature implementiert (PR ADR-015..024) | `docker-traefik.bdd.ps1` (D1-D8) |
 | 2d | `04-services.yml` (ollama, qdrant; code-server deaktiviert bis Abnahme) | ❌ nein (Deploy Phase 4 offen); Ollama- **und** Qdrant-Feature implementiert | `docker-traefik.bdd.ps1` (O1-O3), `qdrant.bdd.ps1` (Q1-Q4) |
+| 2e | `05-openclaw.yml` (openclaw-gateway, Container-Multi-Instanz ADR-025) | ❌ nein (Deploy offen); Feature implementiert | `openclaw.bdd.ps1` (O1-O4) |
 | 2e | Phase-3-Workflow (geplant) | ❌ nein (OpenClaw) | `openclaw.bdd.ps1` (geplant) |
 
 ## 4. Testkatalog (Features & Szenarien)
@@ -82,6 +83,15 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | Q3 | Health-Endpoint ok (Qdrant intern HTTP) | `GET http://localhost:6333/healthz` → 200, Body `healthz check passed` (nicht `/health` → 404) |
 | Q4 | Collection `zoocode-3072d` existiert (RFC 0034b/#195) | `GET /collections/zoocode-3072d` → status ok, `3072`, `Cosine` |
 | Q5 | gRPC-Port 6334 erreichbar (TS-TCP-Forward) | Runner → TCP-Connect `100.x:6334` erfolgreich (WireGuard-verschlüsselt, kein TLS) |
+
+### Feature: OpenClaw-Gateways (`openclaw.bdd.ps1`, implementiert 2026-08-01)
+
+| # | Szenario | Then-Assertion |
+| --- | --- | --- |
+| O1 | Health je aktiver Instanz via HTTPS (TS-Serve-TLS) | Runner → `https://<fqdn>:<port>/` → HTTP 200 (oc1:18789, oc2:18790) |
+| O2 | Gateway-Ports von außen dicht | Runner → `http://<Public-IP>:18789/18790/18791` → kein HTTP-Response |
+| O3 | `openclaw.json` (SSoT) je Instanz vorhanden | `/srv/openclaw/<name>/config/openclaw.json` existiert |
+| O4 | Geplante Instanz nicht deployed | `docker ps` → kein Container `openclaw-oc3` (enabled=false) |
 
 ### Geplant (sobald Services deployt sind)
 - **CodeServer:** HTTP 200 auf Hostname, Passwort-Auth greift (401 ohne / 200 mit)

@@ -34,8 +34,43 @@ code_server_hostname: "{{ lookup('env', 'CODE_SERVER_HOSTNAME') | default('code.
 # Tailscale – Auth (wird dynamisch im Workflow generiert)
 tailscale_auth_key: "{{ lookup('env', 'TAILSCALE_AUTH_KEY') | default('', true) }}"
 
-# OpenClaw
-openclaw_llm_provider: "{{ lookup('env', 'OPENCLAW_LLM_PROVIDER') | default('anthropic', true) }}"
-openclaw_llm_api_key: "{{ lookup('env', 'OPENCLAW_LLM_API_KEY') | default('', true) }}"
-openclaw_websearch_api_key: "{{ lookup('env', 'OPENCLAW_WEBSEARCH_API_KEY') | default('', true) }}"
-openclaw_gateway_port: 18789
+# OpenClaw – Multi-Instanz (ADR-025, revidiert 2026-08-01): Gateway als gepinnter Docker-Container
+# pro Instanz: Container + Config-Volume + openclaw.json (SSoT). Ports localhost-only, TLS via Tailscale Serve.
+# Secrets je Instanz als GH-Secrets: <INST>_TELEGRAM_BOT_TOKEN, <INST>_LLM_API_KEY, <INST>_WEBSEARCH_API_KEY
+openclaw_image: "ghcr.io/openclaw/openclaw"
+openclaw_image_version: "2026.7.1"          # Pin (ADR-017); Update = Variable + Deploy. GHCR-Tag bei Deploy verifizieren
+# Agent-Modell-Matrix (Stand 2026-08-01, bisherige Instanz) – je Instanz referenzierbar
+openclaw_agent_models:
+  Orchestrator: {primary: "deepseek/deepseek-v4-flash", fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]}
+  Architekt:    {primary: "deepseek/deepseek-v4-pro",    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]}
+  "Engineer Pro": {primary: "deepseek/deepseek-v4-flash", fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]}
+  Reviewer:     {primary: "deepseek/deepseek-v4-pro",    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]}
+
+openclaw_instances:
+  - name: oc1
+    enabled: true
+    port: 18789
+    label: "OC1 – Default Gateway (out of box)"
+    llm_provider: "{{ lookup('env', 'OC1_LLM_PROVIDER') | default('anthropic', true) }}"
+    llm_api_key: "{{ lookup('env', 'OC1_LLM_API_KEY') | default('', true) }}"
+    websearch_api_key: "{{ lookup('env', 'OC1_WEBSEARCH_API_KEY') | default('', true) }}"
+    telegram_bot_token: "{{ lookup('env', 'OC1_TELEGRAM_BOT_TOKEN') | default('', true) }}"
+    agents: []                               # OC1: Default, keine speziellen Agents
+  - name: oc2
+    enabled: true
+    port: 18790
+    label: "OC2 – DevOps Team (4 Agents)"
+    llm_provider: "{{ lookup('env', 'OC2_LLM_PROVIDER') | default('anthropic', true) }}"
+    llm_api_key: "{{ lookup('env', 'OC2_LLM_API_KEY') | default('', true) }}"
+    websearch_api_key: "{{ lookup('env', 'OC2_WEBSEARCH_API_KEY') | default('', true) }}"
+    telegram_bot_token: "{{ lookup('env', 'OC2_TELEGRAM_BOT_TOKEN') | default('', true) }}"
+    agents: [Orchestrator, Architekt, "Engineer Pro", Reviewer]
+  - name: oc3
+    enabled: false                            # nur geplant (Harald 2026-08-01)
+    port: 18791
+    label: "OC3 – Future Purpose (geplant)"
+    llm_provider: "{{ lookup('env', 'OC3_LLM_PROVIDER') | default('anthropic', true) }}"
+    llm_api_key: "{{ lookup('env', 'OC3_LLM_API_KEY') | default('', true) }}"
+    websearch_api_key: "{{ lookup('env', 'OC3_WEBSEARCH_API_KEY') | default('', true) }}"
+    telegram_bot_token: "{{ lookup('env', 'OC3_TELEGRAM_BOT_TOKEN') | default('', true) }}"
+    agents: []

@@ -1,49 +1,48 @@
-# ADR-025: OpenClaw-Deployment-Form (nativ/systemd vs. Docker-Container)
+# ADR-025: OpenClaw-Deployment-Form (Docker-Container, Multi-Instanz)
 
-- **Status:** Vorgeschlagen (Proposed)
-- **Datum:** 2026-07-31
-- **Kontext:** Migrationsplan Phase 5 – „OpenClaw Minimal" auf DEV (Gateway + Memory + WebSearch). IaC3-Betrieb: OpenClaw lief **nativ**, aber als Standalone-Prozess ohne systemd (Vorfall 2026-07-16: 6h Downtime durch fehlende Prozess-Verwaltung). IaC4 baut parallel eine Docker-Plattform (ADR-015..024) für Traefik/Ollama/Qdrant/code-server. Frage: Läuft OpenClaw selbst als Container oder nativ?
+- **Status:** Angenommen (Accepted, 2026-08-01; Revision der Vorgängerversion vom 2026-07-31)
+- **Datum:** 2026-07-31 (revidiert 2026-08-01)
+- **Kontext:** Migrationsplan Phase 5 – „OpenClaw" auf DEV. IaC3-Betrieb: OpenClaw lief nativ (ohne systemd → Vorfall 2026-07-16, 6h Downtime) und eine Rollen-Neuinstallation behielt **alte Konfigurationen** (IaC3-Lesson: Altlasten in `~/.openclaw`). Harald 2026-08-01: **Multi-Instanz**-Betrieb für Untersuchungen (mehrere Gateways, nicht Agents) + Recherche zu offizieller Ansible-/Docker-Installation.
 
 ## Entscheidungsfrage
-Wie wird das OpenClaw-Gateway auf dem IaC4-VPS betrieben?
+Wie wird das OpenClaw-Gateway auf dem IaC4-VPS betrieben — und wie werden mehrere Instanzen parallel betrieben?
+
+## Faktenlage (geprüft 2026-08-01)
+- **openclaw-ansible** (v2.0.0): installiert das Gateway **host-based** (Node/pnpm + systemd), Docker nur als Sandbox-Backend. Es gibt **keine** offizielle „Ansible + Docker-Gateway"-Kombination.
+- **Offizieller Docker-Weg** existiert: `ghcr.io/openclaw/openclaw` (gepinnte Version-Tags) + Compose + Volumes (`install/docker`), Setup via `scripts/docker/setup.sh`, ClawDock-Helfer.
+- **IaC3-Lesson:** Host-Installation hinterlässt Konfig-Altlasten bei Reinstall → Container-Instanz mit explizitem Config-Volume = sauberer Reinstall (Container/Volume neu).
 
 ## Optionen
 
-### A: Nativ (Host) + systemd mit Hardening — EMPFEHLUNG (openclaw-ansible-Muster)
-- **Fachliche Auswirkungen:** OpenClaw läuft direkt auf dem Host als systemd-Service mit Hardening (`NoNewPrivileges`, `PrivateTmp`, unprivilegierter Service-User, Auto-Start/Restart). Das ist der **von OpenClaw dokumentierte Produktivweg** für VPS-Deployments. Docker auf dem Host bleibt als **Sandbox-Backend** nutzbar (`agents.defaults.sandbox`), ohne das Gateway zu containerisieren. Ollama/Qdrant direkt via `localhost:11434`/`localhost:6333` erreichbar (kein `host.docker.internal` nötig). Update-Pfad: Standard-Installer (`install/updating`), idempotent. Voraussetzung: Node 24 (NodeSource-Repo; Ubuntu-apt-Node 18 reicht nicht).
-- **Zukunft:** openclaw-ansible als Referenz für Härtungs-Updates; Sandbox-Ausbau ohne Gateway-Umbau möglich; konsistent mit arc42/07 (Host-Process openclaw, Port 18789 nur Tailscale).
+### A: Nativ (Host) + systemd (Vorgänger-Empfehlung)
+- Wie bisher: Node 24 via NodeSource, Installer, systemd-Unit (Hardening-Muster openclaw-ansible).
+- **Nachteile (heute entscheidend):** Altlasten-Problem aus IaC3 bleibt (Host-`~/.openclaw`, pnpm-Global-State); Multi-Instanz = mehrere User/Home-Dirs + Units (fummelig); Host-Angriffsfläche (Node/pnpm).
 
-### B: Docker-Container (`ghcr.io/openclaw/openclaw`, gepinnt)
-- **Fachliche Auswirkungen:** Isoliertes Image (non-root `node`-User, `tini` als PID 1), Reproduzierbarkeit via Image-Tag (vgl. ADR-017). Aber: OpenClaw-Doku positioniert Docker explizit als „optional … isolated, **throwaway** gateway environment or a host without local installs"; Setup-Flow (`.env`-Sync, Compose, Volumes `OPENCLAW_CONFIG_DIR`/`WORKSPACE_DIR`/`AUTH_PROFILE_SECRET_DIR`), Ollama-Zugriff bräuchte `host.docker.internal`-Mapping; Container-Restart-Politik + Volume-Persistenz = zusätzliche Betriebspunkte; Sandbox-Docker-Socket-Frage (nie Host-Socket in Sandbox-Container mounten).
-- **Zukunft:** Sinnvoll für Wegwerf-/Test-Umgebungen; für den Dauerbetrieb des zentralen Gateways mehr Komplexität ohne fachlichen Gewinn.
+### B: Docker-Container, gepinnt, Multi-Instanz — EMPFEHLUNG (neu)
+- Pro Instanz: **ein Container** (`ghcr.io/openclaw/openclaw:<version>`, ADR-017-Pin) + **ein Config-Volume** (Host-Bind-Mount `/srv/openclaw/<name>/config` mit `openclaw.json` = SSoT) + **ein Workspace** (`/srv/openclaw/<name>/workspace`).
+- Ports binden nur an **localhost**; **Tailscale Serve terminiert TLS** (`--https=<port>`, beliebige Ports im Tailnet, heute verifiziert) → `https://<fqdn>:<port>/`.
+- Container im **traefik-network** → Ollama/Qdrant via Docker-DNS (`http://ollama:11434`, `http://qdrant:6333`); **kein `host.docker.internal`** nötig (alle Dienste containerisiert).
+- Multi-Instanz: Liste `openclaw_instances` in group_vars (OC1/OC2/OC3), Ansible-Loop erzeugt Container + Config + Serve.
+- **Reinstall = Container + Volume neu** → keine Altlasten (löst IaC3-Problem).
+- **Worst-Case:** Image-Update defekt → Container-Rollback via alten Pin; Volumes bleiben; kein Host-Schaden.
+- **Update-Pfad:** Pin-Variable ändern → Deploy (`pull: always` + Recreate); Gateway-interne Updates (`openclaw update`-Äquivalent) möglich.
 
-### C: `openclaw-ansible`-Playbook direkt als Abhängigkeit
-- **Fachliche Auswirkungen:** Fertiges Playbook (eigener `openclaw`-User, UFW-Regeln, Tailscale). Aber: externe Repo-Abhängigkeit (Supply-Chain, Update-Zyklus fremd), überschreibt IaC4-Design (deploy-user, Firewall-Konzept R1-R9, Tailscale-OAuth-Workflows) → Konflikt mit bestehenden IaC4-Entscheidungen.
-- **Zukunft:** Nicht kompatibel mit IaC4-SSoT; nur als **Referenz/Muster** für die eigene Rolle sinnvoll.
-
-## Evidenz
-- OpenClaw-Docs `install/ansible`: „The gateway runs directly on the host, not in Docker. Agent sandboxing is optional; this playbook installs Docker because it is the default sandbox backend."; systemd-Hardening-Liste; Node-Anforderung (22.22.3+/24.15+/25.9+, Node 24 empfohlen)
-- OpenClaw-Docs `install/docker`: „Docker is optional. Use it for an isolated, throwaway gateway environment"; `host.docker.internal`-Mapping für Host-Provider (Ollama/LM Studio); Persistenz-Details (Config/Workspace/Auth-Secret-Verzeichnisse)
-- IaC3-Betriebserfahrung: nativ ohne systemd → Vorfall 2026-07-16 (6h Downtime); Lehre: Prozess-Management ist Pflicht
+### C: openclaw-ansible als Abhängigkeit
+- Verworfen (wie bisher): überschreibt IaC4-Design (deploy-user, Firewall-Konzept, OAuth-Workflows), host-based, keine Multi-Instanz-Struktur. Nur als Muster.
 
 ## Empfehlung
-**Option A** – OpenClaw nativ als systemd-Service, Hardening-Muster aus openclaw-ansible adaptiert (eigener Service-User, `NoNewPrivileges`, `PrivateTmp`), Docker bleibt Sandbox-Backend. Umsetzung als eigene `roles/openclaw-gateway` (IaC4-Struktur), Node 24 via NodeSource. Kein `openclaw-ansible`-Repo als Dependency (Option C nur Muster).
-
-## Worst-Case / Rollback
-- **Worst-Case 1:** Gateway-Update defekt → Gateway startet nicht.
-  - **Rollback:** `~/.openclaw`-Backup vor Update (Config/Workspace/State), alten Installer-Stand wiederherstellen; `systemctl restart openclaw`; kein Netzwerk-/Lockout-Risiko (Port 18789 Tailscale-only, UFW unverändert).
-- **Worst-Case 2:** systemd-Unit-Hardening zu strikt (Service startet nicht).
-  - **Rollback:** Unit-Anpassung (z.B. `PrivateTmp` deaktivieren), `systemctl daemon-reload && restart`; BDD-Check `systemctl is-active openclaw`.
-- **Gegenmaßnahme:** Post-Deploy-Verifikation (Phase 7): `systemctl status` + `/healthz`-Check via Tailscale; Config in Git (SSoT), Laufzeit-Daten auf dem VPS.
+**Option B** – Docker-Container (gepinnt, ADR-017), Multi-Instanz über `openclaw_instances`-Liste, TS-Serve-TLS, Bind-Mounts unter `/srv/openclaw/<name>/`, Docker-DNS zu Ollama/Qdrant. Umsetzung als `roles/openclaw-gateway` (Loop über Instanzen, `enabled`-Flag für geplante Instanzen wie OC3).
 
 ## Konsequenzen
-- `roles/openclaw-gateway` implementiert native Installation (Installer + systemd-Unit), NICHT Container
-- Node 24 via NodeSource-Repo (Baseline-abhängig)
-- Ollama-/Qdrant-Integration über `localhost` (ADR-021/ADR-011-kompatibel); kein `host.docker.internal`
-- Sandbox-Option (`agents.defaults.sandbox`) später via Docker-Plattform (ADR-015) möglich
-- P4: arc42/07 (Host-Process openclaw) bleibt korrekt; Migrationsplan Phase 5 referenziert diese ADR
+- Rolle `openclaw-gateway`: Container-Deploy pro Instanz (Compose-Template, openclaw.json.j2, Health-Wait, Serve-Task)
+- Instanz-Struktur: OC1 (Default, WebUI+Telegram+Memory+WebSearch+LLM), OC2 (zusätzlich Agents orchestrator/architect/reviewer/engineer), OC3 (geplant, disabled)
+- Secrets je Instanz als GH-Secrets (`OC<n>_TELEGRAM_BOT_TOKEN`, `OC<n>_LLM_API_KEY`, `OC<n>_WEBSEARCH_API_KEY`); Workflow reicht sie als env durch
+- Kein Host-Node/pnpm mehr; alte native Rolle ersetzt
+- BDD: `openclaw.bdd.ps1` (Health je Instanz via HTTPS, Ports von außen dicht, Serve-Routen)
+- arc42/07: OpenClaw als Container, Ports 18789/18790/18791 nur Tailnet
 
 ## Referenzen
-- <https://docs.openclaw.ai/install/ansible>
 - <https://docs.openclaw.ai/install/docker>
-- <https://github.com/openclaw/openclaw-ansible>
+- <https://docs.openclaw.ai/install/ansible> (host-based, Stand 2026-08-01)
+- <https://github.com/openclaw/openclaw-ansible> (v2.0.0)
+- IaC3-Lesson (2026-07-16/18): Prozess-Management + Altlasten bei Reinstall

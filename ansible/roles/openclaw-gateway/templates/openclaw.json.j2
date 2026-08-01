@@ -1,13 +1,56 @@
 {
   "gateway": {
     "mode": "local",
-    "port": {{ openclaw_gateway_port }},
-    "bind": "loopback"
+    "port": {{ oc.port }},
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "allowTailscale": true
+    },
+    "controlUi": {
+      "allowedOrigins": ["http://localhost:{{ oc.port }}", "http://127.0.0.1:{{ oc.port }}"]
+    }
   },
   "agents": {
     "defaults": {
-      "workspace": "~/.openclaw/workspace"
+      "workspace": "/home/node/workspace"
+    }
+{% if oc.agents | length > 0 %},
+    "list": [
+{% for a in oc.agents %}      {
+        "name": "{{ a }}",
+        "model": {
+          "primary": "{{ openclaw_agent_models[a].primary }}",
+          "fallbacks": {{ openclaw_agent_models[a].fallbacks | tojson }}
+        }
+      }{{ "," if not loop.last else "" }}
+{% endfor %}    ]
+{% endif %}
+  },
+  "memory": {
+    "backend": "qmd"
+  },
+  "plugins": {
+    "entries": {
+      "perplexity": {
+        "enabled": true,
+        "config": {
+          "webSearch": {
+            "apiKey": "{{ oc.websearch_api_key }}"
+          }
+        }
+      }
     }
   },
-  "providers": {}
+  "providers": {
+    "{{ oc.llm_provider }}": {
+      "apiKey": "{{ oc.llm_api_key }}"
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "{{ oc.telegram_bot_token }}"
+    }
+  }
 }
