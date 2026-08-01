@@ -97,7 +97,7 @@ jobs:
             FAIL=1
           fi
           if [ "${{ inputs.playbook }}" = "openclaw" ]; then
-            T="${{ inputs.target }}"
+            T=$(echo "${{ inputs.target }}" | tr '[:lower:]' '[:upper:]')
             eval "KD=\$${T}_DEEPSEEK_API_KEY"; eval "KO=\$${T}_OPENROUTER_API_KEY"
             eval "KA=\$${T}_OPENAI_API_KEY";    eval "KG=\$${T}_GOOGLE_API_KEY"
             if [ -z "$KD" ] && [ -z "$KO" ] && [ -z "$KA" ] && [ -z "$KG" ]; then
