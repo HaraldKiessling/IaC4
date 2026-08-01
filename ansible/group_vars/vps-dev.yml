@@ -30,7 +30,7 @@ openclaw_instances:
     gateway_token_env: "DEV_OC2_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC2_TELEGRAM_BOT_TOKEN"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
-    # Konstant-Haltung (RFC Kap. 5.3): identische Rahmenbedingungen zu OC3,
+    # Konstant-Haltung (Design 01-oc2-oc3-benchmark Kap. 5.3): identische Rahmenbedingungen zu OC3,
     # damit Timeout/Concurrency keine Benchmark-Variablen sind.
     # Bewusst NICHT Doku-Defaults (maxConcurrent 8, runTimeout 0) – Abweichung dokumentiert.
     subagents_defaults:
@@ -48,7 +48,7 @@ openclaw_instances:
     gateway_token_env: "DEV_OC3_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC3_TELEGRAM_BOT_TOKEN"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
-    # Modell-Invertierung (RFC Befund B1): Orchestrator = Qualität (pro),
+    # Modell-Invertierung (Design 01-oc2-oc3-benchmark Befund B1): Orchestrator = Qualität (pro),
     # Sub-Agents = Kosten (flash) – Doku-Empfehlung agents.defaults.subagents.model
     agent_models:
       Orchestrator:
@@ -56,14 +56,14 @@ openclaw_instances:
         fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
       Architect:
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro"]   # RFC 4.3 exakt (Architect MINOR-1)
+        fallbacks: ["deepseek/deepseek-v4-pro"]   # Design 01-oc2-oc3-benchmark Kap. 4.3 exakt (Architect MINOR-1)
       "Engineer Pro":
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro"]   # RFC 4.3 exakt (Architect MINOR-1)
+        fallbacks: ["deepseek/deepseek-v4-pro"]   # Design 01-oc2-oc3-benchmark Kap. 4.3 exakt (Architect MINOR-1)
       Reviewer:
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro"]   # RFC 4.3 exakt (Architect MINOR-1)
-    # Orchestrator-Pattern (RFC B3): Depth-2-Delegation + echte Rollen-IDs (B2)
+        fallbacks: ["deepseek/deepseek-v4-pro"]   # Design 01-oc2-oc3-benchmark Kap. 4.3 exakt (Architect MINOR-1)
+    # Orchestrator-Pattern (Design 01-oc2-oc3-benchmark Befund B3): Depth-2-Delegation + echte Rollen-IDs (B2)
     subagents_defaults:
       delegationMode: "prefer"
       maxSpawnDepth: 2
