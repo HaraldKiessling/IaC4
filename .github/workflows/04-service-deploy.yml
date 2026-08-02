@@ -251,7 +251,7 @@ jobs:
             echo "--- GH_TOKEN-Check (Compose-Datei via sudo + Container-Env) ---"
             ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
               "$VPS_USER@$VPS_TS_IP" \
-              "for oc in oc1 oc2 oc3; do echo "== \$oc =="; sudo grep -c 'GH_TOKEN' /srv/openclaw/\$oc/docker-compose.yml 2>/dev/null || echo 'compose: unlesbar'; docker inspect openclaw-\$oc 2>/dev/null | grep -c 'GH_TOKEN=' || echo 'env: 0'; done" || true
+              "for oc in oc1 oc2 oc3; do echo "== \$oc =="; cd /srv/openclaw/\$oc && docker compose config 2>/dev/null | grep -c 'GH_TOKEN' || echo 'compose-config: 0'; done" || true
           fi
           echo ""
           echo "▶️  Nächster Schritt: Workflow 04-bdd-tests.yml (BDD-Verifikation, qa/bdd-testkonzept.md)"
