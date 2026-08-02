@@ -130,6 +130,14 @@ jobs:
             fi
           fi
           [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
+
+          # H1 (Issue #78-Review): clean/benchmark sind destruktive Benchmark-Modi – NUR dev
+          if [ "${{ inputs.clean }}" = "true" ] && [ "${{ inputs.target }}" != "dev" ]; then
+            echo "❌ clean-Modus NUR für dev erlaubt (destruktiv: Sessions/QMD/Workspace werden gelöscht)"; exit 1
+          fi
+          if [ "${{ inputs.benchmark }}" = "true" ] && [ "${{ inputs.target }}" != "dev" ]; then
+            echo "❌ benchmark-Modus NUR für dev erlaubt (skipBootstrap/BOOTSTRAP.md-Entfernung)"; exit 1
+          fi
           echo "✅ Vorbedingungen ok"
 
       - name: Connect Runner to Tailnet (MagicDNS)
