@@ -123,7 +123,7 @@ gh workflow run 04-service-deploy.yml -f target=prod -f playbook=openclaw -f ins
 
 **Verifikation nach Clean:** `sessions.list` → 0, `agents.workspace.list` → leer, alle Instanzen `health=ok`.
 
-**Kombination mit Benchmark-Modus:** `clean=true` + `benchmark=true` (PR #76) = BOOTSTRAP.md weg + kein Persistenz-State → sauberster Start.
+**Kombination:** `clean=true` + `skip_bootstrap=true` (PR #76) = BOOTSTRAP.md weg + kein Persistenz-State → sauberster Benchmark-Start.
 
 ## 5. Best Practices (konsolidierte Lessons)
 
