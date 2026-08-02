@@ -36,6 +36,14 @@ on:
           - oc1
           - oc2
           - oc3
+      skip_bootstrap:
+        description: 'skipBootstrap-Modus: verhindert BOOTSTRAP.md-Erzeugung + entfernt bestehende (generisch – wird u.a. vom OC-Benchmark verwendet)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: read
@@ -186,7 +194,7 @@ jobs:
           *) echo "❌ Unbekanntes Playbook"; exit 1 ;;
           esac
           echo "▶️  Playbook: $PB (target: ${{ inputs.target }})"
-          ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}
+          ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}${{ inputs.playbook == 'openclaw' && inputs.skip_bootstrap == 'true' && ' -e skip_bootstrap=true' || '' }}
 
       - name: Post-Deploy Check (SSH via Tailscale)
         run: |
