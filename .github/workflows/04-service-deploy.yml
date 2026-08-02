@@ -131,12 +131,11 @@ jobs:
           fi
           [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
 
-          # H1 (Issue #78-Review): clean/benchmark sind destruktive Benchmark-Modi – NUR dev
-          if [ "${{ inputs.clean }}" = "true" ] && [ "${{ inputs.target }}" != "dev" ]; then
-            echo "❌ clean-Modus NUR für dev erlaubt (destruktiv: Sessions/QMD/Workspace werden gelöscht)"; exit 1
-          fi
-          if [ "${{ inputs.benchmark }}" = "true" ] && [ "${{ inputs.target }}" != "dev" ]; then
-            echo "❌ benchmark-Modus NUR für dev erlaubt (skipBootstrap/BOOTSTRAP.md-Entfernung)"; exit 1
+          # H1 (Issue #78-Review): Clean auf PROD erfordert explizites Human-Approval
+          # (confirm_clean_prod=true, Harald-Entscheidung 2026-08-02). Das Gate liegt im
+          # Playbook-Schritt; hier nur der Früh-Abbruch ohne Approval (verhindert unnötigen Tailnet-Aufbau).
+          if [ "${{ inputs.clean }}" = "true" ] && [ "${{ inputs.target }}" = "prod" ] && [ "${{ inputs.confirm_clean_prod }}" != "true" ]; then
+            echo "❌ clean-Modus auf PROD erfordert confirm_clean_prod=true (Human-Approval, destruktiv)"; exit 1
           fi
           echo "✅ Vorbedingungen ok"
 
