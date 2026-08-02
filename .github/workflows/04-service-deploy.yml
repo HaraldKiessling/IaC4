@@ -218,6 +218,18 @@ jobs:
           *) echo "❌ Unbekanntes Playbook"; exit 1 ;;
           esac
           echo "▶️  Playbook: $PB (target: ${{ inputs.target }})"
+
+          # HUMAN-APPROVAL-Gate (Issue #78, Harald 2026-08-02): Clean auf PROD zulässig,
+          # aber NUR mit expliziter Bestätigung confirm_clean_prod=true.
+          if [ "${{ inputs.clean }}" = "true" ] && [ "${{ inputs.target }}" = "prod" ] && [ "${{ inputs.confirm_clean_prod }}" != "true" ]; then
+            echo "❌ CLEAN auf PROD ist destruktiv (Sessions/QMD/State/Workspace aller Instanzen)."
+            echo "   Human-Approval erforderlich: confirm_clean_prod=true setzen (Freigabe Harald)."
+            exit 1
+          fi
+          if [ "${{ inputs.clean }}" = "true" ]; then
+            echo "⚠️  CLEAN-Modus aktiv: Persistenz-State wird gelöscht (target: ${{ inputs.target }})."
+          fi
+
           ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}${{ inputs.playbook == 'openclaw' && inputs.skip_bootstrap == 'true' && ' -e skip_bootstrap=true' || '' }}${{ inputs.playbook == 'openclaw' && inputs.clean == 'true' && ' -e openclaw_clean=true' || '' }}
 
       - name: Post-Deploy Check (SSH via Tailscale)
