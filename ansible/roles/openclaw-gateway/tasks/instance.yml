@@ -75,6 +75,15 @@
   when: openclaw_clean | default(false) | bool
   register: _oc_clean_ws
 
+# Feldtest-Fund 2026-08-02: Workspace-Attestation muss mit weg, sonst WorkspaceVanishedError
+# (OpenClaw weigert sich, über attestiertem Workspace neu zu seeden)
+- name: "{{ oc.name }}: CLEAN – Workspace-Attestation entfernen (sonst WorkspaceVanishedError)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/config/workspace-attestations"
+    state: absent
+  when: openclaw_clean | default(false) | bool
+  register: _oc_clean_attest
+
 - name: "{{ oc.name }}: CLEAN – config/workspace neu anlegen (uid 1000)"
   ansible.builtin.file:
     path: "{{ item }}"
