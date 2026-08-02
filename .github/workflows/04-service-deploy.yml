@@ -44,6 +44,22 @@ on:
         options:
           - 'false'
           - 'true'
+      clean:
+        description: 'CLEAN-Modus (Issue #78): Session-Store/QMD/Agent-Dirs + Workspace zurücksetzen – deterministische Benchmark-Startbedingung'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      confirm_clean_prod:
+        description: 'HUMAN-APPROVAL: Clean auf PROD bestätigen (destruktiv – Freigabe Harald, Issue #78)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: read
@@ -194,7 +210,7 @@ jobs:
           *) echo "❌ Unbekanntes Playbook"; exit 1 ;;
           esac
           echo "▶️  Playbook: $PB (target: ${{ inputs.target }})"
-          ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}${{ inputs.playbook == 'openclaw' && inputs.skip_bootstrap == 'true' && ' -e skip_bootstrap=true' || '' }}
+          ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}${{ inputs.playbook == 'openclaw' && inputs.skip_bootstrap == 'true' && ' -e skip_bootstrap=true' || '' }}${{ inputs.playbook == 'openclaw' && inputs.clean == 'true' && ' -e openclaw_clean=true' || '' }}
 
       - name: Post-Deploy Check (SSH via Tailscale)
         run: |
