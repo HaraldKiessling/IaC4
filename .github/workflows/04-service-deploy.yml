@@ -87,6 +87,9 @@ jobs:
       DEV_OC3_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC3_WEBSEARCH_API_KEY }}
       DEV_OC3_GATEWAY_TOKEN: ${{ secrets.DEV_OC3_GATEWAY_TOKEN }}
       DEV_OC3_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC3_TELEGRAM_BOT_TOKEN }}
+      DEV_OC1_GH_TOKEN: ${{ secrets.DEV_OC1_GH_TOKEN }}
+      DEV_OC2_GH_TOKEN: ${{ secrets.DEV_OC2_GH_TOKEN }}
+      DEV_OC3_GH_TOKEN: ${{ secrets.DEV_OC3_GH_TOKEN }}
       PROD_DEEPSEEK_API_KEY: ${{ secrets.PROD_DEEPSEEK_API_KEY }}
       PROD_OPENROUTER_API_KEY: ${{ secrets.PROD_OPENROUTER_API_KEY }}
       PROD_OPENAI_API_KEY: ${{ secrets.PROD_OPENAI_API_KEY }}
@@ -100,6 +103,9 @@ jobs:
       PROD_OC3_WEBSEARCH_API_KEY: ${{ secrets.PROD_OC3_WEBSEARCH_API_KEY }}
       PROD_OC3_GATEWAY_TOKEN: ${{ secrets.PROD_OC3_GATEWAY_TOKEN }}
       PROD_OC3_TELEGRAM_BOT_TOKEN: ${{ secrets.PROD_OC3_TELEGRAM_BOT_TOKEN }}
+      PROD_OC1_GH_TOKEN: ${{ secrets.PROD_OC1_GH_TOKEN }}
+      PROD_OC2_GH_TOKEN: ${{ secrets.PROD_OC2_GH_TOKEN }}
+      PROD_OC3_GH_TOKEN: ${{ secrets.PROD_OC3_GH_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4

@@ -12,6 +12,7 @@ services:
 {% if oc_telegram_bot_token | default('') | length > 0 %}
       TELEGRAM_BOT_TOKEN: "{{ oc_telegram_bot_token }}"
 {% endif %}
+
     volumes:
       - ./config:/home/node/.openclaw
       - ./workspace:/home/node/.openclaw/workspace

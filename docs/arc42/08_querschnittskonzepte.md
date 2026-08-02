@@ -19,6 +19,7 @@
 | <T>_OC<n>_WEBSEARCH_API_KEY | GH Actions Secret | Perplexity-WebSearch je Instanz (optional) |
 | <T>_OC<n>_GATEWAY_TOKEN | GH Actions Secret | Gateway-Auth-Token je Instanz (Pflicht, K3-1) |
 | <T>_OC<n>_TELEGRAM_BOT_TOKEN | GH Actions Secret | Telegram-Bot je Instanz (optional) |
+| <T>_OC<n>_GH_TOKEN | GH Actions Secret | GH-Read-Token je Instanz (optional, read-only; DEV gesetzt, PROD folgt – Harald 2026-08-02) |
 
 **Nicht in diesem Repo:** Secret-Werte (nur Env-Referenzen in Workflow/group_vars); Ollama braucht keinen Key (lokal, Docker-DNS)
 
@@ -55,7 +56,7 @@ Jeder Workflow liest und schreibt bestimmte GitHub Secrets. Die folgende Tabelle
 | **01** | `TAILSCALE_API_KEY`, `TAILSCALE_TAILNET`, `GH_TOKEN` | **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`** |
 | **02** | `SSH_KEY`, `VPS_USER`, `VPS_DEV_PUBLIC_IP` (dev) / `VPS_PROD_PUBLIC_IP` (prod), **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET` (OAuth-Client-Token) | – |
 | **03** | `SSH_KEY`, `VPS_USER`, **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET` (OAuth-Client-Token; IP via Tailscale-API – keine Public-IP-Secrets) | – |
-| **04** | `SSH_KEY`, `VPS_USER`, Tailscale-OAuth-Secrets, `TRAEFIK_DASHBOARD_AUTH`(hist.), `CODE_SERVER_*`, `<T>_<PROVIDER>_API_KEY`, `<T>_OC<n>_{WEBSEARCH,GATEWAY,TELEGRAM}` | – |
+| **04** | `SSH_KEY`, `VPS_USER`, Tailscale-OAuth-Secrets, `TRAEFIK_DASHBOARD_AUTH`(hist.), `CODE_SERVER_*`, `<T>_<PROVIDER>_API_KEY`, `<T>_OC<n>_{WEBSEARCH,GATEWAY,TELEGRAM,GH_TOKEN}` | – |
 | **04b** | `SSH_KEY`, `VPS_USER`, Tailscale-OAuth-Secrets, `VPS_DEV_PUBLIC_IP` | – |
 | **CI** | – | – |
 

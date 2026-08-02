@@ -20,6 +20,7 @@ openclaw_instances:
     websearch_api_key_env: "PROD_OC1_WEBSEARCH_API_KEY"
     gateway_token_env: "PROD_OC1_GATEWAY_TOKEN"
     telegram_bot_token_env: "PROD_OC1_TELEGRAM_BOT_TOKEN"
+    gh_token_env: "PROD_OC1_GH_TOKEN"    # optional, andere Tokens als DEV (Harald 2026-08-02)
     agents: []
   - name: oc2
     enabled: true
@@ -29,6 +30,7 @@ openclaw_instances:
     websearch_api_key_env: "PROD_OC2_WEBSEARCH_API_KEY"
     gateway_token_env: "PROD_OC2_GATEWAY_TOKEN"
     telegram_bot_token_env: "PROD_OC2_TELEGRAM_BOT_TOKEN"
+    gh_token_env: "PROD_OC2_GH_TOKEN"    # optional, andere Tokens als DEV (Harald 2026-08-02)
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
   - name: oc3
     enabled: false
@@ -38,4 +40,5 @@ openclaw_instances:
     websearch_api_key_env: "PROD_OC3_WEBSEARCH_API_KEY"
     gateway_token_env: "PROD_OC3_GATEWAY_TOKEN"
     telegram_bot_token_env: "PROD_OC3_TELEGRAM_BOT_TOKEN"
+    gh_token_env: "PROD_OC3_GH_TOKEN"    # optional, andere Tokens als DEV (Harald 2026-08-02)
     agents: []
