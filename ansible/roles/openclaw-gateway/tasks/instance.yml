@@ -20,7 +20,7 @@
     oc_websearch_api_key: "{{ lookup('env', oc.websearch_api_key_env) | default('', true) }}"
     oc_gateway_token: "{{ lookup('env', oc.gateway_token_env) | default('', true) }}"
     oc_telegram_bot_token: "{{ lookup('env', oc.telegram_bot_token_env) | default('', true) }}"
-    oc_gh_read_token: "{{ lookup('env', oc.gh_read_token_env) | default('', true) }}"
+    oc_gh_token: "{{ lookup('env', oc.gh_token_env) | default('', true) }}"
 
 - name: "{{ oc.name }}: Assert – API-Key des aktiven Providers ({{ oc_llm_provider }}) gesetzt"
   ansible.builtin.assert:
