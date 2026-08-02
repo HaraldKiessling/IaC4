@@ -29,7 +29,7 @@ Konstanten (Design 01): `maxConcurrent: 4`, `runTimeoutSeconds: 900` — identis
 Vor jeder Benchmark-Runde die Instanzen auf definierten Ausgangszustand zurücksetzen (PR #79):
 
 ```bash
-gh workflow run 04-service-deploy.yml -f target=dev -f playbook=openclaw -f instance=all -f benchmark=true -f clean=true
+gh workflow run 04-service-deploy.yml -f target=dev -f playbook=openclaw -f instance=all -f skip_bootstrap=true -f clean=true
 ```
 
 **Was `clean=true` löscht** (nur Persistenz-State, SSoT bleibt):
@@ -47,8 +47,8 @@ openclaw gateway call health --url ...                                          
 ```
 
 **Regeln:**
-- `clean`/`benchmark` nur mit `target=dev` (PROD-Guard im Workflow, H1)
-- Merge-Reihenfolge: PR #76 (benchmark/skipBootstrap) VOR PR #79 (clean) — sonst fehlt der skipBootstrap-Konsument
+- `clean` nur mit `target=dev` ohne Zusatz-Approval; PROD-Clean nur mit `confirm_clean_prod=true` (H1)
+- Merge-Reihenfolge: PR #76 (skip_bootstrap) VOR PR #79 (clean) — sonst fehlt der skipBootstrap-Konsument
 - Nach Clean: erster Agent-Turn je Instanz ist der Benchmark-Task (kein Bootstrap-Ritual, da BOOTSTRAP.md entfernt + skipBootstrap aktiv)
 
 ### 1.3 Session-Isolation
