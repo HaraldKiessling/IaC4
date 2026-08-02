@@ -97,6 +97,11 @@
   when: openclaw_clean | default(false) | bool
 
 
+- name: "{{ oc.name }}: DEBUG oc_gh_token-Laenge (Wert wird nie ausgegeben)"
+  ansible.builtin.debug:
+    msg: "oc_gh_token Laenge: {{ oc_gh_token | length }} | gh_token_env: {{ oc.gh_token_env }}"
+  when: openclaw_debug | default(false) | bool
+
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
   ansible.builtin.template:
     src: openclaw.json.j2
