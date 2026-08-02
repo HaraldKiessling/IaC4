@@ -235,10 +235,6 @@ jobs:
             echo "⚠️  CLEAN-Modus aktiv: Persistenz-State wird gelöscht (target: ${{ inputs.target }})."
           fi
 
-          # DEBUG: Env-Sichtbarkeit GH_TOKEN (Wert nie ausgeben)
-          echo "DEBUG GH_TOKEN-Env: ${DEV_OC1_GH_TOKEN:+gesetzt}${DEV_OC1_GH_TOKEN:-LEER}"
-          echo "DEBUG Variable-Name: gh_token_env = $(grep -o 'gh_token_env:.*' ../ansible/group_vars/vps-dev.yml | head -1)"
-
           ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}${{ inputs.playbook == 'openclaw' && inputs.skip_bootstrap == 'true' && ' -e skip_bootstrap=true' || '' }}${{ inputs.playbook == 'openclaw' && inputs.clean == 'true' && ' -e openclaw_clean=true' || '' }}
 
       - name: Post-Deploy Check (SSH via Tailscale)
@@ -248,10 +244,10 @@ jobs:
               "$VPS_USER@$VPS_TS_IP" \
               "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'traefik|ollama|openclaw' || true"
           if [ "${{ inputs.playbook }}" = "openclaw" ]; then
-            echo "--- GH_TOKEN-Check (Compose-Datei via sudo + Container-Env) ---"
+            echo "--- GH_TOKEN-Check (nur JA/NEIN, kein Wert) ---"
             ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
               "$VPS_USER@$VPS_TS_IP" \
-              "for oc in oc1 oc2 oc3; do echo "== \$oc =="; cd /srv/openclaw/\$oc && docker compose config 2>/dev/null | grep -c 'GH_TOKEN' || echo 'compose-config: 0'; done" || true
+              "for oc in oc1 oc2 oc3; do printf '%s: ' \$oc; docker exec openclaw-\$oc sh -c 'printenv GH_TOKEN >/dev/null 2>&1 && echo JA || echo NEIN'; done" || true
           fi
           echo ""
           echo "▶️  Nächster Schritt: Workflow 04-bdd-tests.yml (BDD-Verifikation, qa/bdd-testkonzept.md)"

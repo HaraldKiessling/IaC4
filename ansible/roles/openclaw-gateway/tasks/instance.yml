@@ -97,10 +97,6 @@
   when: openclaw_clean | default(false) | bool
 
 
-- name: "{{ oc.name }}: DEBUG oc_gh_token-Laenge (Wert wird nie ausgegeben)"
-  ansible.builtin.debug:
-    msg: "oc_gh_token Laenge: {{ oc_gh_token | length }} | gh_token_env: {{ oc.gh_token_env }}"
-
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
   ansible.builtin.template:
     src: openclaw.json.j2
@@ -115,12 +111,14 @@
     src: docker-compose.yml.j2
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/docker-compose.yml"
     mode: '0600'   # enthält OPENCLAW_GATEWAY_TOKEN-ENV – nicht weltlesbar (Reviewer 2. Runde)
+  register: _oc_compose
 
-- name: "{{ oc.name }}: Container starten"
+- name: "{{ oc.name }}: Container starten (Recreate bei Compose-Aenderung – Env-Update wirksam)"
   community.docker.docker_compose_v2:
     project_src: "{{ openclaw_data_root }}/{{ oc.name }}"
     state: present
     pull: always
+    recreate: "{{ 'always' if _oc_compose.changed else 'auto' }}"
 
 # F5 (Review): Nach Clean ist der Container durch "Container starten" bereits frisch; dieser
 # Restart ist Safety-Net fuer den Fall, dass der Stop still fehlschlug (alter Prozess haelt sonst
