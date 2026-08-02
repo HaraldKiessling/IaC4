@@ -20,6 +20,7 @@ openclaw_instances:
     websearch_api_key_env: "DEV_OC1_WEBSEARCH_API_KEY"
     gateway_token_env: "DEV_OC1_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC1_TELEGRAM_BOT_TOKEN"
+    gh_read_token_env: "DEV_OC1_GH_READ_TOKEN"    # optional: fehlendes Secret = kein GH-Token im Container (Harald 2026-08-02)
     agents: []                        # bewusst KEINE Rollen-Agents (Single-Agent, Creator-These)
     # Konstant-Haltung wie OC2 (Design 01 Kap. 6.1): identische Timeouts/Concurrency
     # fuer alle 3 Benchmark-Arme – Timeout/Concurrency duerfen keine Variable sein.
@@ -38,6 +39,7 @@ openclaw_instances:
     websearch_api_key_env: "DEV_OC2_WEBSEARCH_API_KEY"
     gateway_token_env: "DEV_OC2_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC2_TELEGRAM_BOT_TOKEN"
+    gh_read_token_env: "DEV_OC2_GH_READ_TOKEN"    # optional: fehlendes Secret = kein GH-Token im Container (Harald 2026-08-02)
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
     # Konstant-Haltung (Design 01-oc2-oc3-benchmark Kap. 5.3): identische Rahmenbedingungen zu OC3,
     # damit Timeout/Concurrency keine Benchmark-Variablen sind.
@@ -56,6 +58,7 @@ openclaw_instances:
     websearch_api_key_env: "DEV_OC3_WEBSEARCH_API_KEY"
     gateway_token_env: "DEV_OC3_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC3_TELEGRAM_BOT_TOKEN"
+    gh_read_token_env: "DEV_OC3_GH_READ_TOKEN"    # optional: fehlendes Secret = kein GH-Token im Container (Harald 2026-08-02)
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
     # Modell-Invertierung (Design 01-oc2-oc3-benchmark Befund B1): Orchestrator = Qualität (pro),
     # Sub-Agents = Kosten (flash) – Doku-Empfehlung agents.defaults.subagents.model
