@@ -7,7 +7,18 @@ import jinja2
 
 ROOT = 'ansible'
 gv_all = yaml.safe_load(open(f'{ROOT}/group_vars/all.yml'))
+def _bool_filter(v):
+    # Ansible-Äquivalent: 'true'/'yes'/1/True -> True, alles andere -> False
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v != 0
+    if isinstance(v, str):
+        return v.strip().lower() in ('true', 'yes', 'on', '1')
+    return bool(v)
+
 env = jinja2.Environment(trim_blocks=True, lstrip_blocks=True, keep_trailing_newline=True)
+env.filters['bool'] = _bool_filter
 SRC = open(f'{ROOT}/roles/openclaw-gateway/templates/openclaw.json.j2').read()
 COMPOSE = open(f'{ROOT}/roles/openclaw-gateway/templates/docker-compose.yml.j2').read()
 
@@ -21,6 +32,7 @@ def fake_lookup(name, *a, **kw):
 
 def render(oc, target):
     e = jinja2.Environment(trim_blocks=True, lstrip_blocks=True, keep_trailing_newline=True)
+    e.filters['bool'] = _bool_filter
     e.globals['lookup'] = fake_lookup
     t = e.from_string(SRC)
     ctx = dict(oc=oc, openclaw_agent_models=gv_all['openclaw_agent_models'],
@@ -74,6 +86,7 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             dummy_lookup = {v: 'k-' + k for k, v in target['openclaw_provider_envs'].items() if v}
             if dummy_lookup:
                 e3 = jinja2.Environment()
+                e3.filters['bool'] = _bool_filter
                 e3.globals['lookup'] = make_lookup(dummy_lookup)
                 dk = json.loads(e3.from_string(SRC).render(
                     oc=oc, openclaw_agent_models=gv_all['openclaw_agent_models'],

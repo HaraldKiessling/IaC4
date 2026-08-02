@@ -38,6 +38,12 @@
       Gateway-Token für {{ oc.name }} fehlt (Secret {{ oc.gateway_token_env }} nicht gesetzt).
       Auth-Zustand wäre sonst unbestimmt (K3-1) – Token zwingend, da Gateway nur via Tailnet erreichbar sein soll.
 
+- name: "{{ oc.name }}: BOOTSTRAP.md entfernen (Benchmark-Vergleich, skip_bootstrap)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/BOOTSTRAP.md"
+    state: absent
+  when: skip_bootstrap | default(false) | bool
+
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
   ansible.builtin.template:
     src: openclaw.json.j2

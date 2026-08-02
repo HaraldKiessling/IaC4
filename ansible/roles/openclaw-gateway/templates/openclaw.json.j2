@@ -21,6 +21,9 @@
   "agents": {
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace"
+{% if skip_bootstrap | default(false) | bool %},
+      "skipBootstrap": true
+{% endif %}
 {% if subagents_defaults %},
       "subagents": {{ subagents_defaults | tojson }}
 {% endif %}
