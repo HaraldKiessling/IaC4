@@ -24,6 +24,33 @@ Konstanten (Design 01): `maxConcurrent: 4`, `runTimeoutSeconds: 900` — identis
 - [ ] Snapshot-Bibliothek frisch (neue Seeds je Runde — **Lerneffekt!** Keine Snapshots wiederholen)
 - [ ] `reasoningTokens`-Key korrekt (NICHT `reasoning` — T2-Bug: Usage-Spalte war 0)
 
+### 1.3 Clean-Modus (deterministische Startbedingung, Issue #78)
+
+Vor jeder Benchmark-Runde die Instanzen auf definierten Ausgangszustand zurücksetzen (PR #79):
+
+```bash
+gh workflow run 04-service-deploy.yml -f target=dev -f playbook=openclaw -f instance=all -f benchmark=true -f clean=true
+```
+
+**Was `clean=true` löscht** (nur Persistenz-State, SSoT bleibt):
+- `config/agents/` → Session-Store (`~/.openclaw/agents/<id>/sessions/`), QMD-Index (`.../qmd/`), Agent-Dirs/Auth
+- `config/state/` → `openclaw.sqlite` (TaskFlow/Plugin-State)
+- `workspace/` → AGENTS.md/MEMORY.md/BOOTSTRAP.md (wird beim Start neu erzeugt)
+
+**Was bleibt:** `openclaw.json` (SSoT), `docker-compose.yml`, Secrets (ENV), `credentials/` (kein OAuth/QR — statische Keys via Template).
+
+**Verifikation nach Clean (Gateway-RPC, kein SSH):**
+```bash
+openclaw gateway call sessions.list --url wss://vps-dev.tailcfea8a.ts.net:<port> ...   # count=0
+openclaw gateway call agents.workspace.list --url ... --params '{"agentId":"..."}'     # frisch
+openclaw gateway call health --url ...                                                 # ok
+```
+
+**Regeln:**
+- `clean`/`benchmark` nur mit `target=dev` (PROD-Guard im Workflow, H1)
+- Merge-Reihenfolge: PR #76 (benchmark/skipBootstrap) VOR PR #79 (clean) — sonst fehlt der skipBootstrap-Konsument
+- Nach Clean: erster Agent-Turn je Instanz ist der Benchmark-Task (kein Bootstrap-Ritual, da BOOTSTRAP.md entfernt + skipBootstrap aktiv)
+
 ### 1.3 Session-Isolation
 
 - Eindeutige Session-Keys je Lauf: `agent:<id>:benchmark-<runde>-<uuid8>` (verhindert Wiederholungs-Lerneffekt)
