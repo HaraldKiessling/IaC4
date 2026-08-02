@@ -243,5 +243,12 @@ jobs:
           ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
               "$VPS_USER@$VPS_TS_IP" \
               "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'traefik|ollama|openclaw' || true"
+          if [ "${{ inputs.playbook }}" = "openclaw" ]; then
+            echo "--- GH_TOKEN-Check je Instanz ---"
+            for oc in oc1 oc2 oc3; do
+              CNT=$(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$VPS_USER@$VPS_TS_IP" "docker exec openclaw-$oc sh -c 'echo \"GH_TOKEN gesetzt: \"\${GH_TOKEN:+JA}\${GH_TOKEN:-NEIN}' 2>/dev/null" 2>/dev/null)
+              echo "$oc: $CNT"
+            done
+          fi
           echo ""
           echo "▶️  Nächster Schritt: Workflow 04-bdd-tests.yml (BDD-Verifikation, qa/bdd-testkonzept.md)"
