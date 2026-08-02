@@ -12,12 +12,7 @@ services:
 {% if oc_telegram_bot_token | default('') | length > 0 %}
       TELEGRAM_BOT_TOKEN: "{{ oc_telegram_bot_token }}"
 {% endif %}
-{% if oc_gh_token | default('') | length > 0 %}
-      GH_TOKEN: "{{ oc_gh_token }}"
-      # exec.md Z.74: Snapshot filtert secret-looking Env-Variablen (u.a. GH_TOKEN) aus exec-Shells.
-      # Deaktivieren, damit der Agent das GH-Read-Token in exec nutzen kann (nur bei GH_TOKEN gesetzt).
-      OPENCLAW_EXEC_SHELL_SNAPSHOT: "0"
-{% endif %}
+
     volumes:
       - ./config:/home/node/.openclaw
       - ./workspace:/home/node/.openclaw/workspace
