@@ -103,6 +103,28 @@ setsid nohup python3 -u run_benchmark_t2.py > /tmp/benchmark-t2.log 2>&1 < /dev/
 - **Kosten-Gesamtbild** je Instanz (T1: OC3 teuerster Arm trotz weniger Tokens — pro-Orchestrator; T2: OC2 ≈ OC1, da Reasoning normalisiert)
 - Lerneffekt-Kontrolle: Snapshots nie wiederholen; bei Abbruch+Resume: aborted Sessions kennzeichnen und NICHT doppelt werten (T1: t10 doppelt gelaufen)
 
+## 4.5 Clean-Modus (deterministische Startbedingung, Issue #78)
+
+Vor JEDER Benchmark-Runde die Instanzen auf Null-Zustand setzen (sonst kontaminieren Session-Historie, QMD-Index und Runtime-State die Messung):
+
+```bash
+# Clean auf DEV (empfohlen vor jeder Runde):
+gh workflow run 04-service-deploy.yml -f target=dev -f playbook=openclaw -f instance=all -f clean=true
+# Clean auf PROD (nur mit Freigabe Harald):
+gh workflow run 04-service-deploy.yml -f target=prod -f playbook=openclaw -f instance=all -f clean=true -f confirm_clean_prod=true
+```
+
+**Was Clean löscht (evidenzbasiert, OpenClaw-Doku):**
+- `config/agents/` → Session-Store, QMD-Index, Agent-Dirs (`~/.openclaw/agents/<id>/{sessions,qmd,agent}`)
+- `config/state/` → openclaw.sqlite (TaskFlow/Plugin-State)
+- `workspace/` → AGENTS.md/MEMORY.md/BOOTSTRAP.md (wird beim Start neu erzeugt)
+
+**Was Clean NICHT anfasst (SSoT):** `openclaw.json`, `docker-compose.yml`, Secrets (ENV), `credentials/` (statische API-Keys via ENV/Template).
+
+**Verifikation nach Clean:** `sessions.list` → 0, `agents.workspace.list` → leer, alle Instanzen `health=ok`.
+
+**Kombination mit Benchmark-Modus:** `clean=true` + `benchmark=true` (PR #76) = BOOTSTRAP.md weg + kein Persistenz-State → sauberster Start.
+
 ## 5. Best Practices (konsolidierte Lessons)
 
 | # | Praxis | Lesson (Quelle) |
@@ -117,6 +139,7 @@ setsid nohup python3 -u run_benchmark_t2.py > /tmp/benchmark-t2.log 2>&1 < /dev/
 | BP-8 | Ground-Truth-SHA fixieren | T1: Zuordnung nur über SHA wasserdicht |
 | BP-9 | Token nie in Prozess-Args | Env-only (`OPENCLAW_GATEWAY_TOKEN`), ps-sicher |
 | BP-10 | Frische Snapshots je Runde | Lerneffekt-Kontamination (gleicher Snapshot 2× gesehen) |
+| BP-11 | **Clean-Modus vor jeder Runde** (`clean=true`-Deploy, Issue #78) | Sessions/QMD/State/Workspace der Instanzen = Null-Zustand; SSoT bleibt; PROD nur mit `confirm_clean_prod=true` |
 
 ## 6. Referenzen
 
