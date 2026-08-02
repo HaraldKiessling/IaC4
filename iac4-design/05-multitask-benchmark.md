@@ -1,19 +1,20 @@
-# Design 05: Multi-Task-Parallel-Benchmark mit echten Issues (OC1/OC2/OC3)
+# Design 05: Issue-Benchmark OC1/OC2/OC3 – gleiche Aufgabe, echte Issues
 
 > **Status:** Entwurf (Review ausstehend) · **Stand:** 2026-08-02 · **Autor:** Nova (Orchestrator)
-> **Zweck:** Benchmark-Konzept — mehrere reale Aufgaben gleichzeitig auf allen 3 Instanzen (OC1/OC2/OC3), jede Instanz bearbeitet eine andere Aufgabe. Misst Orchestrierungs- und Parallel-Fähigkeit, nicht nur Einzelaufgaben-Lösung.
+> **Zweck:** Benchmark-Konzept — **dieselbe reale Aufgabe für alle 3 Instanzen (OC1/OC2/OC3) gleichzeitig**, über mehrere Runden mit verschiedenen Issues. Vergleich: **Geschwindigkeit, Kosten, Qualität, Stabilität** (Harald 2026-08-02: „alle drei die gleichen Aufgaben … nicht jeder Runde andere Aufgabe").
 
 ## 1. Motivation & Abgrenzung zu T1/T2
 
 | Aspekt | T1/T2 (Design 03/04) | Design 05 (dieses Konzept) |
 |---|---|---|
 | Input | Künstliche Snapshots mit Seed-Defekten | **Echte Issues aus dem IaC4-Backlog** |
-| Aufgaben je Lauf | 1 identische Aufgabe für alle 3 Arme | **3 verschiedene Aufgaben parallel** (1 je Arm) |
-| Gemessene Fähigkeit | Defekt-Findung | **Orchestrierung**: Sub-Agent-Einsatz, Aufgaben-Organisation, Konzept-Qualität |
+| Aufgaben je Runde | 1 identische Aufgabe für alle 3 Arme | **1 identisches Issue für alle 3 Arme** (parallel) |
+| Issues über Runden | Neue Snapshots je Lauf | **Rotation echter Issues** über Runden (kein Issue doppelt) |
+| Gemessene Fähigkeit | Defekt-Findung | **Aufgaben-Lösung** (Analyse→Design→Plan) unter realen Bedingungen |
 | Realismus | Synthetisch | Echte Anforderungen, echter Repo-Kontext (read-only) |
 | Output | Defekt-Befund | **Umsetzungsplan/Architektur-Entwurf/Review-Artefakt** (Markdown im Workspace) |
 
-**These:** Echte, parallel verteilte Aufgaben fordern die Orchestrator-Instanzen (OC2/OC3) stärker als Snapshot-Defekt-Suche — Sub-Agent-Delegation (architect/engineer/reviewer) wird bei umfangreichen Issues zum Differenzierer. OC1 (Vanilla-Baseline, keine Rollen-Agents) zeigt den Team-Vorteil als Kontrast.
+**These:** Echte Issues mit gleicher Aufgabe je Runde kombinieren die Vergleichbarkeit von T1/T2 (identische Bedingungen, 3 Arme) mit realen Anforderungen. Der Arm-Vergleich bleibt sauber: gleiche Aufgabe, gleiche Konstanten, gleiche Startbedingung (Clean) → Differenzen in Latenz/Kosten/Qualität/Stabilität sind Instanz-Eigenschaften.
 
 ## 2. Testaufbau
 
@@ -29,7 +30,7 @@ Konstanten (Design 01): `maxConcurrent: 4`, `runTimeoutSeconds: 900` — identis
 
 ### 2.2 Task-Pool (Kandidaten-Issues, Stand 2026-08-02)
 
-Eignungskriterien: kein offener PR (frei), read-only-tauglich (Analyse/Plan/Design, kein Repo-Write nötig), Sub-Agent-Potenzial (mehrere Teilaspekte → Delegation), klare Anforderungen (Bewertbarkeit).
+Eignungskriterien: kein offener PR (frei), read-only-tauglich (Analyse/Plan/Design, kein Repo-Write nötig), Sub-Agent-Potenzial (mehrere Teilaspekte → Delegation), klare Anforderungen (Bewertbarkeit), vergleichbarer Umfang innerhalb einer Klasse.
 
 | Issue | Titel | Komplexität | Sub-Agent-Potenzial | Besonderheit |
 |---|---|---|---|---|
@@ -43,36 +44,37 @@ Eignungskriterien: kein offener PR (frei), read-only-tauglich (Analyse/Plan/Desi
 | [#68](https://github.com/HaraldKiessling/IaC4/issues/68) | Betriebs-Backlog (Selbstheilung/Token-Divergenz/Teardown) | **H** | Hoch (3 Teilbereiche) | Aus PR #67 ausgegliedert |
 | [#75](https://github.com/HaraldKiessling/IaC4/issues/75) | OC2-Nachteile T1 + dynamisches Reasoning-Level | **L** | Mittel (Analyse + Idee) | Meta-Benchmark-Thema |
 
-### 2.3 Aufgaben-Zuordnung & Rotation
+### 2.3 Runden-Aufbau (gleiche Aufgabe je Runde)
 
-- **Runde** = 3 parallele Läufe (OC1/OC2/OC3), je Arm genau 1 Issue.
-- **Rotation über Runden:** Kein Arm bearbeitet dasselbe Issue zweimal; über 3 Runden durchläuft jeder Arm jede Komplexitäts-Klasse (H/M/L) → Fairness trotz ungleicher Schwierigkeit.
-- **Runde 1 (Vorschlag, Freigabe Harald):** OC1→#42 (M), OC2→#65 (H), OC3→#32 (M). Alternative: OC3→#65 (schwerster Task an stärkstem Arm).
-- **Prompt-Template** standardisiert (Anhang A): Issue-Body als Input + Rahmenbedingungen (read-only, Artefakt-Format, Sub-Agents, Token-Zugriff).
+- **Runde** = 1 Issue, **identisch für alle 3 Arme**, parallel gestartet (echte Parallelität, gleiche Startzeit).
+- **Rotation:** Issues rotieren über Runden (R1: #65, R2: #42, R3: #32, …) — kein Issue doppelt; Komplexitäts-Klassen mischen (H/M/L), damit über Runden jede Klasse je Arm vorkommt.
+- **Prompt-Template** identisch je Runde, nur Issue-Body variiert (Anhang A) → Prompt-Differenz ist die Aufgaben-Differenz, kein Störfaktor.
+- **Reihenfolge-Effekt:** Bei Parallel-Start keine Lauf-Reihenfolge; Ressourcen-Sharing (3 Läufe gleichzeitig auf 1 VPS) ist **Kovariate** (Kap. 5) und für alle Arme identisch → fair.
+- **Stabilitäts-Messung:** (a) Abbruch-/Timeout-Rate je Arm über Runden; (b) Qualitäts-Varianz (Score-Streuung) über Runden; (c) optional 1 Wiederholungs-Runde (gleiches Issue 2×, mit Clean dazwischen) → Intra-Instanz-Varianz.
 
-### 2.4 Rahmenbedingungen (alle Läufe)
+### 2.4 Rahmenbedingungen (alle Runden)
 
 1. **Read-only GH-Token** (`.gh-read-token` im Workspace) — Probe 2026-08-02 bestätigt: Lesen (Issues/Repo/Workflows/Check-Runs) 200 ✅, Schreiben 403 ❌. Reicht für Analyse-Artefakte vollständig.
 2. **Artefakte:** Markdown im Instanz-Workspace unter `benchmark/mt<runde>/<issue>-<inst>.md` — **je Instanz eigene Datei** (Design-04-T3-Fix: Artefakt-Trennung).
 3. **Session-Isolation:** eindeutige Session-Keys `agent:<id>:benchmark-mt<runde>-<uuid8>` (verhindert Wiederholungs-Lerneffekt).
-4. **Clean vor Runde** (PR #79) — deterministische Startbedingung. ⚠️ Clean löscht `workspace/` → `.gh-read-token` wird durch den Deploy-Datei-Task NACH Clean neu angelegt (Reihenfolge im Play verifiziert, PR #80). Vor Lauf 1 verifizieren.
-5. **Parallel-Start:** alle 3 Läufe gleichzeitig via `openclaw agent` (Background). Ressourcen-Sharing (1 VPS) ist **bewusste Kovariate** (siehe 5).
+4. **Clean vor jeder Runde** (PR #79) — deterministische Startbedingung. ⚠️ Clean löscht `workspace/` → `.gh-read-token` wird durch den Deploy-Datei-Task NACH Clean neu angelegt (Reihenfolge im Play verifiziert, PR #80). Vor Runde 1 verifizieren (Pre-Check).
+5. **Parallel-Start:** alle 3 Läufe gleichzeitig via `openclaw agent` (Background, `setsid nohup` — T1-Lesson: Loop überlebt Session-Ende).
 6. **Kein Repo-Write:** Artefakte bleiben im Workspace; keine Branches/PRs durch die Instanzen. (Voll-Umsetzung später durch Nova auf Basis der Artefakte — Option, siehe 7.)
 
 ## 3. Messgrößen (Erweiterung Methodik 2.3)
 
 | Metrik | Quelle | Hinweis |
 |---|---|---|
-| Latenz (s) | Loop (CLI-Dauer) | je Instanz × Issue |
-| Tokens (in/out/reasoning/total) | `agentMeta.usage` | **Key: `reasoningTokens`** (T2-Bug) |
-| Kosten (€) | Tokens × Preis | DeepSeek V4: flash $0.14/$0.28, pro $0.435/$0.87 je 1M; 1 EUR = 1.14 USD |
-| **Anforderungs-Abdeckung (%)** | Issue-Checkboxen/-Anforderungen als Ground-Truth-Ersatz | **Neu:** je Issue vor Lauf fixierte Checkliste; automatisiert (Keyword) + manuell |
+| **Geschwindigkeit** (Latenz s) | Loop (CLI-Dauer) | je Instanz × Runde; relativ (Ressourcen-Sharing) |
+| **Kosten** (€) | Tokens × Preis | DeepSeek V4: flash $0.14/$0.28, pro $0.435/$0.87 je 1M; 1 EUR = 1.14 USD; Key `reasoningTokens` (T2-Bug) |
+| **Qualität** (Anforderungs-Abdeckung %) | Issue-Checkliste als Ground-Truth-Ersatz | je Issue vor Runde fixiert, SHA-256 gesichert; automatisiert (Keyword) + manuell |
+| **Stabilität** | Task-Log + Scores über Runden | Abbruch-/Timeout-Rate, Qualitäts-Varianz, (opt.) Wiederholungs-Runde |
 | IaC4-Konformität | Artefakt-Review | ADR-Bezug, Regeln (secrets/ssh/evidence), keine Verbotsverletzung |
 | Sub-Agent-Nutzung | Transkript-Scan (`toolCall`-Typen) | Spawns, Rollen (architect/engineer/reviewer), Depth |
-| **Zeit bis erster Spawn** | Transkript-Zeitstempel | **Neu:** Orchestrierungs-Latenz |
+| Zeit bis erster Spawn | Transkript-Zeitstempel | Orchestrierungs-Latenz |
 | Artefakt-Qualität | Blind-Review | Struktur, Vollständigkeit, Begründungen, Alternativen |
 
-**Normierung:** Komplexitäts-Gewicht H=3 / M=2 / L=1 → `Anforderungs-Score / Komplexität` je Arm (Fairness bei ungleichen Issues).
+**Normierung:** Komplexitäts-Gewicht H=3 / M=2 / L=1 → `Anforderungs-Score / Komplexität` je Arm (Vergleichbarkeit über Klassen).
 
 ## 4. Adjudikation
 
@@ -84,11 +86,11 @@ Eignungskriterien: kein offener PR (frei), read-only-tauglich (Analyse/Plan/Desi
 
 ## 5. Fairness & Variablenkontrolle
 
-- Gleiche Prompt-Struktur (Template Anhang A), gleiche Konstanten (maxConcurrent/runTimeout).
-- Aufgaben-Rotation über Runden; kein Issue doppelt.
-- **Ressourcen-Sharing:** 3 parallele Läufe auf einem VPS → Latenz nicht absolut vergleichbar. Gegenmaßnahmen: O5-Ressourcen-Kovariate (PR #70) mitschneiden; relative Latenz (je Lauf) statt absoluter; Reihenfolge-Effekte durch Rotation.
+- Gleiche Prompt-Struktur (Template Anhang A), gleiche Konstanten (maxConcurrent/runTimeout), gleiche Startzeit, gleiches Issue je Runde.
+- **Ressourcen-Sharing:** 3 parallele Läufe auf einem VPS → Latenz nicht absolut vergleichbar. Gegenmaßnahmen: O5-Ressourcen-Kovariate (PR #70) mitschneiden; relative Latenz (je Runde) statt absoluter; identische Bedingungen für alle Arme je Runde.
 - **Rate-Limits:** GH read-only 5000 req/h — unkritisch; bei 503/504 Retry im Prompt (T1-Lesson: aborted Läufe kennzeichnen, nicht doppelt werten).
 - **Kontext-Kovariate:** Issue-Body wird komplett in den Prompt gegeben (kein versteckter Kontext — bewusste Abweichung vom T1-Kontext-Test, da echte Anforderungen vollständig sein müssen).
+- **Lerneffekt:** Issues werden durch Benchmark „verbraucht" (Artefakt = Lösungsskizze); kein Issue doppelt; Artefakte werden verwertet (Kap. 7.3).
 
 ## 6. Risiken & Gegenmaßnahmen
 
@@ -96,30 +98,32 @@ Eignungskriterien: kein offener PR (frei), read-only-tauglich (Analyse/Plan/Desi
 |---|---|
 | Lerneffekt: Issue wird durch Benchmark „verbraucht" | Artefakte sind verwertbare Lösungsskizzen → danach echte Umsetzung durch Nova (Write, PR) auf Basis des Gewinner-Artefakts |
 | OC1 hat keine Rollen-Agents → Spawn-Versuche scheitern/entfallen | OC1 als Single-Agent-Baseline werten; Spawn-Versuche (0) sind Messwert, kein Fehler |
-| Clean löscht `.gh-read-token` | Deploy-Reihenfolge verifizieren (Datei-Task nach Clean); Pre-Check vor Runde |
+| Clean löscht `.gh-read-token` | Deploy-Reihenfolge verifizieren (Datei-Task nach Clean); Pre-Check vor jeder Runde |
 | GitHub-503/Downtime | Retry im Prompt (3×), Lauf als `aborted` kennzeichnen |
 | Artefakt-Kollision (Instanzen schreiben gleiche Datei) | Eindeutige Pfade je Instanz (`<issue>-<inst>.md`); Artefakt-Trennung Pflicht |
 | Sub-Agent-Spawns dauern lang (Depth 2) | runTimeout 900s; Überwachung via Task-Log (kein stiller Tod) |
 | Ressourcen-Engpass (3 Läufe parallel, 1 VPS) | Kovariate messen; bei OOM: Runde wiederholen, gekennzeichnet |
+| Instanz hängt/kein Health nach Clean | Pre-Check je Runde (3× health), Runde abbrechen statt raten |
 
 ## 7. Offene Fragen an Harald
 
-1. **Runde-1-Zuordnung:** OC3 auf #65 (schwerster Task an stärkstem Arm) oder OC2 (Team-Ist vs. pro-Orchestrator-Vergleich auf H)?
-2. **Anzahl Runden:** 1 Pilot (Konzept-Validierung) oder direkt 3 (volle Rotation)?
-3. **Artefakt-Verwertung:** Gewinner-Artefakte danach von mir in echte PRs überführen (Write-Token vorhanden)?
-4. **Voll-Umsetzungs-Benchmark** (später): eigener Write-Token `DEV_OC_BENCH_WRITE_TOKEN` (Branch/PR-Scope) — gewünscht?
+1. **Issue-Reihenfolge Runde 1-3:** Start mit #65 (H, Wunschkandidat) oder erst M/L (Validierung, dann H)?
+2. **Anzahl Runden:** 1 Pilot (Konzept-Validierung) oder 3 (volle Rotation inkl. H/M/L)?
+3. **Stabilitäts-Messung:** Wiederholungs-Runde (gleiches Issue 2×, +Clean) gewünscht oder reicht Varianz über Runden?
+4. **Artefakt-Verwertung:** Gewinner-Artefakte danach von mir in echte PRs überführen (Write-Token vorhanden)?
+5. **Voll-Umsetzungs-Benchmark** (später): eigener Write-Token `DEV_OC_BENCH_WRITE_TOKEN` (Branch/PR-Scope) — gewünscht?
 
 ## 8. Review-Gates (vor Durchführung)
 
 - [ ] 🏗️ Architect-Review: Konzept-Vollständigkeit, 5W, Alternativen
 - [ ] 🔍 Reviewer-Review: Methodik-Konsistenz, Variablenkontrolle, Checkliste, Risiken
 - [ ] ✨ Harald-Freigabe
-- [ ] Pre-Check: Health 3×, Token-Datei vorhanden, Clean-Zustand verifiziert
+- [ ] Pre-Check je Runde: Health 3×, Token-Datei vorhanden, Clean-Zustand verifiziert
 
-## Anhang A: Task-Prompt-Template (je Instanz)
+## Anhang A: Task-Prompt-Template (identisch je Runde, nur Issue variiert)
 
 ```
-Du bist der <ARM>-Arm eines Benchmark-Laufs (Multi-Task, Design 05).
+Du bist der <ARM>-Arm eines Benchmark-Laufs (Design 05, Runde <R>).
 Aufgabe: Bearbeite Issue <#NN> (<Titel>) bis zum Artefakt — KEINE Repo-Änderungen.
 
 Kontext (read-only, nie ausgeben):
