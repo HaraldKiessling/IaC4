@@ -235,6 +235,10 @@ jobs:
             echo "⚠️  CLEAN-Modus aktiv: Persistenz-State wird gelöscht (target: ${{ inputs.target }})."
           fi
 
+          # DEBUG: Env-Sichtbarkeit GH_TOKEN (Wert nie ausgeben)
+          echo "DEBUG GH_TOKEN-Env: ${DEV_OC1_GH_TOKEN:+gesetzt}${DEV_OC1_GH_TOKEN:-LEER}"
+          echo "DEBUG Variable-Name: gh_token_env = $(grep -o 'gh_token_env:.*' ../ansible/group_vars/vps-dev.yml | head -1)"
+
           ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}${{ inputs.playbook == 'openclaw' && inputs.skip_bootstrap == 'true' && ' -e skip_bootstrap=true' || '' }}${{ inputs.playbook == 'openclaw' && inputs.clean == 'true' && ' -e openclaw_clean=true' || '' }}
 
       - name: Post-Deploy Check (SSH via Tailscale)
