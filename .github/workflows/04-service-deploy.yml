@@ -248,10 +248,10 @@ jobs:
               "$VPS_USER@$VPS_TS_IP" \
               "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'traefik|ollama|openclaw' || true"
           if [ "${{ inputs.playbook }}" = "openclaw" ]; then
-            echo "--- GH_TOKEN-Check (Compose-Datei + Container-Env) ---"
+            echo "--- GH_TOKEN-Check (docker inspect Env-Zählung, kein Wert) ---"
             ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
               "$VPS_USER@$VPS_TS_IP" \
-              "for oc in oc1 oc2 oc3; do echo "== \$oc =="; grep -c GH_TOKEN /srv/openclaw/\$oc/docker-compose.yml; docker inspect openclaw-\$oc --format '{{{{range .Config.Env}}}}{{{{.}}}}{{{{end}}}}' | tr ' ' '\n' | grep -c '^GH_TOKEN=' || true; done" || true
+              "for oc in oc1 oc2 oc3; do printf '%s: ' \$oc; docker inspect openclaw-\$oc 2>/dev/null | grep -c 'GH_TOKEN=' || echo 0; done" || true
           fi
           echo ""
           echo "▶️  Nächster Schritt: Workflow 04-bdd-tests.yml (BDD-Verifikation, qa/bdd-testkonzept.md)"
