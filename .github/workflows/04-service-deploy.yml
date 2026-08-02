@@ -44,6 +44,22 @@ on:
         options:
           - 'false'
           - 'true'
+      clean:
+        description: 'CLEAN-Modus (Issue #78): Session-Store/QMD/Agent-Dirs + Workspace zurücksetzen – deterministische Benchmark-Startbedingung'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      confirm_clean_prod:
+        description: 'HUMAN-APPROVAL: Clean auf PROD bestätigen (destruktiv – Freigabe Harald, Issue #78)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: read
@@ -114,6 +130,13 @@ jobs:
             fi
           fi
           [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
+
+          # H1 (Issue #78-Review): Clean auf PROD erfordert explizites Human-Approval
+          # (confirm_clean_prod=true, Harald-Entscheidung 2026-08-02). Das Gate liegt im
+          # Playbook-Schritt; hier nur der Früh-Abbruch ohne Approval (verhindert unnötigen Tailnet-Aufbau).
+          if [ "${{ inputs.clean }}" = "true" ] && [ "${{ inputs.target }}" = "prod" ] && [ "${{ inputs.confirm_clean_prod }}" != "true" ]; then
+            echo "❌ clean-Modus auf PROD erfordert confirm_clean_prod=true (Human-Approval, destruktiv)"; exit 1
+          fi
           echo "✅ Vorbedingungen ok"
 
       - name: Connect Runner to Tailnet (MagicDNS)
@@ -194,7 +217,19 @@ jobs:
           *) echo "❌ Unbekanntes Playbook"; exit 1 ;;
           esac
           echo "▶️  Playbook: $PB (target: ${{ inputs.target }})"
-          ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}${{ inputs.playbook == 'openclaw' && inputs.skip_bootstrap == 'true' && ' -e skip_bootstrap=true' || '' }}
+
+          # HUMAN-APPROVAL-Gate (Issue #78, Harald 2026-08-02): Clean auf PROD zulässig,
+          # aber NUR mit expliziter Bestätigung confirm_clean_prod=true.
+          if [ "${{ inputs.clean }}" = "true" ] && [ "${{ inputs.target }}" = "prod" ] && [ "${{ inputs.confirm_clean_prod }}" != "true" ]; then
+            echo "❌ CLEAN auf PROD ist destruktiv (Sessions/QMD/State/Workspace aller Instanzen)."
+            echo "   Human-Approval erforderlich: confirm_clean_prod=true setzen (Freigabe Harald)."
+            exit 1
+          fi
+          if [ "${{ inputs.clean }}" = "true" ]; then
+            echo "⚠️  CLEAN-Modus aktiv: Persistenz-State wird gelöscht (target: ${{ inputs.target }})."
+          fi
+
+          ansible-playbook "playbooks/$PB" -i /tmp/inventory -e openclaw_instance_filter=${{ inputs.instance }}${{ inputs.playbook == 'openclaw' && inputs.skip_bootstrap == 'true' && ' -e skip_bootstrap=true' || '' }}${{ inputs.playbook == 'openclaw' && inputs.clean == 'true' && ' -e openclaw_clean=true' || '' }}
 
       - name: Post-Deploy Check (SSH via Tailscale)
         run: |
