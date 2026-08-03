@@ -37,12 +37,18 @@ def main():
     for run in runs:
         inst = run['inst']; port = PORTS[inst]; aid = AIDS[inst]
         key = run['sessionKey']
-        # Artefakt-Existenz prüfen (Workspace-Listing via Agent-Turn? Nein: RPC workspace.list)
-        wl = gw_call(port, 'agents.workspace.list', {'agentId': aid or 'main', 'path': 'benchmark'})
-        # Einfacher Check: Lauf-Output enthält Artefakt-Pfad?
+        # Artefakt-Existenz prüfen: Workspace-Listing im Runden-Ordner (robust)
+        runde = run.get('runde', '?')
+        wl = gw_call(port, 'agents.workspace.list', {'agentId': aid or 'main', 'path': f'benchmark/{runde}'})
+        files = wl.get('entries', wl.get('files', []))
+        names = [f.get('name','') for f in files]
+        # Artefakt = exakt #<issue>-<inst>.md (kein -draft, kein -plan, kein Plan)
+        expected = f"#{run['issue']}-{inst}.md"
+        has_artifact = expected in names
+        # Zusätzlich: Lauf-Output enthält Artefakt-Pfad?
         out = json.load(open(run['out'])) if os.path.exists(run['out']) else {}
         payloads = out.get('result', {}).get('payloads', [])
-        has_artifact = any('#29' in (p.get('text','') or '') or f"#{run['issue']}" in (p.get('text','') or '') for p in payloads) if payloads else False
+        has_artifact = has_artifact or any(expected in (p.get('text','') or '') for p in payloads) if payloads else has_artifact
         # Zusätzlich: letzte Session-Message auf Artefakt-Pfad prüfen
         r = gw_call(port, 'sessions.get', {'key': key})
         msgs = r.get('messages', [])
@@ -55,13 +61,15 @@ def main():
                         last_text = part.get('text','')
                         break
             if last_text: break
-        artifact_mentioned = 'Artefakt' in last_text or f"#{run['issue']}" in last_text or 'workspace/benchmark' in last_text
-        if not artifact_mentioned and not has_artifact:
+        artifact_mentioned = expected in last_text or (f"#{run['issue']}-{inst}" in last_text and '-plan' not in last_text and '-draft' not in last_text)
+        has_artifact = has_artifact or artifact_mentioned
+        if not has_artifact:
             print(f"{inst}: KEIN Artefakt-Nachweis -> Follow-up-Turn")
             msg = ("Deine Sub-Agent-Ergebnisse sind da. Hole sie via sessions_history und schreibe JETZT das Artefakt "
-                   f"(Pflicht, Markdown): /home/node/.openclaw/workspace/benchmark/benchmark/{run['runde']}/#{run['issue']}-{inst}.md "
+                   f"(Pflicht, Markdown, EXAKTER Dateiname): /home/node/.openclaw/workspace/benchmark/{run['runde']}/#{run['issue']}-{inst}.md "
                    "mit den 5 Abschnitten (Anforderungs-Analyse, Lösungs-Design, Risiko-Analyse, Umsetzungs-Plan, Review-Notiz). "
-                   "Integriere ALLE Sub-Ergebnisse — keine Platzhalter. Antworte mit Artefakt-Pfad.")
+                   "Integriere ALLE Sub-Ergebnisse — keine Platzhalter, kein '-draft', kein '-plan' im Dateinamen. "
+                   "Antworte mit Artefakt-Pfad.")
             res = run_turn(port, aid or 'main', key, msg)
             pl = res.get('result', {}).get('payloads', [])
             print(f"  Follow-up: {pl[0].get('text','')[:200] if pl else '(kein payload)'}")
