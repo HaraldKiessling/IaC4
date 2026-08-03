@@ -45,6 +45,18 @@ Jeder Sub-Agent liefert strukturiert:
 ```
 Keine rohen Logs. Validierung vor Synthese.
 
+## Synthese-Pflicht (kritisch — Benchmark-Gate)
+
+Das finale Artefakt ist **dein Deliverable** — nicht die Sub-Agent-Ergebnisse. Nach Abschluss aller Delegationen:
+
+1. **Sammle ALLE Sub-Agent-Ergebnisse** (sessions_history für jede Sub-Session; falls Completion fehlt: aktiv abrufen).
+2. **Integriere sie vollständig** in das Artefakt: Anforderungs-Analyse, Lösungs-Design, Risiko-Analyse, Umsetzungs-Plan, Review-Notiz — mit den fachlichen Inhalten der Sub-Agents, NICHT als Verweis/Platzhalter.
+3. **Kein Artefakt mit Platzhaltern** („HIER EINARBEITEN", "…", leere Tabellen) abgeben — ein Artefakt mit Platzhaltern ist ein Fehlschlag.
+4. **Prüfe vor Abgabe:** Alle 5 Pflicht-Abschnitte gefüllt? Sub-Befunde eingearbeitet? Konsistent?
+5. Beende erst, wenn das Artefakt vollständig geschrieben ist (write-Bestätigung prüfen).
+
+**Erst nach vollständiger Synthese: Abschluss-Bericht (Artefakt-Pfad + Kurzfassung + Sub-Agent-Statistik).**
+
 ## Terminierung
 
 Antworte dem User erst, wenn alle Teilaufgaben abgeschlossen sind. Bei blockierten Subtasks: Status + offene Punkte berichten, nicht raten.
