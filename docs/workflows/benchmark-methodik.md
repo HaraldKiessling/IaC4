@@ -2,7 +2,7 @@
 
 > **Zweck:** Wiederverwendbare Methodik für OpenClaw-Instanz-Vergleichstests (OC1/OC2/OC3 auf vps-dev).
 > Basierend auf T1 (2026-08-02, 15 Läufe/45 Runs, Design 04) und T2 (Reasoning-Level-Variable, 12 Läufe/36 Runs).
-> Stand: 2026-08-02 · Status: aktiv (konsolidiert aus PR #74/#76 + T2-Auswertung)
+> Stand: 2026-08-03 · Status: aktiv (konsolidiert aus PR #74/#76 + T2-Auswertung + Kostenmessung d06/d07, PR #83)
 
 ## 1. Testaufbau
 
@@ -10,7 +10,9 @@
 
 | Arm | Instanz | Agent | Modell (Orchestrator) | Rolle |
 |---|---|---|---|---|
-| OC1 | `oc1` (18789) | `main` | deepseek-v4-flash | Vanilla-Baseline (kein agents.list) |
+| OC1 | `oc1` (18789) | `main` | deepseek-v4-pro* | Vanilla-Baseline (kein agents.list) |
+
+*Empirisch (d07): OC1 läuft auf `deepseek-v4-pro` (Default-Modell), nicht flash — Kosten-Fairness-Befund, siehe 4b.
 | OC2 | `oc2` (18790) | `orchestrator` | deepseek-v4-flash | Team-Ist (4 Agents, suggest/Depth 1) |
 | OC3 | `oc3` (18791) | `orchestrator` | deepseek-v4-pro | Best-Practice (4 Agents, prefer/Depth 2, Modell-Invertierung) |
 
@@ -124,6 +126,29 @@ gh workflow run 04-service-deploy.yml -f target=prod -f playbook=openclaw -f ins
 **Verifikation nach Clean:** `sessions.list` → 0, `agents.workspace.list` → leer, alle Instanzen `health=ok`.
 
 **Kombination:** `clean=true` + `skip_bootstrap=true` (PR #76) = BOOTSTRAP.md weg + kein Persistenz-State → sauberster Benchmark-Start.
+
+## 4b. Kostenmessung (Pflicht seit 2026-08-03, PR #83)
+
+**Jeder Benchmark-Lauf dokumentiert die LLM-Kosten je Instanz** — Hauptsession UND alle Sub-Sessions (Sub-Agent-Delegation ist der dominante Kostenfaktor, d07-Befund: OC3-Subs = 96 % der Kosten).
+
+**Skript:** `scripts/benchmark/benchmark-costs.py <task-log.json> --eur [--agent-detail]`
+- Liest Session-Transkripte via Gateway-API (Ports 18789/18790/18791), summiert `usage.input`/`cacheRead`/`output` je Message, rechnet mit **Modell-Preis je Message** (flash vs. pro unterscheiden!)
+- Sub-Sessions automatisch inkludiert; Memory-Check-/Fremd-Sessions ausgeschlossen
+
+**Preise (DeepSeek offiziell, 2026-08-03, https://api-docs.deepseek.com/quick_start/pricing/):**
+
+| Modell | Input (miss) | Input (cache-hit) | Output |
+|---|---|---|---|
+| `deepseek-v4-flash` | $0,14 / 1M | $0,0028 / 1M | $0,28 / 1M |
+| `deepseek-v4-pro` | $1,74 / 1M | $0,0145 / 1M | $3,48 / 1M |
+
+⚠️ **Nicht die Promo-Preise $0,435/$0,87 (Design 05) verwenden** — das sind keine Listenpreise. EUR-Umrechnung: 1 EUR = 1,14 USD (Design 05-Konstante).
+
+**Regeln:**
+1. Kosten NACH jedem Lauf ermitteln (Sessions sind nach Clean weg — sofort sichern!)
+2. In der Auswertungstabelle führen: `Kosten €` je Instanz + Summe
+3. Modell-Konfiguration je Instanz mit dokumentieren (OC1 = pro! Fairness-Befund d07: Vanilla-Arm nutzt teuerstes Modell)
+4. `cacheRead` ist bei DeepSeek ~50–100× günstiger als miss — hohe Hit-Raten verzerren Token-Vergleiche; **Kosten ≠ Tokens**
 
 ## 5. Best Practices (konsolidierte Lessons)
 
