@@ -24,7 +24,13 @@
   },
   "agents": {
     "defaults": {
-      "workspace": "/home/node/.openclaw/workspace",
+      "workspace": "/home/node/.openclaw/workspace"
+{% if am.get('Orchestrator') %},
+      "model": {
+        "primary": "{{ am['Orchestrator'].primary }}",
+        "fallbacks": {{ am['Orchestrator'].fallbacks | tojson }}
+      }
+{% endif %},
       "memorySearch": {
         "provider": "local"
       }
