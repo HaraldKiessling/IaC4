@@ -41,16 +41,14 @@ openclaw_instances:
     telegram_bot_token_env: "DEV_OC2_TELEGRAM_BOT_TOKEN"
     gh_token_env: "DEV_OC2_GH_TOKEN"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
-    # Design 06 (PR #83): OC2 an OC3 angeglichen (Harald 2026-08-03) — prefer/Depth 2 +
-    # Modell-Invertierung. Pilot d06-d10 zeigten reproduzierbar: suggest/Depth 1 (OC2) schwankt
-    # stark (11-90% Orchestrator-Anteil), prefer/Depth 2 (OC3) ist stabil (25-33%).
-    # -> OC2/OC3 = zwei Replikate des Team-Setups (n=2) fuer L/M/H-Benchmark.
-    # Modell-Invertierung (Design 01-oc2-oc3-benchmark Befund B1): Orchestrator = Qualität (pro),
-    # Sub-Agents = Kosten (flash)
+    # Design 06 (PR #83), Harald 2026-08-03: Team-Konfiguration identisch zu OC3 (prefer/Depth 2),
+    # EINZIGE Benchmark-Variable = Orchestrator-Modell: OC2 = flash, OC3 = pro.
+    # Sub-Agents auf beiden = flash (konsistent, kein zweiter Störfaktor).
+    # Misst: Lohnt sich das teurere pro-Modell für Orchestrator-Koordination/Synthese?
     agent_models:
       Orchestrator:
-        primary: "deepseek/deepseek-v4-pro"
-        fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Architect:
         primary: "deepseek/deepseek-v4-flash"
         fallbacks: ["deepseek/deepseek-v4-pro"]
