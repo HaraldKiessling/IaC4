@@ -97,6 +97,15 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             elif 'orchestrator_tool_scope' in oc:
                 orch = next(x for x in d['agents']['list'] if x['id'] == 'orchestrator')
                 assert 'tools' not in orch, f"{oc['name']}: tools-Key unerwartet (soft/ohne strict)"
+            if oc.get('subagent_tools'):
+                # Design 06-Fix: Sub-Agents haben eigene Fach-Tools (nicht kastriert)
+                for a in oc['agents']:
+                    aid = a.lower().replace(' ', '-')
+                    if aid == 'orchestrator':
+                        continue
+                    ent = next(x for x in d['agents']['list'] if x['id'] == aid)
+                    assert ent.get('tools', {}).get('allow') == oc['subagent_tools'], \
+                        f"{oc['name']}/{aid}: Sub-Agent-Tools fehlen/falsch (Kastrations-Fix)"
             if oc.get('subagents_tools_deny'):
                 assert d['tools']['subagents']['tools']['deny'] == oc['subagents_tools_deny'], \
                     f"{oc['name']}: tools.subagents.deny falsch"

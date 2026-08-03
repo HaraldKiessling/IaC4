@@ -4,6 +4,7 @@
 {% set subagents_deny = oc.subagents_tools_deny | default([], true) %}
 {% set agent_workspaces = oc.agent_workspaces | default(false, true) %}
 {% set orch_tool_scope = oc.orchestrator_tool_scope | default('', true) %}
+{% set subagent_tools = oc.subagent_tools | default([], true) %}
 {
   "gateway": {
     "mode": "local",
@@ -50,6 +51,11 @@
           "allow": ["read", "write", "memory_search", "memory_get",
                     "sessions_spawn", "sessions_yield", "sessions_history",
                     "sessions_list", "sessions_send", "session_status"]
+        }
+{% endif %}
+{% if subagent_tools and agent_id != 'orchestrator' %},
+        "tools": {
+          "allow": {{ subagent_tools | tojson }}
         }
 {% endif %}
 {% if allow_agents and agent_id == 'orchestrator' %},
