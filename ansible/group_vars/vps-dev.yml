@@ -91,6 +91,19 @@ openclaw_instances:
       Reviewer:
         primary: "deepseek/deepseek-v4-flash"
         fallbacks: ["deepseek/deepseek-v4-pro"]   # Design 01-oc2-oc3-benchmark Kap. 4.3 exakt (Architect MINOR-1)
+    # Design 06-Fix (PR #83, 2026-08-03): Sub-Agents brauchen EIGENE Fach-Tools —
+    # Per-Agent-Tool-Policy des Orchestrators vererbt sich sonst auf Sub-Agents
+    # (Filterkette multi-agent-sandbox-tools.md) und kastriert deren exec/web.
+    subagent_tools:
+      - exec
+      - process
+      - web_search
+      - web_fetch
+      - read
+      - write
+      - apply_patch
+      - memory_search
+      - memory_get
     # Orchestrator-Pattern (Design 01-oc2-oc3-benchmark Befund B3): Depth-2-Delegation + echte Rollen-IDs (B2)
     subagents_defaults:
       delegationMode: "prefer"
