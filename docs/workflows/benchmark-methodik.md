@@ -135,7 +135,7 @@ gh workflow run 04-service-deploy.yml -f target=prod -f playbook=openclaw -f ins
 - Liest Session-Transkripte via Gateway-API (Ports 18789/18790/18791), summiert `usage.input`/`cacheRead`/`output` je Message, rechnet mit **Modell-Preis je Message** (flash vs. pro unterscheiden!)
 - Sub-Sessions automatisch inkludiert; Memory-Check-/Fremd-Sessions ausgeschlossen
 
-**Preise (DeepSeek offiziell, 2026-08-03, https://api-docs.deepseek.com/quick_start/pricing/):**
+**Preise (DeepSeek offiziell, 2026-08-03, [api-docs.deepseek.com](https://api-docs.deepseek.com/quick_start/pricing/)):**
 
 | Modell | Input (miss) | Input (cache-hit) | Output |
 |---|---|---|---|
