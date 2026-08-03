@@ -52,9 +52,8 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             assert 'providers' not in d, "Root-providers verboten (models.providers)"
             assert 'models' in d and 'providers' in d['models']
             # Memory-Konfiguration (Fix 2026-08-03): FTS-only explizit – kein Embedding-Default
-            assert d['memory']['backend'] == 'qmd', f"{oc['name']}: memory.backend != qmd"
-            assert d['memory'].get('qmd', {}).get('searchMode') == 'search', \
-                f"{oc['name']}: qmd.searchMode != search (FTS-only)"
+            assert d['memory']['backend'] == 'builtin', f"{oc['name']}: memory.backend != builtin (qmd nicht im Container)"
+            assert 'qmd' not in d['memory'], f"{oc['name']}: memory.qmd unerwartet (builtin-Backend)"
             assert d['agents']['defaults'].get('memorySearch', {}).get('provider') == 'none', \
                 f"{oc['name']}: memorySearch.provider != none (Embedding-Default 'openai' verursacht Index-Warnung)"
             for a in oc['agents']:

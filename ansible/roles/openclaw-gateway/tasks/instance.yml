@@ -131,6 +131,18 @@
     state: absent
   when: oc_gh_token | length == 0
 
+- name: "{{ oc.name }}: Design 06 – MEMORY.md + memory/ ins Root-Workspace deployen (nach Clean!)"
+  ansible.builtin.copy:
+    src: "agent-workspaces/orchestrator/{{ item.src }}"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ item.dest }}"
+    mode: '0644'
+    owner: '1000'
+    group: '1000'
+  loop:
+    - {src: 'MEMORY.md', dest: 'MEMORY.md'}
+    - {src: 'memory/2026-08-03.md', dest: 'memory/2026-08-03.md'}
+  when: oc.agent_workspaces | default(false) | bool and oc.agents | length > 0
+
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
 
   ansible.builtin.template:

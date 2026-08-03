@@ -31,10 +31,7 @@
     }
   },
   "memory": {
-    "backend": "qmd",
-    "qmd": {
-      "searchMode": "search"
-    }
+    "backend": "builtin"
   },
   "plugins": {
     "entries": {
