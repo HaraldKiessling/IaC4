@@ -51,6 +51,12 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             # Schema-Checks (K1-1/K1-2-Regression)
             assert 'providers' not in d, "Root-providers verboten (models.providers)"
             assert 'models' in d and 'providers' in d['models']
+            # Memory-Konfiguration (Fix 2026-08-03): FTS-only explizit – kein Embedding-Default
+            assert d['memory']['backend'] == 'qmd', f"{oc['name']}: memory.backend != qmd"
+            assert d['memory'].get('qmd', {}).get('searchMode') == 'search', \
+                f"{oc['name']}: qmd.searchMode != search (FTS-only)"
+            assert d['agents']['defaults'].get('memorySearch', {}).get('provider') == 'none', \
+                f"{oc['name']}: memorySearch.provider != none (Embedding-Default 'openai' verursacht Index-Warnung)"
             for a in oc['agents']:
                 aid = a.lower().replace(' ', '-')
                 assert any(x.get('id') == aid for x in d['agents'].get('list', [])), f"agent id {aid} fehlt"

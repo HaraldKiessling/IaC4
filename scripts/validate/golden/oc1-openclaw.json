@@ -18,6 +18,9 @@
   "agents": {
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
+      "memorySearch": {
+        "provider": "none"
+      },
       "subagents": {
         "delegationMode": "suggest",
         "maxChildrenPerAgent": 5,
@@ -28,7 +31,10 @@
     }
   },
   "memory": {
-    "backend": "qmd"
+    "backend": "qmd",
+    "qmd": {
+      "searchMode": "search"
+    }
   },
   "plugins": {
     "entries": {

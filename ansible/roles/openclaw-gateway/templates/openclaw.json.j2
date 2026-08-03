@@ -22,7 +22,10 @@
   },
   "agents": {
     "defaults": {
-      "workspace": "/home/node/.openclaw/workspace"
+      "workspace": "/home/node/.openclaw/workspace",
+      "memorySearch": {
+        "provider": "none"
+      }
 {% if skip_bootstrap | default(false) | bool %},
       "skipBootstrap": true
 {% endif %}
@@ -57,7 +60,10 @@
 {% endif %}
   },
   "memory": {
-    "backend": "qmd"
+    "backend": "qmd",
+    "qmd": {
+      "searchMode": "search"
+    }
   },
   "plugins": {
     "entries": {
