@@ -5,6 +5,7 @@
 {% set agent_workspaces = oc.agent_workspaces | default(false, true) %}
 {% set orch_tool_scope = oc.orchestrator_tool_scope | default('', true) %}
 {% set subagent_tools = oc.subagent_tools | default([], true) %}
+{% set agent_thinking = oc.agent_thinking | default({}, true) %}
 {
   "gateway": {
     "mode": "local",
@@ -43,6 +44,9 @@
           "primary": "{{ am[a].primary }}",
           "fallbacks": {{ am[a].fallbacks | tojson }}
         }
+{% if agent_thinking.get(a) %},
+        "thinkingDefault": "{{ agent_thinking.get(a) }}"
+{% endif %}
 {% if agent_workspaces and agent_id != 'orchestrator' %},
         "workspace": "/home/node/.openclaw/workspace/{{ agent_id }}"
 {% endif %}

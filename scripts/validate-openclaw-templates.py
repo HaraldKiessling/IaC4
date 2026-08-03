@@ -87,6 +87,12 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                     else:
                         assert ent.get('workspace') == f"/home/node/.openclaw/workspace/{aid}", \
                             f"{oc['name']}/{aid}: workspace fehlt/falsch"
+            if oc.get('agent_thinking'):
+                for a, lvl in oc['agent_thinking'].items():
+                    eid = a.lower().replace(' ', '-')
+                    ent = next(x for x in d['agents']['list'] if x['id'] == eid)
+                    assert ent.get('thinkingDefault') == lvl, \
+                        f"{oc['name']}/{eid}: thinkingDefault {ent.get('thinkingDefault')} != {lvl}"
             if oc.get('subagents_tools_deny'):
                 assert d['tools']['subagents']['tools']['deny'] == oc['subagents_tools_deny'], \
                     f"{oc['name']}: tools.subagents.deny falsch"
