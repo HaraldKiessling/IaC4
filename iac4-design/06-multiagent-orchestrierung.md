@@ -52,6 +52,12 @@ Quellen: `docs/tools/subagents.md` · `docs/gateway/config-agents.md` · `docs/c
 - **`agents.list[].workspace` existiert** (`agent-workspace.md` Z. 40) → Per-Agent-Workspace mit eigenen `AGENTS.md`/`SOUL.md` ist die native Prompt-Mechanik. **Kein `prompt`-Feld in `agents.list` nachweisbar** (Review-Befund Major-1) → Umsetzung NIE über Config-Prompt, immer über Workspace-Dateien.
 - `sessions_spawn` ist non-blocking, push-based; Doku: `sessions_yield` + Completion als nächste Message (Pilot-BP-7: Events kamen nicht an → Timeout-Fallback via `sessions_history`).
 
+### 2.6 OpenClaw-Community (Best Practices — konsistent, aber KEINE Mess-Evidenz)
+Quellen: dev.to „OpenClaw Multiagent Best Practices" (2025) · docs.openclaw.ai/concepts/multi-agent · Reddit r/openclaw (Multi-Agent-Threads) · GitHub openclaw/openclaw#4561
+- **Konsens:** 1 Orchestrator + spezialisierte Sub-Agents; Isolation (eigene Workspaces/agentDir); explizite Delegations-Regeln; hierarchische Delegation mit Limits (`maxSpawnDepth: 2`, `maxChildrenPerAgent` = 5 Default); Tool-Restriktion je Agent („Tool-risk rule: prefer the smallest tool surface"); kompakte Summaries statt roher Logs; **strukturierte Koordination > Prompt-only-Flow** („deterministic pipelines are more dependable than asking an LLM to manage orchestration logic in prose").
+- **Mechanik-Hinweis (dev.to):** „Subagents receive all tools except session/system tools; orchestrators get additional session tools" — d.h. OpenClaw-Sub-Agents haben Default-Volllzugriff; **Restriktion ist explizit zu konfigurieren** (stützt unseren Tool-Scoping-Eingriff).
+- **⚠️ Einordnung:** Community-BPs stützen unser Design in allen 7 Punkten, sind aber Erfahrungswissen (Blogs/Threads), **keine kontrollierte Mess-Evidenz** — Wirksamkeit bleibt Pilot-Hypothese.
+
 ## 3. Was dem Setup fehlt (Checkliste)
 
 | # | Fehlt | Evidenz | Konkret für OC2/OC3 |
