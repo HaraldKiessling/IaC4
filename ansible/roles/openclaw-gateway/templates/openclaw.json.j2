@@ -24,7 +24,7 @@
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
       "memorySearch": {
-        "provider": "none"
+        "provider": "local"
       }
 {% if skip_bootstrap | default(false) | bool %},
       "skipBootstrap": true
@@ -60,7 +60,7 @@
 {% endif %}
   },
   "memory": {
-    "backend": "builtin"
+    "backend": "qmd"
   },
   "plugins": {
     "entries": {

@@ -19,7 +19,7 @@
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
       "memorySearch": {
-        "provider": "none"
+        "provider": "local"
       },
       "subagents": {
         "delegationMode": "suggest",
@@ -31,7 +31,7 @@
     }
   },
   "memory": {
-    "backend": "builtin"
+    "backend": "qmd"
   },
   "plugins": {
     "entries": {
