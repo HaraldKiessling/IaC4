@@ -72,6 +72,11 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             if 'agent_models' in oc:
                 for aid, mdl in oc['agent_models'].items():
                     eid = aid.lower().replace(' ', '-')
+                    # OC1 (agents: []) hat agent_models nur fuer agents.defaults.model — kein list-Eintrag
+                    if not oc['agents']:
+                        assert d['agents']['defaults'].get('model', {}).get('primary') == mdl['primary'], \
+                            f"{oc['name']}: defaults.model != {mdl['primary']} (OC1-Fairness-Fix)"
+                        continue
                     a = next(x for x in d['agents']['list'] if x['id'] == eid)
                     assert a['model']['primary'] == mdl['primary'], \
                         f"{oc['name']}/{eid}: primary {a['model']['primary']} != {mdl['primary']}"

@@ -22,6 +22,13 @@ openclaw_instances:
     telegram_bot_token_env: "DEV_OC1_TELEGRAM_BOT_TOKEN"
     gh_token_env: "DEV_OC1_GH_TOKEN"
     agents: []                        # bewusst KEINE Rollen-Agents (Single-Agent, Creator-These)
+    # Fairness-Fix (2026-08-03, Kosten-Befund): OC1 lief auf pro (OpenClaw-Default =
+    # erstes Provider-Modell). Alle 3 Arme jetzt modellgleich auf flash — einzige
+    # Benchmark-Variable = Team-Setup (OC1: Single, OC2/OC3: Team).
+    agent_models:
+      Orchestrator:
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
     # Konstant-Haltung wie OC2 (Design 01 Kap. 6.1): identische Timeouts/Concurrency
     # fuer alle 3 Benchmark-Arme – Timeout/Concurrency duerfen keine Variable sein.
     # Bewusst NICHT Doku-Defaults (maxConcurrent 8, runTimeout 0) – Abweichung dokumentiert.

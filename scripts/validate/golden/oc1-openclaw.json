@@ -18,6 +18,13 @@
   "agents": {
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
+      "model": {
+        "primary": "deepseek/deepseek-v4-flash",
+        "fallbacks": [
+          "deepseek/deepseek-v4-pro",
+          "google/gemini-3.5-flash"
+        ]
+      },
       "memorySearch": {
         "provider": "local"
       },
