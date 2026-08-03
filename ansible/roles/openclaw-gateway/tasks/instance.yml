@@ -105,7 +105,7 @@
 - name: "{{ oc.name }}: Design 06 – Rollen-AGENTS.md je Agent deployen (nach Clean!)"
   ansible.builtin.copy:
     src: "agent-workspaces/{{ agent_id }}/AGENTS.md"
-    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ agent_id }}/AGENTS.md"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ '/AGENTS.md' if agent_id == 'orchestrator' else '/' + agent_id + '/AGENTS.md' }}"
     mode: '0644'
     owner: '1000'
     group: '1000'
