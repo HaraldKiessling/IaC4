@@ -36,11 +36,10 @@ Quelle: https://developers.openai.com/api/docs/guides/agents/orchestration
 - Orchestrator besitzt die Konversation, delegiert **bounded Subtasks**, synthetisiert. Workers sind „Tools" — antworten nie dem User, liefern strukturierte Ergebnisse.
 - Delegations-Regeln **im System-Prompt**; Workers: single responsibility, explizites Output-Schema.
 
-### 2.3 LangGraph — Supervisor-Muster (Community-Standard)
+### 2.3 LangGraph — Supervisor-Muster (Community-Standard) — PRINZIP-Referenz, KEINE Übertragbarkeits-Evidenz
 Quellen: https://langchain-ai.github.io/langgraph/concepts/multi_agent/ · https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/
-- **Best Practice: Supervisor ohne Domain-Tools** („manager agent, no tools") — Supervisor = reiner Router/Planner, alle Tools liegen bei den Workern.
-- „You usually keep the supervisor tool-free when you want a pure planner/orchestrator that doesn't do work itself, need auditability and policy control over tool usage, want clear layering."
-- Routing-Regeln im Supervisor-Prompt (Roster + Spezialisierung + Terminierung), strukturierte Routing-Outputs (`{"next": "worker"}`).
+- **Prinzip: Supervisor ohne Domain-Tools** („manager agent, no tools") — Supervisor = reiner Router/Planner, alle Tools bei den Workern; strukturierte Routing-Outputs (`{"next": "worker"}`).
+- **⚠️ Einordnung (Review-Folge):** LangGraph ist ein **anderes Paradigma** (expliziter Graph, Runtime erzwingt Routing, handoff tools, FINISH-Protokoll). OpenClaw hat keinen Routing-Zwang — `sessions_spawn` + Tool-Policy verlassen sich auf LLM-Compliance. LangGraph belegt also das *Prinzip* „Tool-freier Supervisor", **nicht** dessen Wirksamkeit in OpenClaw. Der übertragbare Hebel (Per-Agent-Tool-Policy) ist in OpenClaw mechanisch vorhanden (`config-tools.md`), seine **Wirksamkeit ist eine Hypothese → wird im Pilot getestet** (Kap. 7, Q1).
 
 ### 2.4 Microsoft/Azure + Community-Konsens
 Quellen: https://learn.microsoft.com/en-us/agents/architecture/multi-agent-orchestrator-sub-agent · https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns
@@ -91,7 +90,7 @@ Quellen: `docs/tools/subagents.md` · `docs/gateway/config-agents.md` · `docs/c
 - **Weich** (nur Prompt-Mandat, Tools bleiben): Geringeres Risiko, aber empirisch wirkungslos in unserem Setup (T1/mt0). LangGraph-Best-Practice: „keep the supervisor tool-free" für pure Orchestrierung.
 - **Pragmatischer Kompromiss:** Default **scharf**, aber über `group_vars` (`orchestrator_tool_scope: strict|soft`) pro Runde umschaltbar — Benchmark misst beide Modi (Kovariate!), kein Repo-Eingriff nötig.
 
-**Empfehlung: scharf als Default (strict), Fallback soft per group_var.** Begründung: einzige empirisch belegte Wirkmechanik; LangGraph/Anthropic/OpenAI-Konsens; Fallback hält Risiko klein.
+**Empfehlung: scharf als Default (strict), Fallback soft per group_var.** Begründung: einzige mechanisch wirksame Stellschraube in OpenClaw (T1: Prompt allein wirkt nicht); Prinzip-Konsens Anthropic/OpenAI/LangGraph (Übertragbarkeit auf OpenClaw offen — Pilot-Hypothese); Fallback hält Risiko klein.
 
 ### Q2: Rollen-Prompts aus AGENTS.md/methodology.md destillieren?
 **Fachliche Auswirkungen:**
