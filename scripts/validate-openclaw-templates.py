@@ -51,6 +51,10 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             # Schema-Checks (K1-1/K1-2-Regression)
             assert 'providers' not in d, "Root-providers verboten (models.providers)"
             assert 'models' in d and 'providers' in d['models']
+            # Memory-Konfiguration (Fix 2026-08-03): FTS-only explizit – kein Embedding-Default
+            assert d['memory']['backend'] == 'qmd', f"{oc['name']}: memory.backend != qmd (lokal-konsistent)"
+            assert d['agents']['defaults'].get('memorySearch', {}).get('provider') == 'local', \
+                f"{oc['name']}: memorySearch.provider != local (QMD-Setup wie PROD-Host; Default 'openai' verursacht Index-Warnung)"
             for a in oc['agents']:
                 aid = a.lower().replace(' ', '-')
                 assert any(x.get('id') == aid for x in d['agents'].get('list', [])), f"agent id {aid} fehlt"
@@ -73,6 +77,16 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                         f"{oc['name']}/{eid}: primary {a['model']['primary']} != {mdl['primary']}"
                     assert a['model']['fallbacks'] == mdl['fallbacks'], \
                         f"{oc['name']}/{eid}: fallbacks {a['model']['fallbacks']} != {mdl['fallbacks']}"
+            if oc.get('agent_workspaces'):
+                # Design 06: Per-Agent-Workspace NUR für Sub-Agents (Orchestrator behält Root)
+                for a in oc['agents']:
+                    aid = a.lower().replace(' ', '-')
+                    ent = next(x for x in d['agents']['list'] if x['id'] == aid)
+                    if aid == 'orchestrator':
+                        assert 'workspace' not in ent, f"{oc['name']}/orchestrator: workspace unerwartet (Root bleibt)"
+                    else:
+                        assert ent.get('workspace') == f"/home/node/.openclaw/workspace/{aid}", \
+                            f"{oc['name']}/{aid}: workspace fehlt/falsch"
             if oc.get('subagents_tools_deny'):
                 assert d['tools']['subagents']['tools']['deny'] == oc['subagents_tools_deny'], \
                     f"{oc['name']}: tools.subagents.deny falsch"

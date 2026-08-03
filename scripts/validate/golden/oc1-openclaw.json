@@ -18,6 +18,9 @@
   "agents": {
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
+      "memorySearch": {
+        "provider": "local"
+      },
       "subagents": {
         "delegationMode": "suggest",
         "maxChildrenPerAgent": 5,

@@ -2,6 +2,9 @@
 {% set subagents_defaults = oc.subagents_defaults | default({}, true) %}
 {% set allow_agents = oc.subagents_allow_agents | default([], true) %}
 {% set subagents_deny = oc.subagents_tools_deny | default([], true) %}
+{% set agent_workspaces = oc.agent_workspaces | default(false, true) %}
+{% set orch_tool_scope = oc.orchestrator_tool_scope | default('', true) %}
+{% set subagent_tools = oc.subagent_tools | default([], true) %}
 {
   "gateway": {
     "mode": "local",
@@ -20,7 +23,10 @@
   },
   "agents": {
     "defaults": {
-      "workspace": "/home/node/.openclaw/workspace"
+      "workspace": "/home/node/.openclaw/workspace",
+      "memorySearch": {
+        "provider": "local"
+      }
 {% if skip_bootstrap | default(false) | bool %},
       "skipBootstrap": true
 {% endif %}
@@ -37,6 +43,11 @@
           "primary": "{{ am[a].primary }}",
           "fallbacks": {{ am[a].fallbacks | tojson }}
         }
+{% if agent_workspaces and agent_id != 'orchestrator' %},
+        "workspace": "/home/node/.openclaw/workspace/{{ agent_id }}"
+{% endif %}
+
+
 {% if allow_agents and agent_id == 'orchestrator' %},
         "subagents": {
           "allowAgents": {{ allow_agents | tojson }}

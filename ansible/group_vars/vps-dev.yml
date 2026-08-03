@@ -20,6 +20,7 @@ openclaw_instances:
     websearch_api_key_env: "DEV_OC1_WEBSEARCH_API_KEY"
     gateway_token_env: "DEV_OC1_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC1_TELEGRAM_BOT_TOKEN"
+    gh_token_env: "DEV_OC1_GH_TOKEN"
     agents: []                        # bewusst KEINE Rollen-Agents (Single-Agent, Creator-These)
     # Konstant-Haltung wie OC2 (Design 01 Kap. 6.1): identische Timeouts/Concurrency
     # fuer alle 3 Benchmark-Arme – Timeout/Concurrency duerfen keine Variable sein.
@@ -33,21 +34,41 @@ openclaw_instances:
   - name: oc2
     enabled: true
     port: 18790
-    label: "OC2 – DevOps Team (4 Agents) – Kontrollgruppe (Design 01-oc2-oc3-benchmark)"
+    label: "OC2 – DevOps Team (4 Agents) – Team-Replikat 1 (Design 06, PR #83)"
     llm_provider: deepseek
     websearch_api_key_env: "DEV_OC2_WEBSEARCH_API_KEY"
     gateway_token_env: "DEV_OC2_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC2_TELEGRAM_BOT_TOKEN"
+    gh_token_env: "DEV_OC2_GH_TOKEN"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
-    # Konstant-Haltung (Design 01-oc2-oc3-benchmark Kap. 5.3): identische Rahmenbedingungen zu OC3,
-    # damit Timeout/Concurrency keine Benchmark-Variablen sind.
-    # Bewusst NICHT Doku-Defaults (maxConcurrent 8, runTimeout 0) – Abweichung dokumentiert.
+    # Design 06 (PR #83), Harald 2026-08-03: Team-Konfiguration identisch zu OC3 (prefer/Depth 2),
+    # EINZIGE Benchmark-Variable = Orchestrator-Modell: OC2 = flash, OC3 = pro.
+    # Sub-Agents auf beiden = flash (konsistent, kein zweiter Störfaktor).
+    # Misst: Lohnt sich das teurere pro-Modell für Orchestrator-Koordination/Synthese?
+    agent_models:
+      Orchestrator:
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+      Architect:
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro"]
+      "Engineer Pro":
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro"]
+      Reviewer:
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro"]
     subagents_defaults:
-      delegationMode: "suggest"      # Doku-Default, explizit
-      maxSpawnDepth: 1               # Doku-Default, explizit
+      delegationMode: "prefer"
+      maxSpawnDepth: 2
       maxChildrenPerAgent: 5
-      maxConcurrent: 4               # Konstante (≠ Doku-Default 8)
-      runTimeoutSeconds: 900         # Konstante (≠ Doku-Default 0)
+      maxConcurrent: 4               # Konstante (identisch OC3)
+      runTimeoutSeconds: 900         # Konstante (identisch OC3)
+    subagents_allow_agents: ["orchestrator", "architect", "engineer-pro", "reviewer"]
+    # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md
+    # Tool-Scoping revidiert (14:45): Orchestrator braucht volle Tools als Pass-Through
+    # (Vererbung an Kinder); Steuerung via AGENTS.md-Mandat (weich).
+    agent_workspaces: true
   - name: oc3
     enabled: true
     port: 18791
@@ -56,6 +77,7 @@ openclaw_instances:
     websearch_api_key_env: "DEV_OC3_WEBSEARCH_API_KEY"
     gateway_token_env: "DEV_OC3_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC3_TELEGRAM_BOT_TOKEN"
+    gh_token_env: "DEV_OC3_GH_TOKEN"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
     # Modell-Invertierung (Design 01-oc2-oc3-benchmark Befund B1): Orchestrator = Qualität (pro),
     # Sub-Agents = Kosten (flash) – Doku-Empfehlung agents.defaults.subagents.model
@@ -80,4 +102,9 @@ openclaw_instances:
       maxConcurrent: 4               # Konstante (identisch OC2)
       runTimeoutSeconds: 900         # Konstante (identisch OC2)
     subagents_allow_agents: ["orchestrator", "architect", "engineer-pro", "reviewer"]
+    # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md
+    # Tool-Scoping-Entscheidung revidiert (14:45): agents.list[].tools am Orchestrator
+    # vererbt sich auf Sub-Agents (Filterkette) -> Delegation kastriert. Orchestrator
+    # braucht volle Tools als Pass-Through; Steuerung via AGENTS.md-Mandat (weich).
+    agent_workspaces: true
     subagents_tools_deny: ["cron", "gateway"]

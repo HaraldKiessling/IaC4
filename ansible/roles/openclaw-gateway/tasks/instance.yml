@@ -20,6 +20,7 @@
     oc_websearch_api_key: "{{ lookup('env', oc.websearch_api_key_env) | default('', true) }}"
     oc_gateway_token: "{{ lookup('env', oc.gateway_token_env) | default('', true) }}"
     oc_telegram_bot_token: "{{ lookup('env', oc.telegram_bot_token_env) | default('', true) }}"
+    oc_gh_token: "{{ lookup('env', oc.gh_token_env) | default('', true) }}"
 
 - name: "{{ oc.name }}: Assert – API-Key des aktiven Providers ({{ oc_llm_provider }}) gesetzt"
   ansible.builtin.assert:
@@ -87,7 +88,72 @@
   when: openclaw_clean | default(false) | bool
 
 
+- name: "{{ oc.name }}: Design 06 – Agent-Workspaces anlegen (feature: agent_workspaces)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ agent_id }}"
+    state: directory
+    mode: '0755'
+    owner: '1000'
+    group: '1000'
+  loop: "{{ oc.agents }}"
+  loop_control:
+    loop_var: a
+  vars:
+    agent_id: "{{ a | lower | replace(' ', '-') }}"
+  when: oc.agent_workspaces | default(false) | bool and oc.agents | length > 0
+
+- name: "{{ oc.name }}: Design 06 – Rollen-AGENTS.md je Agent deployen (nach Clean!)"
+  ansible.builtin.copy:
+    src: "agent-workspaces/{{ agent_id }}/AGENTS.md"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ '/AGENTS.md' if agent_id == 'orchestrator' else '/' + agent_id + '/AGENTS.md' }}"
+    mode: '0644'
+    owner: '1000'
+    group: '1000'
+  loop: "{{ oc.agents }}"
+  loop_control:
+    loop_var: a
+  vars:
+    agent_id: "{{ a | lower | replace(' ', '-') }}"
+  when: oc.agent_workspaces | default(false) | bool and oc.agents | length > 0
+
+- name: "{{ oc.name }}: GH-Read-Token als Datei im Workspace ablegen (Agent-lesbar, 0600)"
+  ansible.builtin.copy:
+    content: "{{ oc_gh_token }}"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/.gh-read-token"
+    mode: '0600'
+    owner: '1000'
+    group: '1000'
+  when: oc_gh_token | length > 0
+
+- name: "{{ oc.name }}: GH-Token-Datei entfernen (kein Secret gesetzt – optional)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/.gh-read-token"
+    state: absent
+  when: oc_gh_token | length == 0
+
+- name: "{{ oc.name }}: Design 06 – memory/-Verzeichnis anlegen (Copy-Ziel, alle Instanzen)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/memory"
+    state: directory
+    mode: '0755'
+    owner: '1000'
+    group: '1000'
+  when: true
+
+- name: "{{ oc.name }}: Design 06 – MEMORY.md + memory/ ins Root-Workspace deployen (ALLE Instanzen, auch OC1) (nach Clean!)"
+  ansible.builtin.copy:
+    src: "agent-workspaces/orchestrator/{{ item.src }}"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ item.dest }}"
+    mode: '0644'
+    owner: '1000'
+    group: '1000'
+  loop:
+    - {src: 'MEMORY.md', dest: 'MEMORY.md'}
+    - {src: 'memory/2026-08-03.md', dest: 'memory/2026-08-03.md'}
+  when: true
+
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
+
   ansible.builtin.template:
     src: openclaw.json.j2
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/config/openclaw.json"
@@ -125,6 +191,24 @@
   until: _oc_health.status == 200
   retries: 12
   delay: 5
+
+- name: "{{ oc.name }}: QMD im Container installieren (User-npm, Version gepinnt K3-2)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: /bin/sh -lc "command -v qmd >/dev/null 2>&1 || (mkdir -p ~/.local/bin ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g @tobilu/qmd@{{ openclaw_qmd_version }} && ln -sf ~/.npm-global/bin/qmd ~/.local/bin/qmd)"
+  register: _oc_qmd
+  changed_when: _oc_qmd.stdout | default('') | length > 0
+  failed_when: _oc_qmd.rc != 0
+
+- name: "{{ oc.name }}: QMD-Version verifizieren (erwartet {{ openclaw_qmd_version }})"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: /bin/sh -lc "export PATH=$HOME/.local/bin:$PATH; qmd --version | grep -q '{{ openclaw_qmd_version }}'"
+  register: _oc_qmd_ver
+  changed_when: false
+  failed_when: _oc_qmd_ver.rc != 0
 
 - name: "{{ oc.name }}: Tailscale Serve-Status (Idempotenz)"
   ansible.builtin.shell: tailscale serve status

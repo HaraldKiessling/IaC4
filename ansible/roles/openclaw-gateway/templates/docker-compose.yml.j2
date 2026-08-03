@@ -8,7 +8,18 @@ services:
       - "127.0.0.1:{{ oc.port }}:{{ oc.port }}"
     environment:
       OPENCLAW_GATEWAY_TOKEN: "{{ oc_gateway_token | default('') }}"
+      # K4-3 (PR #83): deaktiviert exec-Startup-Snapshot, der Secret-Variablen ausschliesst
+      # (docs/tools/exec.md Z.74: "Set OPENCLAW_EXEC_SHELL_SNAPSHOT=0 ... to disable this snapshot path")
+      OPENCLAW_EXEC_SHELL_SNAPSHOT: "0"
+      # K3-3 (PR #83): GH-Read-Token ZWEI Wege, bewusst:
+      #  1) GH_TOKEN-Env -> gh-CLI im Container nutzt Token nativ (gh liest GH_TOKEN automatisch)
+      #  2) .gh-read-token-Datei (instance.yml) -> Agents lesen Token via read (Pilot-Prompt-Pfad,
+      #     QMD indiziert hidden paths nicht -> kein Memory-Index-Leak)
+{% if oc_gh_token | default('') | length > 0 %}
+      GH_TOKEN: "{{ oc_gh_token }}"
+{% endif %}
       OPENCLAW_WORKSPACE_DIR: "/home/node/.openclaw/workspace"
+      PATH: "/home/node/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 {% if oc_telegram_bot_token | default('') | length > 0 %}
       TELEGRAM_BOT_TOKEN: "{{ oc_telegram_bot_token }}"
 {% endif %}

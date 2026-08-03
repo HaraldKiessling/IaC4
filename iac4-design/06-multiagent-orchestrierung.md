@@ -1,0 +1,149 @@
+# Design 06: Multi-Agent-Orchestrierung — was dem Setup fehlt (evidenzbasiert)
+
+> **Status:** Überarbeitung nach Review (PR #83, Befunde Major-1…-4 eingearbeitet) · **Stand:** 2026-08-03 · **Autor:** Nova (Orchestrator) · **Review:** 🏗️ (PR #83)
+> **Auslöser:** Issue #82 · Pilot-Befund Design 05 (mt0): OC2/OC3-Orchestrator macht ~90–95 % der Arbeit selbst, obwohl Sub-Agents verfügbar und Spawns > 0.
+
+## 1. Problem & Root-Cause (Pilot-Befund)
+
+| Metrik | OC2 (Team-Ist) | OC3 (Best-Practice) |
+|---|---|---|
+| Spawns | 2 | 3 |
+| Orchestrator-Anteil an Tokens/ToolCalls | ~95 % | ~90 % |
+| Ergebnis | Draft 5/6 | ❌ 0/6 (BP-7) |
+
+*(Zahlen harmonisiert mit Issue #82: „~80 %" im PR-Body war Tippfehler; korrekt 90–95 %.)*
+
+**Root-Cause (Repo-Inspektion 2026-08-03, verifiziert im Review):** Die `agents.list`-Einträge in `openclaw.json.j2` (Z. 33–39) enthalten **nur `id`, `name`, `model`** — **keine System-Prompts, keine Workspace-Dateien je Agent, keine Per-Agent-Tool-Policies**. Konsequenzen:
+
+1. Der Orchestrator hat **kein Delegations-Mandat** — kein Prompt sagt ihm „du VERTEILST, du führst nicht aus". LLM-Default ohne Anweisung: selbst machen.
+2. Die Sub-Agents haben **keine Rollen-Prompts** — „Architect" ist nur ein Name ohne Verantwortlichkeiten, Methodik, Output-Format.
+3. `delegationMode: "suggest"` ist nur eine *Erlaubnis*, kein *Gebot* — vgl. OpenClaw-Doku `subagents.md`: *„controls prompt guidance only; it does not change tool policy or enforce delegation"*.
+4. Keine **Output-Contracts**: Sub-Agent-Antworten sind unstrukturiert → Orchestrator muss nacharbeiten statt synthetisieren.
+5. **Kein Tool-Scoping:** Der Orchestrator hat dieselben Fach-Tools (exec/web_search) wie die Sub-Agents — nichts zwingt ihn zu delegieren. Empirisch: T1 (Design 04) = **0 Spawns in 46 Sessions trotz suggest/prefer**; mt0 = Spawns 2/3, aber 90–95 % Selbstarbeit. Prompt-Guidance allein wirkt nachweislich nicht.
+
+**Fazit:** Das Setup hat die *Struktur* (Agents registriert, allowAgents, Modelle) — es fehlt das *Verhalten* (Prompts, Mandate, Contracts, Tool-Policies).
+
+## 2. Evidenz aus Primärquellen
+
+### 2.1 Anthropic — Multi-Agent Research System (2025)
+Quelle: https://www.anthropic.com/engineering/multi-agent-research-system
+- Orchestrator (Lead) plant, zerlegt, spawns 3–5 Sub-Agents parallel, synthetisiert. Sub-Agents arbeiten **isoliert**, liefern **kondensierte Executive Summaries**.
+- Token-Volumen erklärt ~80 % des Erfolgs (BrowseComp) — nur bei Aufgaben mit unabhängigen Parallel-Threads.
+- Lessons: (a) Sub-Agents isolieren, (b) Orchestrator = einziger Ort für globalen State, (c) **Tool-Scoping je Rolle**, (d) strukturierte Outputs.
+
+### 2.2 OpenAI — Orchestrator-Workers / Agents as Tools
+Quelle: https://developers.openai.com/api/docs/guides/agents/orchestration
+- Orchestrator besitzt die Konversation, delegiert **bounded Subtasks**, synthetisiert. Workers sind „Tools" — antworten nie dem User, liefern strukturierte Ergebnisse.
+- Delegations-Regeln **im System-Prompt**; Workers: single responsibility, explizites Output-Schema.
+
+### 2.3 LangGraph — Supervisor-Muster (Community-Standard) — PRINZIP-Referenz, KEINE Übertragbarkeits-Evidenz
+Quellen: https://langchain-ai.github.io/langgraph/concepts/multi_agent/ · https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/
+- **Prinzip: Supervisor ohne Domain-Tools** („manager agent, no tools") — Supervisor = reiner Router/Planner, alle Tools bei den Workern; strukturierte Routing-Outputs (`{"next": "worker"}`).
+- **⚠️ Einordnung (Review-Folge):** LangGraph ist ein **anderes Paradigma** (expliziter Graph, Runtime erzwingt Routing, handoff tools, FINISH-Protokoll). OpenClaw hat keinen Routing-Zwang — `sessions_spawn` + Tool-Policy verlassen sich auf LLM-Compliance. LangGraph belegt also das *Prinzip* „Tool-freier Supervisor", **nicht** dessen Wirksamkeit in OpenClaw. Der übertragbare Hebel (Per-Agent-Tool-Policy) ist in OpenClaw mechanisch vorhanden (`config-tools.md`), seine **Wirksamkeit ist eine Hypothese → wird im Pilot getestet** (Kap. 7, Q1).
+
+### 2.4 Microsoft/Azure + Community-Konsens
+Quellen: https://learn.microsoft.com/en-us/agents/architecture/multi-agent-orchestrator-sub-agent · https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns
+- Orchestrator = Source of Truth, persistentes Plan-Artefakt, Summarization an Grenzen, Quality Gates, Pipeline ≤ 3–4 Stufen.
+
+### 2.5 OpenClaw-Doku (Mechanik, lokal verifiziert)
+Quellen: `docs/tools/subagents.md` · `docs/gateway/config-agents.md` · `docs/concepts/agent-workspace.md` · `docs/gateway/config-tools.md`
+- `delegationMode` = **prompt guidance only**; suggest = „standard prompt nudge", prefer = „delegate anything more involved" — beides kein Gebot.
+- **`agents.list[].tools.allow/deny` + `alsoAllow` existieren** (`config-tools.md`, `multi-agent-sandbox-tools.md`) → Tool-Scoping technisch umsetzbar.
+- **`agents.list[].workspace` existiert** (`agent-workspace.md` Z. 40) → Per-Agent-Workspace mit eigenen `AGENTS.md`/`SOUL.md` ist die native Prompt-Mechanik. **Kein `prompt`-Feld in `agents.list` nachweisbar** (Review-Befund Major-1) → Umsetzung NIE über Config-Prompt, immer über Workspace-Dateien.
+- `sessions_spawn` ist non-blocking, push-based; Doku: `sessions_yield` + Completion als nächste Message (Pilot-BP-7: Events kamen nicht an → Timeout-Fallback via `sessions_history`).
+
+### 2.6 OpenClaw-Community (Best Practices — konsistent, aber KEINE Mess-Evidenz)
+Quellen: dev.to „OpenClaw Multiagent Best Practices" (2025) · docs.openclaw.ai/concepts/multi-agent · Reddit r/openclaw (Multi-Agent-Threads) · GitHub openclaw/openclaw#4561
+- **Konsens:** 1 Orchestrator + spezialisierte Sub-Agents; Isolation (eigene Workspaces/agentDir); explizite Delegations-Regeln; hierarchische Delegation mit Limits (`maxSpawnDepth: 2`, `maxChildrenPerAgent` = 5 Default); Tool-Restriktion je Agent („Tool-risk rule: prefer the smallest tool surface"); kompakte Summaries statt roher Logs; **strukturierte Koordination > Prompt-only-Flow** („deterministic pipelines are more dependable than asking an LLM to manage orchestration logic in prose").
+- **Mechanik-Hinweis (dev.to):** „Subagents receive all tools except session/system tools; orchestrators get additional session tools" — d.h. OpenClaw-Sub-Agents haben Default-Volllzugriff; **Restriktion ist explizit zu konfigurieren** (stützt unseren Tool-Scoping-Eingriff).
+- **⚠️ Einordnung:** Community-BPs stützen unser Design in allen 7 Punkten, sind aber Erfahrungswissen (Blogs/Threads), **keine kontrollierte Mess-Evidenz** — Wirksamkeit bleibt Pilot-Hypothese.
+
+## 3. Was dem Setup fehlt (Checkliste)
+
+| # | Fehlt | Evidenz | Konkret für OC2/OC3 |
+|---|---|---|---|
+| 1 | **Orchestrator-System-Prompt mit Delegations-Mandat** | Anthropic/OpenAI/LangGraph | `AGENTS.md` im Orchestrator-Workspace: „Du VERTEILST, du führst nicht aus. Fachliche Arbeit delegierst du — auch wenn du sie selbst könntest." + Roster der Sub-Agents + Routing-/Terminierungsregeln. |
+| 2 | **Rollen-Prompts für Sub-Agents** | Anthropic, OpenAI | Je Sub-Agent eigene Workspace-Datei (`AGENTS.md`): Architect (Design-Methodik, 5W, Alternativen), Engineer (IaC4-Regeln, `set -euo pipefail`, Evidence), Reviewer (Checkliste Methodik Schritt 6, Befund-Format, Signatur). Jeder: „antworte NIE dem User, liefere strukturiertes Ergebnis an den Orchestrator." |
+| 3 | **Output-Contracts** | OpenAI (Schema), Anthropic (Summaries) | Jeder Sub-Agent liefert `{status, ergebnis, belege/quellen, offene_punkte}` als kompakte Summary. |
+| 4 | **Plan-Dokument / State** | Microsoft | Orchestrator führt Plan (Subtasks/Status) als Workspace-Datei; re-liest vor Delegation. |
+| 5 | **Completion-Handling (BP-7-Fix)** | OpenClaw-Doku + Pilot | Regel: „Nach Spawn: `sessions_yield`; kommt keine Completion, nach Timeout via `sessions_history` aktiv abrufen. Nie ohne Ergebnis weiter." (yield zuerst, Polling nur als Fallback) |
+| 6 | **Tool-Scoping als Verteilungs-Hebel** | LangGraph (Kern), Anthropic, OpenAI + T1/mt0-Empirie | Orchestrator: nur Koordinations-/Lese-Tools (sessions_*, read, write für Plan) + `AGENTS.md`-Zugriff; **ohne exec/web_search/gh** → MUSS delegieren. Sub-Agents: volle Fach-Tools. |
+| 7 | **Verteilungs-Metriken** | Issue #82 | Siehe Kap. 7 (Mess-Methode). |
+
+## 4. Umsetzungs-Vorschlag (nach Freigabe)
+
+1. **Template `openclaw.json.j2` erweitern:** `agents.list[].workspace` je Agent rendern (`workspace/<agent_id>`), `agents.list[].tools.allow/deny` für Orchestrator (scharf: deny `exec`, `web_search`, `web_fetch`, `gh`-fähige Tools; allow `read`, `write`, `sessions_*`, `memory_search`), parametrisiert per `group_vars` (`orchestrator_tool_scope: strict|soft` — Fallback schaltbar).
+2. **Workspace-Dateien je Agent:** Orchestrator-`AGENTS.md` (Mandat + Roster + Routing) und je Sub-Agent `AGENTS.md`/`SOUL.md` (Rollen aus `docs/workflows/methodology.md` + AGENTS.md-Regeln destilliert — Freigabe Harald, offene Frage 2). Deployment via Ansible-Template (neue Rolle/Task) oder Bootstrap-Injektion.
+3. **Output-Contract** als gemeinsame Prompt-Schablone (JSON-Schema im Prompt).
+4. **Task-Prompt-Template Design 05** um Completion-Handling erweitern (yield → Timeout-Fallback).
+5. **Verifikation:** Nachweis 1 = Pilot mt0 (Baseline, ~90–95 % Selbstarbeit, Issue #82) · Nachweis 2 = Pilot-Wiederholung mit **identischer Task (Issue #29)** auf OC2/OC3 mit neuem Setup → direkter Vorher/Nachher-Vergleich (Kontrollvariable = Task) · Nachweis 3 = Benchmark Design 05 Runden L/M/H (frische Issues, „kein Issue doppelt" bleibt für Benchmark-Runden gültig).
+
+## 5. Alternativen (Methodik Schritt 4 — Abwägung)
+
+| Option | Beschreibung | Verwerfungsgrund / Bewertung |
+|---|---|---|
+| **A: Nur `delegationMode: prefer`** | Config-Umstellung ohne Prompts/Tools | **Verworfen (empirisch):** T1 = 0 Spawns in 46 Sessions trotz suggest/prefer. Prompt-Guidance allein wirkt nicht (Doku: „prompt guidance only"). |
+| **B: Tool-Scoping allein (ohne Prompts)** | Orchestrator ohne Fach-Tools, keine Rollen-Prompts | **Teilweise:** erzwingt Delegation, aber Sub-Agents bleiben leere Hüllen (keine Rollen/Contracts) → Qualität unkontrolliert. Nur als Zwischenschritt denkbar. |
+| **C: Config-`prompt`-Feld je Agent** | System-Prompt direkt in `openclaw.json` | **Verworfen (Review Major-1):** Feld in 2026.7.1 nicht nachweisbar (Doku/Schema/Source) → Schema-Validierungsbruch beim Deploy. |
+| **D: Per-Agent-Workspace + AGENTS.md (gewählt)** | Native Mechanik: `agents.list[].workspace` + Workspace-Dateien + Tool-Policy | **Gewählt:** dokumentiert, versionierbar im Repo, deploybar via Ansible, testbar (Doku-Check), keine Phantom-Keys. Kombiniert mit Tool-Scoping. |
+| **E: Plugin-Hook `before_prompt_build`** | System-Prompt-Mutation per Plugin | **Nicht bevorzugt:** mächtig, aber außerhalb des IaC4-Templates, schwerer reviewbar; bleibt Eskalationsoption. |
+
+## 6. Offene Fragen an Harald — Analyse + Empfehlung
+
+### Q1: Tool-Scoping scharf oder weich?
+**Fachliche Auswirkungen:**
+- **Scharf** (Orchestrator ohne exec/web_search/web_fetch/gh): Erzwingt Delegation strukturell — einzige nachweislich wirksame Mechanik (T1: 0 Spawns trotz prefer; mt0: Spawns ja, aber 90–95 % Selbstarbeit, weil Tools da waren). Risiko: wenn Spawns ausfallen (T1-Reprise), kann der Orchestrator gar nichts mehr tun → Pre-Check-Gate nötig (Delegations-Smoke-Test vor Runde 1). Konsequenz dokumentieren: Orchestrator kann nichts selbst verifizieren — gewollt.
+- **Weich** (nur Prompt-Mandat, Tools bleiben): Geringeres Risiko, aber empirisch wirkungslos in unserem Setup (T1/mt0). LangGraph-Best-Practice: „keep the supervisor tool-free" für pure Orchestrierung.
+- **Pragmatischer Kompromiss:** Default **scharf**, aber über `group_vars` (`orchestrator_tool_scope: strict|soft`) pro Runde umschaltbar — Benchmark misst beide Modi (Kovariate!), kein Repo-Eingriff nötig.
+
+**Empfehlung (REVIDIERT 2026-08-03, Pilot-Befund): Prompt-Mandat (weich) — Config-basiertes Scoping ist in OpenClaw architektonisch unmöglich.** Empirischer Befund über 4 Pilot-Runden: `agents.list[orchestrator].tools` (Allow UND Deny) vererbt sich auf Sub-Agents (Filterkette `multi-agent-sandbox-tools.md`: „each level can only further restrict, not grant back") → Delegation wird kastriert (d07-OC3: „curl_issue29 blocked | Kein exec-Tool"; d08-Sub-Agents: nur read/write/memory_*). Der Orchestrator MUSS `exec`/`web_*` in seinem Toolset haben, damit seine Spezialisten sie nutzen können — die Steuerung erfolgt daher über das **AGENTS.md-Delegations-Mandat** (Pass-Through-Disziplin: Tools besitzen, nie selbst nutzen). Wirkung wird im Pilot d09 gemessen (n=1), dann im L/M/H-Benchmark.
+
+### Q2: Rollen-Prompts aus AGENTS.md/methodology.md destillieren?
+**Fachliche Auswirkungen:**
+- Ja, Quellen sind da: `docs/workflows/methodology.md` (Schritte 4–6, Sub-Agent-Einsatz-Tabelle, Issue-#37-Signatur-Regel), `AGENTS.md` (Conventional Commits, `set -euo pipefail`, Evidence-Pflicht), `.roo/rules`-Übernahmen (evidence-based-engineering, alternativen-pflicht).
+- Wichtig: Destillation ≠ Kopie — auf die 3 Rollen zugeschnitten (Architect: Design/Alternativen/5W; Engineer: Umsetzung/Evidence; Reviewer: Befundformat/Signatur), inkl. „nie dem User antworten" + Output-Contract.
+- Deployment über Ansible-Template (Workspace-Dateien) hält sie versionierbar und reviewbar.
+
+**Empfehlung: Ja.** Best Practice (OpenAI: Delegations-Regeln im System-Prompt; Anthropic: isolierte Sub-Agents) + unsere Methodik liefert die Inhalte bereits; Aufwand klein, Wirkung hoch.
+
+### Q3: Umsetzung sofort oder erst Benchmark-L/M/H mit altem Setup?
+**Fachliche Auswirkungen:**
+- **Erst Baseline L/M/H (alt):** sauberste Wissenschaft (vollständige Baseline vor Intervention), aber: mt0-Pilot existiert bereits als Baseline (Issue #29, alle 3 Instanzen, read-only) → zusätzliche L/M/H-Runde mit altem Setup kostet Zeit + Tokens und liefert wenig Neues (erwartbar: gleiche ~90–95 %-Selbstarbeit, da Setup unverändert). Zudem hängt der Benchmark-Ablauf an Design 05 (PR #81, noch im Review).
+- **Sofort umsetzen:** Pilot-Wiederholung mit identischer Task (Issue #29) = direkter Vorher/Nachher-Vergleich mit maximaler Kontrolle (Task konstant). Danach L/M/H mit frischen Issues als Nachweis 3. Risiko: ohne Baseline-L/M/H fehlt eine Verteilungs-Kurve über Schwierigkeitsgrade im Alt-Zustand — kompensierbar, weil mt0 (L) und T1 (alle Klassen, 0 Spawns) die Alt-Verteilung bereits grob belegen.
+- **Deploy-Regel:** Umsetzung läuft auf Feature-Branch → Deploy **DEV** (vps-dev) → Pilot dort. Merge main/Deploy prod erst nach Nachweis + Harald-Freigabe (gilt ohnehin).
+
+**Empfehlung: Sofort umsetzen (Branch → Deploy dev → Pilot mit Issue #29 als Kontroll-Task).** Begründung: Baseline existiert (mt0/T1), Doppel-Messung mit altem Setup = verschwendete Runde; Design 05-Review kann parallel laufen.
+
+## 7. Mess-Methode (Review-Befund Major-4)
+
+- **Orchestrator-Anteil:** je Runde aus Session-Transkripten (BP-6-Sicherung): `Tokens_orchestrator / (Tokens_orchestrator + Σ Tokens_subagents)` und `ToolCalls_orchestrator / Σ ToolCalls_alle` — beide Kennzahlen berichten.
+- **Ziel:** Orchestrator-Anteil < 40 % (beide Kennzahlen) · ≥ 1 Spawn je Teilaufgabe · 0 abgebrochene Läufe · Artefakt-Disziplin 100 %.
+- **Normierung:** Ressourcen-Kovariate V5 (PR #70) je Instanz mitschreiben (CPU/Last), da spawnender Arm mehr verbraucht.
+- **Vergleich:** identische Task (Issue #29) vorher (mt0) vs. nachher (Pilot) — Task als Kontrollvariable fix.
+
+## 8. Abhängigkeiten & Reihenfolge
+
+- **Design 05 (PR #81, OPEN):** Benchmark-Ablauf/Methodik für Nachweis 3; nicht blockierend für Pilot (mt0-Ablauf existiert).
+- **PR #80 (OPEN):** Token-Datei-Task; in PR #83 aufgegangen (GH-Read-Token: `.gh-read-token`-Datei + `GH_TOKEN`-Env, K3-3-dokumentiert) — Pilot bleibt read-only.
+- **PROD-Freischaltung (K4-2, Review PR #83):** Design-06-Features (`agent_workspaces`, `orchestrator_tool_scope: strict`) sind **DEV-only** (vps-dev.yml). PROD erhält in diesem PR ausschließlich die `gh_token_env`-Konvention (Secret-Infrastruktur, keine Verhaltensänderung). **Freischaltplan PROD:** erst nach erfolgreichem Benchmark L/M/H (Design 05) + erneutem Review + expliziter Harald-Freigabe — kein stilles Mitziehen.
+- **Reihenfolge:** Design-06-Umsetzung (Branch) → Review → Deploy DEV → Pilot (Issue #29, read-only) → Auswertung → Design 05-L/M/H → Freigabe → main → prod (mit separater PROD-Entscheidung).
+
+## 9. Review-Befunde → Änderungen
+
+| Befund (PR #83) | Eingearbeitet in |
+|---|---|
+| Major-1: `prompt`-Feld existiert nicht | Kap. 2.5, 4.1, 5 (Option C verworfen) |
+| Major-2: Alternativen fehlen | Kap. 5 (neu) |
+| Major-3: Abhängigkeit PR #81 | Kap. 8 (neu) |
+| Major-4: Mess-Methode fehlt | Kap. 7 (neu) |
+| Minor-1: Zahlen inkonsistent | Kap. 1 (harmonisiert) |
+| Minor-2: Polling vs. yield | Kap. 3 #5 (yield zuerst, Fallback) |
+| Minor-3: Konsequenz Tool-Scoping | Kap. 6 Q1 |
+| K3-1 (Architect-Review): Memory-Doku-Drift | `memory/2026-08-03.md` + Kommentar auf finalen Zustand korrigiert |
+| K3-2 (Architect-Review): QMD ungepinnt | `openclaw_qmd_version: 2.5.3` (all.yml SSoT) + Versions-Assert im Deploy |
+| K3-3 (Architect-Review): GH-Token doppelt | Bewusst beide Wege + Begründung (Env für gh-CLI, Datei für Agent-Lesen) — dokumentiert in docker-compose.yml.j2 |
+| K4-1 (Architect-Review): Tool-Deny unvollständig | Deny → **Allow-Liste** (Least-Privilege): read/write/memory_*/sessions_*/session_status; Validator-Assert angepasst |
+| K4-2 (Architect-Review): PROD-Freischaltung undokumentiert | Kap. 8: DEV-only; PROD-Plan nach L/M/H + Review + Harald-Freigabe |
+| K4-3 (Architect-Review): OPENCLAW_EXEC_SHELL_SNAPSHOT unbelegt | Doku-Beleg ergänzt (docs/tools/exec.md Z.74) im Compose-Kommentar |
+| K4-4 (Architect-Review): benchmark-costs.py hartcodiert | Env-Parametrisierung mit Defaults + `.env.example` |
+| **K5 (Pilot-Befund 14:12): Tool-Policy vererbt sich auf Sub-Agents → Delegation kastriert** | Config-Scoping entfernt; Orchestrator-AGENTS.md Pass-Through-Mandat (Q1 revidiert) |
