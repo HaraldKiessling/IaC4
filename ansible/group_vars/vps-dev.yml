@@ -50,22 +50,11 @@ openclaw_instances:
       maxChildrenPerAgent: 5
       maxConcurrent: 4               # Konstante (≠ Doku-Default 8)
       runTimeoutSeconds: 900         # Konstante (≠ Doku-Default 0)
-    # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md + scharfes Tool-Scoping
+    # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md
+    # Tool-Scoping-Entscheidung revidiert (14:45): agents.list[].tools am Orchestrator
+    # vererbt sich auf Sub-Agents (Filterkette) -> Delegation kastriert. Orchestrator
+    # braucht volle Tools als Pass-Through; Steuerung via AGENTS.md-Mandat (weich).
     agent_workspaces: true
-    orchestrator_tool_scope: strict
-    # Design 06-Fix (PR #83, 2026-08-03): Sub-Agents brauchen EIGENE Fach-Tools —
-    # Per-Agent-Tool-Policy des Orchestrators vererbt sich sonst auf Sub-Agents
-    # (Filterkette multi-agent-sandbox-tools.md) und kastriert deren exec/web.
-    subagent_tools:
-      - exec
-      - process
-      - web_search
-      - web_fetch
-      - read
-      - write
-      - apply_patch
-      - memory_search
-      - memory_get
   - name: oc3
     enabled: true
     port: 18791
@@ -91,19 +80,6 @@ openclaw_instances:
       Reviewer:
         primary: "deepseek/deepseek-v4-flash"
         fallbacks: ["deepseek/deepseek-v4-pro"]   # Design 01-oc2-oc3-benchmark Kap. 4.3 exakt (Architect MINOR-1)
-    # Design 06-Fix (PR #83, 2026-08-03): Sub-Agents brauchen EIGENE Fach-Tools —
-    # Per-Agent-Tool-Policy des Orchestrators vererbt sich sonst auf Sub-Agents
-    # (Filterkette multi-agent-sandbox-tools.md) und kastriert deren exec/web.
-    subagent_tools:
-      - exec
-      - process
-      - web_search
-      - web_fetch
-      - read
-      - write
-      - apply_patch
-      - memory_search
-      - memory_get
     # Orchestrator-Pattern (Design 01-oc2-oc3-benchmark Befund B3): Depth-2-Delegation + echte Rollen-IDs (B2)
     subagents_defaults:
       delegationMode: "prefer"
@@ -112,7 +88,9 @@ openclaw_instances:
       maxConcurrent: 4               # Konstante (identisch OC2)
       runTimeoutSeconds: 900         # Konstante (identisch OC2)
     subagents_allow_agents: ["orchestrator", "architect", "engineer-pro", "reviewer"]
-    # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md + scharfes Tool-Scoping
+    # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md
+    # Tool-Scoping-Entscheidung revidiert (14:45): agents.list[].tools am Orchestrator
+    # vererbt sich auf Sub-Agents (Filterkette) -> Delegation kastriert. Orchestrator
+    # braucht volle Tools als Pass-Through; Steuerung via AGENTS.md-Mandat (weich).
     agent_workspaces: true
-    orchestrator_tool_scope: strict
     subagents_tools_deny: ["cron", "gateway"]

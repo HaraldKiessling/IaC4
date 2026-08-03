@@ -46,18 +46,8 @@
 {% if agent_workspaces and agent_id != 'orchestrator' %},
         "workspace": "/home/node/.openclaw/workspace/{{ agent_id }}"
 {% endif %}
-{% if orch_tool_scope == 'strict' and agent_id == 'orchestrator' %},
-        "tools": {
-          "allow": ["read", "write", "memory_search", "memory_get",
-                    "sessions_spawn", "sessions_yield", "sessions_history",
-                    "sessions_list", "sessions_send", "session_status"]
-        }
-{% endif %}
-{% if subagent_tools and agent_id != 'orchestrator' %},
-        "tools": {
-          "allow": {{ subagent_tools | tojson }}
-        }
-{% endif %}
+
+
 {% if allow_agents and agent_id == 'orchestrator' %},
         "subagents": {
           "allowAgents": {{ allow_agents | tojson }}

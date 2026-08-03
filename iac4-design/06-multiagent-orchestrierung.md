@@ -96,7 +96,7 @@ Quellen: dev.to „OpenClaw Multiagent Best Practices" (2025) · docs.openclaw.a
 - **Weich** (nur Prompt-Mandat, Tools bleiben): Geringeres Risiko, aber empirisch wirkungslos in unserem Setup (T1/mt0). LangGraph-Best-Practice: „keep the supervisor tool-free" für pure Orchestrierung.
 - **Pragmatischer Kompromiss:** Default **scharf**, aber über `group_vars` (`orchestrator_tool_scope: strict|soft`) pro Runde umschaltbar — Benchmark misst beide Modi (Kovariate!), kein Repo-Eingriff nötig.
 
-**Empfehlung: scharf als Default (strict), Fallback soft per group_var.** Begründung: einzige mechanisch wirksame Stellschraube in OpenClaw (T1: Prompt allein wirkt nicht); Prinzip-Konsens Anthropic/OpenAI/LangGraph (Übertragbarkeit auf OpenClaw offen — Pilot-Hypothese); Fallback hält Risiko klein.
+**Empfehlung (REVIDIERT 2026-08-03, Pilot-Befund): Prompt-Mandat (weich) — Config-basiertes Scoping ist in OpenClaw architektonisch unmöglich.** Empirischer Befund über 4 Pilot-Runden: `agents.list[orchestrator].tools` (Allow UND Deny) vererbt sich auf Sub-Agents (Filterkette `multi-agent-sandbox-tools.md`: „each level can only further restrict, not grant back") → Delegation wird kastriert (d07-OC3: „curl_issue29 blocked | Kein exec-Tool"; d08-Sub-Agents: nur read/write/memory_*). Der Orchestrator MUSS `exec`/`web_*` in seinem Toolset haben, damit seine Spezialisten sie nutzen können — die Steuerung erfolgt daher über das **AGENTS.md-Delegations-Mandat** (Pass-Through-Disziplin: Tools besitzen, nie selbst nutzen). Wirkung wird im Pilot d09 gemessen (n=1), dann im L/M/H-Benchmark.
 
 ### Q2: Rollen-Prompts aus AGENTS.md/methodology.md destillieren?
 **Fachliche Auswirkungen:**
@@ -146,3 +146,4 @@ Quellen: dev.to „OpenClaw Multiagent Best Practices" (2025) · docs.openclaw.a
 | K4-2 (Architect-Review): PROD-Freischaltung undokumentiert | Kap. 8: DEV-only; PROD-Plan nach L/M/H + Review + Harald-Freigabe |
 | K4-3 (Architect-Review): OPENCLAW_EXEC_SHELL_SNAPSHOT unbelegt | Doku-Beleg ergänzt (docs/tools/exec.md Z.74) im Compose-Kommentar |
 | K4-4 (Architect-Review): benchmark-costs.py hartcodiert | Env-Parametrisierung mit Defaults + `.env.example` |
+| **K5 (Pilot-Befund 14:12): Tool-Policy vererbt sich auf Sub-Agents → Delegation kastriert** | Config-Scoping entfernt; Orchestrator-AGENTS.md Pass-Through-Mandat (Q1 revidiert) |
