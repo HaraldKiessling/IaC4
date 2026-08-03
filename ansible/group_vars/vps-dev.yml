@@ -34,26 +34,42 @@ openclaw_instances:
   - name: oc2
     enabled: true
     port: 18790
-    label: "OC2 – DevOps Team (4 Agents) – Kontrollgruppe (Design 01-oc2-oc3-benchmark)"
+    label: "OC2 – DevOps Team (4 Agents) – Team-Replikat 1 (Design 06, PR #83)"
     llm_provider: deepseek
     websearch_api_key_env: "DEV_OC2_WEBSEARCH_API_KEY"
     gateway_token_env: "DEV_OC2_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC2_TELEGRAM_BOT_TOKEN"
     gh_token_env: "DEV_OC2_GH_TOKEN"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
-    # Konstant-Haltung (Design 01-oc2-oc3-benchmark Kap. 5.3): identische Rahmenbedingungen zu OC3,
-    # damit Timeout/Concurrency keine Benchmark-Variablen sind.
-    # Bewusst NICHT Doku-Defaults (maxConcurrent 8, runTimeout 0) – Abweichung dokumentiert.
+    # Design 06 (PR #83): OC2 an OC3 angeglichen (Harald 2026-08-03) — prefer/Depth 2 +
+    # Modell-Invertierung. Pilot d06-d10 zeigten reproduzierbar: suggest/Depth 1 (OC2) schwankt
+    # stark (11-90% Orchestrator-Anteil), prefer/Depth 2 (OC3) ist stabil (25-33%).
+    # -> OC2/OC3 = zwei Replikate des Team-Setups (n=2) fuer L/M/H-Benchmark.
+    # Modell-Invertierung (Design 01-oc2-oc3-benchmark Befund B1): Orchestrator = Qualität (pro),
+    # Sub-Agents = Kosten (flash)
+    agent_models:
+      Orchestrator:
+        primary: "deepseek/deepseek-v4-pro"
+        fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+      Architect:
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro"]
+      "Engineer Pro":
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro"]
+      Reviewer:
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro"]
     subagents_defaults:
-      delegationMode: "suggest"      # Doku-Default, explizit
-      maxSpawnDepth: 1               # Doku-Default, explizit
+      delegationMode: "prefer"
+      maxSpawnDepth: 2
       maxChildrenPerAgent: 5
-      maxConcurrent: 4               # Konstante (≠ Doku-Default 8)
-      runTimeoutSeconds: 900         # Konstante (≠ Doku-Default 0)
+      maxConcurrent: 4               # Konstante (identisch OC3)
+      runTimeoutSeconds: 900         # Konstante (identisch OC3)
+    subagents_allow_agents: ["orchestrator", "architect", "engineer-pro", "reviewer"]
     # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md
-    # Tool-Scoping-Entscheidung revidiert (14:45): agents.list[].tools am Orchestrator
-    # vererbt sich auf Sub-Agents (Filterkette) -> Delegation kastriert. Orchestrator
-    # braucht volle Tools als Pass-Through; Steuerung via AGENTS.md-Mandat (weich).
+    # Tool-Scoping revidiert (14:45): Orchestrator braucht volle Tools als Pass-Through
+    # (Vererbung an Kinder); Steuerung via AGENTS.md-Mandat (weich).
     agent_workspaces: true
   - name: oc3
     enabled: true
