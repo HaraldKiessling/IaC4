@@ -66,19 +66,6 @@ openclaw_instances:
       - apply_patch
       - memory_search
       - memory_get
-    # Design 06-Fix (PR #83, 2026-08-03): Sub-Agents brauchen EIGENE Fach-Tools —
-    # Per-Agent-Tool-Policy des Orchestrators vererbt sich sonst auf Sub-Agents
-    # (Filterkette multi-agent-sandbox-tools.md) und kastriert deren exec/web.
-    subagent_tools:
-      - exec
-      - process
-      - web_search
-      - web_fetch
-      - read
-      - write
-      - apply_patch
-      - memory_search
-      - memory_get
   - name: oc3
     enabled: true
     port: 18791
