@@ -115,7 +115,7 @@
     agent_id: "{{ a | lower | replace(' ', '-') }}"
   when: oc.agent_workspaces | default(false) | bool and oc.agents | length > 0
 
-- name: "{{ oc.name }}: openclaw.json deployen (SSoT)""
+- name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
 
   ansible.builtin.template:
     src: openclaw.json.j2
