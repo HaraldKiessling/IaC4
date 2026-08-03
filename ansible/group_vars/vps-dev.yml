@@ -78,6 +78,10 @@ openclaw_instances:
       maxConcurrent: 4               # Konstante (identisch OC3)
       runTimeoutSeconds: 900         # Konstante (identisch OC3)
     subagents_allow_agents: ["orchestrator", "architect", "engineer-pro", "reviewer"]
+    # Vergleichbarkeit (Harald 2026-08-03): Tool-/Rechte-Set identisch zu OC3 —
+    # einzige Benchmark-Variable = Modell-Mix. Deny nur Control-Plane-Tools, die
+    # OpenClaw Sub-Agents ohnehin via SUBAGENT_TOOL_DENY_ALWAYS sperrt (prod-unschädlich).
+    subagents_tools_deny: ["cron", "gateway"]
     # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md
     # Tool-Scoping revidiert (14:45): Orchestrator braucht volle Tools als Pass-Through
     # (Vererbung an Kinder); Steuerung via AGENTS.md-Mandat (weich).
