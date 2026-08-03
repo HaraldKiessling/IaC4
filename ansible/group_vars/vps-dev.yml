@@ -41,10 +41,8 @@ openclaw_instances:
     telegram_bot_token_env: "DEV_OC2_TELEGRAM_BOT_TOKEN"
     gh_token_env: "DEV_OC2_GH_TOKEN"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
-    # Design 06 (PR #83), Harald 2026-08-03: Team-Konfiguration identisch zu OC3 (prefer/Depth 2),
-    # EINZIGE Benchmark-Variable = Orchestrator-Modell: OC2 = flash, OC3 = pro.
-    # Sub-Agents auf beiden = flash (konsistent, kein zweiter Störfaktor).
-    # Misst: Lohnt sich das teurere pro-Modell für Orchestrator-Koordination/Synthese?
+    # Harald 2026-08-03: OC2 = NUR DeepSeek flash (alle 4 Agents).
+    # Benchmark-Variable vs. OC3 = Modell-Mix (dort Arch+Rev pro).
     agent_models:
       Orchestrator:
         primary: "deepseek/deepseek-v4-flash"
@@ -58,6 +56,14 @@ openclaw_instances:
       Reviewer:
         primary: "deepseek/deepseek-v4-flash"
         fallbacks: ["deepseek/deepseek-v4-pro"]
+    # Reasoning (evidenzbasiert, 2026-08-03): T2-Befund Reasoning-Explosion bei flash
+    # (64,7k Reasoning-Tokens, Latenz-Treiber) -> Orchestrator/Engineer Medium begrenzen.
+    # DeepSeek-BP: Think High fuer Architektur/Review, Max nur Security-Audit.
+    agent_thinking:
+      Orchestrator: "medium"
+      Architect: "high"
+      "Engineer Pro": "medium"
+      Reviewer: "high"
     subagents_defaults:
       delegationMode: "prefer"
       maxSpawnDepth: 2
@@ -79,21 +85,28 @@ openclaw_instances:
     telegram_bot_token_env: "DEV_OC3_TELEGRAM_BOT_TOKEN"
     gh_token_env: "DEV_OC3_GH_TOKEN"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
-    # Modell-Invertierung (Design 01-oc2-oc3-benchmark Befund B1): Orchestrator = Qualität (pro),
-    # Sub-Agents = Kosten (flash) – Doku-Empfehlung agents.defaults.subagents.model
+    # Harald 2026-08-03: OC3-Modell-Mix — Orchestrator + Engineer = flash,
+    # Reviewer + Architect = pro (Qualität dort, wo Analyse/Prüfung entscheidet).
     agent_models:
       Orchestrator:
-        primary: "deepseek/deepseek-v4-pro"
-        fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
-      Architect:
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro"]   # Design 01-oc2-oc3-benchmark Kap. 4.3 exakt (Architect MINOR-1)
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+      Architect:
+        primary: "deepseek/deepseek-v4-pro"
+        fallbacks: ["deepseek/deepseek-v4-flash"]
       "Engineer Pro":
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro"]   # Design 01-oc2-oc3-benchmark Kap. 4.3 exakt (Architect MINOR-1)
+        fallbacks: ["deepseek/deepseek-v4-pro"]
       Reviewer:
-        primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro"]   # Design 01-oc2-oc3-benchmark Kap. 4.3 exakt (Architect MINOR-1)
+        primary: "deepseek/deepseek-v4-pro"
+        fallbacks: ["deepseek/deepseek-v4-flash"]
+    # Reasoning (evidenzbasiert, 2026-08-03): DeepSeek-BP Think High fuer Architektur/Review,
+    # Medium fuer Ausfuehrung (T2: Reasoning-Explosion = Latenz-Treiber).
+    agent_thinking:
+      Orchestrator: "medium"
+      Architect: "high"
+      "Engineer Pro": "medium"
+      Reviewer: "high"
     # Orchestrator-Pattern (Design 01-oc2-oc3-benchmark Befund B3): Depth-2-Delegation + echte Rollen-IDs (B2)
     subagents_defaults:
       delegationMode: "prefer"
