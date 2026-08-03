@@ -73,6 +73,23 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                         f"{oc['name']}/{eid}: primary {a['model']['primary']} != {mdl['primary']}"
                     assert a['model']['fallbacks'] == mdl['fallbacks'], \
                         f"{oc['name']}/{eid}: fallbacks {a['model']['fallbacks']} != {mdl['fallbacks']}"
+            if oc.get('agent_workspaces'):
+                # Design 06: Per-Agent-Workspace NUR für Sub-Agents (Orchestrator behält Root)
+                for a in oc['agents']:
+                    aid = a.lower().replace(' ', '-')
+                    ent = next(x for x in d['agents']['list'] if x['id'] == aid)
+                    if aid == 'orchestrator':
+                        assert 'workspace' not in ent, f"{oc['name']}/orchestrator: workspace unerwartet (Root bleibt)"
+                    else:
+                        assert ent.get('workspace') == f"/home/node/.openclaw/workspace/{aid}", \
+                            f"{oc['name']}/{aid}: workspace fehlt/falsch"
+            if oc.get('orchestrator_tool_scope') == 'strict':
+                orch = next(x for x in d['agents']['list'] if x['id'] == 'orchestrator')
+                assert orch.get('tools', {}).get('deny') == ["exec", "web_search", "web_fetch"], \
+                    f"{oc['name']}: Orchestrator-Tool-Deny fehlt/falsch (strict)"
+            elif 'orchestrator_tool_scope' in oc:
+                orch = next(x for x in d['agents']['list'] if x['id'] == 'orchestrator')
+                assert 'tools' not in orch, f"{oc['name']}: tools-Key unerwartet (soft/ohne strict)"
             if oc.get('subagents_tools_deny'):
                 assert d['tools']['subagents']['tools']['deny'] == oc['subagents_tools_deny'], \
                     f"{oc['name']}: tools.subagents.deny falsch"

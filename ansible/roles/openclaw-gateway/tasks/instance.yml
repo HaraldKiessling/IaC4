@@ -87,7 +87,36 @@
   when: openclaw_clean | default(false) | bool
 
 
-- name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
+- name: "{{ oc.name }}: Design 06 – Agent-Workspaces anlegen (feature: agent_workspaces)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ agent_id }}"
+    state: directory
+    mode: '0755'
+    owner: '1000'
+    group: '1000'
+  loop: "{{ oc.agents }}"
+  loop_control:
+    loop_var: a
+  vars:
+    agent_id: "{{ a | lower | replace(' ', '-') }}"
+  when: oc.agent_workspaces | default(false) | bool and oc.agents | length > 0
+
+- name: "{{ oc.name }}: Design 06 – Rollen-AGENTS.md je Agent deployen (nach Clean!)"
+  ansible.builtin.copy:
+    src: "agent-workspaces/{{ agent_id }}/AGENTS.md"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ agent_id }}/AGENTS.md"
+    mode: '0644'
+    owner: '1000'
+    group: '1000'
+  loop: "{{ oc.agents }}"
+  loop_control:
+    loop_var: a
+  vars:
+    agent_id: "{{ a | lower | replace(' ', '-') }}"
+  when: oc.agent_workspaces | default(false) | bool and oc.agents | length > 0
+
+- name: "{{ oc.name }}: openclaw.json deployen (SSoT)""
+
   ansible.builtin.template:
     src: openclaw.json.j2
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/config/openclaw.json"

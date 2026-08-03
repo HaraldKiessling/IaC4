@@ -48,6 +48,9 @@ openclaw_instances:
       maxChildrenPerAgent: 5
       maxConcurrent: 4               # Konstante (≠ Doku-Default 8)
       runTimeoutSeconds: 900         # Konstante (≠ Doku-Default 0)
+    # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md + scharfes Tool-Scoping
+    agent_workspaces: true
+    orchestrator_tool_scope: strict
   - name: oc3
     enabled: true
     port: 18791
@@ -80,4 +83,7 @@ openclaw_instances:
       maxConcurrent: 4               # Konstante (identisch OC2)
       runTimeoutSeconds: 900         # Konstante (identisch OC2)
     subagents_allow_agents: ["orchestrator", "architect", "engineer-pro", "reviewer"]
+    # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md + scharfes Tool-Scoping
+    agent_workspaces: true
+    orchestrator_tool_scope: strict
     subagents_tools_deny: ["cron", "gateway"]
