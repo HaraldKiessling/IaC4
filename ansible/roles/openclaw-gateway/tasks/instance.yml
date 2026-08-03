@@ -131,6 +131,15 @@
     state: absent
   when: oc_gh_token | length == 0
 
+- name: "{{ oc.name }}: Design 06 – memory/-Verzeichnis anlegen (Copy-Ziel)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/memory"
+    state: directory
+    mode: '0755'
+    owner: '1000'
+    group: '1000'
+  when: oc.agent_workspaces | default(false) | bool and oc.agents | length > 0
+
 - name: "{{ oc.name }}: Design 06 – MEMORY.md + memory/ ins Root-Workspace deployen (nach Clean!)"
   ansible.builtin.copy:
     src: "agent-workspaces/orchestrator/{{ item.src }}"
