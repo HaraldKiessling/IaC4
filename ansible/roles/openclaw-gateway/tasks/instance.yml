@@ -192,20 +192,20 @@
   retries: 12
   delay: 5
 
-- name: "{{ oc.name }}: QMD im Container installieren (User-npm, idempotent)"
+- name: "{{ oc.name }}: QMD im Container installieren (User-npm, Version gepinnt K3-2)"
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
-    command: /bin/sh -lc "command -v qmd >/dev/null 2>&1 || (mkdir -p ~/.local/bin ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g @tobilu/qmd && ln -sf ~/.npm-global/bin/qmd ~/.local/bin/qmd)"
+    command: /bin/sh -lc "command -v qmd >/dev/null 2>&1 || (mkdir -p ~/.local/bin ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g @tobilu/qmd@{{ openclaw_qmd_version }} && ln -sf ~/.npm-global/bin/qmd ~/.local/bin/qmd)"
   register: _oc_qmd
   changed_when: _oc_qmd.stdout | default('') | length > 0
   failed_when: _oc_qmd.rc != 0
 
-- name: "{{ oc.name }}: QMD-Version verifizieren (PATH: ~/.local/bin)"
+- name: "{{ oc.name }}: QMD-Version verifizieren (erwartet {{ openclaw_qmd_version }})"
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
-    command: /bin/sh -lc "export PATH=$HOME/.local/bin:$PATH; qmd --version"
+    command: /bin/sh -lc "export PATH=$HOME/.local/bin:$PATH; qmd --version | grep -q '{{ openclaw_qmd_version }}'"
   register: _oc_qmd_ver
   changed_when: false
   failed_when: _oc_qmd_ver.rc != 0

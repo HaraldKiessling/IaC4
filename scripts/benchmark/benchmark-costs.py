@@ -19,12 +19,29 @@ Token je Message aus usage.totalTokens; input/output/cacheRead aus usage.
 """
 import json, subprocess, sys, os
 
+import os
+# K4-4 (PR #83): Konfiguration via Env mit Defaults (keine hartcodierten Umgebungswerte)
+# Beispiel: GW_TAILNET=vps-dev.tailcfea8a.ts.net GW_PORTS_OC1=18789 BENCH_DS_FLASH_IN_MISS=0.14
+GW_TAILNET = os.environ.get("GW_TAILNET", "vps-dev.tailcfea8a.ts.net")
+GW_PORTS = {
+    "oc1": int(os.environ.get("GW_PORTS_OC1", "18789")),
+    "oc2": int(os.environ.get("GW_PORTS_OC2", "18790")),
+    "oc3": int(os.environ.get("GW_PORTS_OC3", "18791")),
+}
 PRICES = {
-    "deepseek-v4-flash": {"in_miss": 0.14, "in_hit": 0.0028, "out": 0.28},
-    "deepseek-v4-pro":   {"in_miss": 1.74, "in_hit": 0.0145, "out": 3.48},
+    "deepseek-v4-flash": {
+        "in_miss": float(os.environ.get("BENCH_DS_FLASH_IN_MISS", "0.14")),
+        "in_hit": float(os.environ.get("BENCH_DS_FLASH_IN_HIT", "0.0028")),
+        "out": float(os.environ.get("BENCH_DS_FLASH_OUT", "0.28")),
+    },
+    "deepseek-v4-pro": {
+        "in_miss": float(os.environ.get("BENCH_DS_PRO_IN_MISS", "1.74")),
+        "in_hit": float(os.environ.get("BENCH_DS_PRO_IN_HIT", "0.0145")),
+        "out": float(os.environ.get("BENCH_DS_PRO_OUT", "3.48")),
+    },
 }
 DEFAULT_PRICE = PRICES["deepseek-v4-flash"]
-EUR_PER_USD = 1.14  # Stand 2026-08 (Design 05)
+EUR_PER_USD = float(os.environ.get("BENCH_EUR_PER_USD", "1.14"))  # Stand 2026-08 (Design 05)
 
 def gw_call(port, method, params=None):
     token = os.environ.get("GW_TOKEN")
@@ -33,7 +50,7 @@ def gw_call(port, method, params=None):
         from tok import TOKEN
         token = TOKEN
     cmd = ["openclaw", "gateway", "call", method,
-           "--url", f"wss://vps-dev.tailcfea8a.ts.net:{port}",
+           "--url", f"wss://{GW_TAILNET}:{port}",
            "--token", token, "--json"]
     if params:
         cmd += ["--params", json.dumps(params)]
@@ -73,7 +90,7 @@ def main():
         for line in f:
             if line.strip():
                 runs.append(json.loads(line))
-    ports = {"oc1": 18789, "oc2": 18790, "oc3": 18791}
+    ports = GW_PORTS
     totals = {}
     for run in runs:
         inst = run["inst"]

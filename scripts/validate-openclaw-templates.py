@@ -89,8 +89,11 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                             f"{oc['name']}/{aid}: workspace fehlt/falsch"
             if oc.get('orchestrator_tool_scope') == 'strict':
                 orch = next(x for x in d['agents']['list'] if x['id'] == 'orchestrator')
-                assert orch.get('tools', {}).get('deny') == ["exec", "web_search", "web_fetch"], \
-                    f"{oc['name']}: Orchestrator-Tool-Deny fehlt/falsch (strict)"
+                expected = ["read", "write", "memory_search", "memory_get",
+                            "sessions_spawn", "sessions_yield", "sessions_history",
+                            "sessions_list", "sessions_send", "session_status"]
+                assert orch.get('tools', {}).get('allow') == expected, \
+                    f"{oc['name']}: Orchestrator-Tool-Allow fehlt/falsch (strict, K4-1)"
             elif 'orchestrator_tool_scope' in oc:
                 orch = next(x for x in d['agents']['list'] if x['id'] == 'orchestrator')
                 assert 'tools' not in orch, f"{oc['name']}: tools-Key unerwartet (soft/ohne strict)"

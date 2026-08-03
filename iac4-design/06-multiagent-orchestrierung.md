@@ -124,8 +124,9 @@ Quellen: dev.to „OpenClaw Multiagent Best Practices" (2025) · docs.openclaw.a
 ## 8. Abhängigkeiten & Reihenfolge
 
 - **Design 05 (PR #81, OPEN):** Benchmark-Ablauf/Methodik für Nachweis 3; nicht blockierend für Pilot (mt0-Ablauf existiert).
-- **PR #80 (OPEN):** Token-Datei-Task; relevant erst für Benchmark-Runden mit Write-Zugriff — Pilot bleibt read-only (kein Block).
-- **Reihenfolge:** Design-06-Umsetzung (Branch) → Review → Deploy DEV → Pilot (Issue #29, read-only) → Auswertung → ggf. Design 05-L/M/H → Freigabe → main → prod.
+- **PR #80 (OPEN):** Token-Datei-Task; in PR #83 aufgegangen (GH-Read-Token: `.gh-read-token`-Datei + `GH_TOKEN`-Env, K3-3-dokumentiert) — Pilot bleibt read-only.
+- **PROD-Freischaltung (K4-2, Review PR #83):** Design-06-Features (`agent_workspaces`, `orchestrator_tool_scope: strict`) sind **DEV-only** (vps-dev.yml). PROD erhält in diesem PR ausschließlich die `gh_token_env`-Konvention (Secret-Infrastruktur, keine Verhaltensänderung). **Freischaltplan PROD:** erst nach erfolgreichem Benchmark L/M/H (Design 05) + erneutem Review + expliziter Harald-Freigabe — kein stilles Mitziehen.
+- **Reihenfolge:** Design-06-Umsetzung (Branch) → Review → Deploy DEV → Pilot (Issue #29, read-only) → Auswertung → Design 05-L/M/H → Freigabe → main → prod (mit separater PROD-Entscheidung).
 
 ## 9. Review-Befunde → Änderungen
 
@@ -138,3 +139,10 @@ Quellen: dev.to „OpenClaw Multiagent Best Practices" (2025) · docs.openclaw.a
 | Minor-1: Zahlen inkonsistent | Kap. 1 (harmonisiert) |
 | Minor-2: Polling vs. yield | Kap. 3 #5 (yield zuerst, Fallback) |
 | Minor-3: Konsequenz Tool-Scoping | Kap. 6 Q1 |
+| K3-1 (Architect-Review): Memory-Doku-Drift | `memory/2026-08-03.md` + Kommentar auf finalen Zustand korrigiert |
+| K3-2 (Architect-Review): QMD ungepinnt | `openclaw_qmd_version: 2.5.3` (all.yml SSoT) + Versions-Assert im Deploy |
+| K3-3 (Architect-Review): GH-Token doppelt | Bewusst beide Wege + Begründung (Env für gh-CLI, Datei für Agent-Lesen) — dokumentiert in docker-compose.yml.j2 |
+| K4-1 (Architect-Review): Tool-Deny unvollständig | Deny → **Allow-Liste** (Least-Privilege): read/write/memory_*/sessions_*/session_status; Validator-Assert angepasst |
+| K4-2 (Architect-Review): PROD-Freischaltung undokumentiert | Kap. 8: DEV-only; PROD-Plan nach L/M/H + Review + Harald-Freigabe |
+| K4-3 (Architect-Review): OPENCLAW_EXEC_SHELL_SNAPSHOT unbelegt | Doku-Beleg ergänzt (docs/tools/exec.md Z.74) im Compose-Kommentar |
+| K4-4 (Architect-Review): benchmark-costs.py hartcodiert | Env-Parametrisierung mit Defaults + `.env.example` |

@@ -39,6 +39,7 @@ tailscale_auth_key: "{{ lookup('env', 'TAILSCALE_AUTH_KEY') | default('', true) 
 # Secrets je Instanz als GH-Secrets: <INST>_TELEGRAM_BOT_TOKEN, <INST>_LLM_API_KEY, <INST>_WEBSEARCH_API_KEY
 openclaw_image: "ghcr.io/openclaw/openclaw"
 openclaw_image_version: "2026.7.1"          # Pin (ADR-017); Update = Variable + Deploy. GHCR-Tag bei Deploy verifizieren
+openclaw_qmd_version: "2.5.3"              # Pin (K3-2, PR #83): QMD-Sidecar im Container; Pilot-verifiziert 2026-08-03
 # Agent-Modell-Matrix (Stand 2026-08-01, bisherige Instanz) – je Instanz referenzierbar
 openclaw_agent_models:
   Orchestrator:

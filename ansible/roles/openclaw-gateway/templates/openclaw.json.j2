@@ -47,7 +47,9 @@
 {% endif %}
 {% if orch_tool_scope == 'strict' and agent_id == 'orchestrator' %},
         "tools": {
-          "deny": ["exec", "web_search", "web_fetch"]
+          "allow": ["read", "write", "memory_search", "memory_get",
+                    "sessions_spawn", "sessions_yield", "sessions_history",
+                    "sessions_list", "sessions_send", "session_status"]
         }
 {% endif %}
 {% if allow_agents and agent_id == 'orchestrator' %},
