@@ -200,7 +200,7 @@ jobs:
         with:
           oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
-          tags: tag:ci
+          tags: tag:ci,tag:ia4
 
       - name: Post-Bootstrap Check (SSH via Tailscale-IP)
         env:
