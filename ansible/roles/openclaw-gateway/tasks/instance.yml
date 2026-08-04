@@ -140,7 +140,7 @@
     group: '1000'
   when: true
 
-- name: "{{ oc.name }}: MEMORY.md ins Root-Workspace deployen (neutral, instanz-spezifisch – KEINE Nova-Identitaet, Persistenz: nur anlegen)
+- name: "{{ oc.name }}: MEMORY.md ins Root-Workspace deployen (neutral, instanz-spezifisch – KEINE Nova-Identitaet, Persistenz: nur anlegen)"
   ansible.builtin.template:
     src: MEMORY.md.j2
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/MEMORY.md"
