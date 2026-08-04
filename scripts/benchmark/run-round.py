@@ -63,4 +63,15 @@ for inst, port, aid, role in runs:
 with open(f"{outdir}/task-log.json", 'w') as f:
     for e in log:
         f.write(json.dumps(e) + '\n')
-print(f"=== RUNDE {ROUND} GESTARTET (Issue #{ISSUE}) ===")
+print(f"=== RUNDE {ROUND} GESTARTET (Issue #{ISSUE}) === (Task-Log: {outdir}/task-log.json)")
+# S-2c integriert (Harald 2026-08-04): warte auf Abschluss -> Follow-up -> Kosten
+import time
+print("Warte auf Abschluss aller 3 Arme (max 15 min)...")
+for i in range(180):
+    time.sleep(5)
+    done = sum(1 for e in log if os.path.exists(e['out']) and json.load(open(e['out'])).get('status','') in ('ok','timeout'))
+    if done == 3: break
+print(f"Alle 3 Arme beendet nach ~{(i+1)*5}s. Follow-up-Synthese...")
+subprocess.run(['python3', os.path.join(BASE, 'followup-synthesis.py'), f'{outdir}/task-log.json'], timeout=600)
+print("Kosten berechnen...")
+subprocess.run(['python3', os.path.join(BASE, 'benchmark-costs.py'), f'{outdir}/task-log.json', '--eur'], timeout=120)
