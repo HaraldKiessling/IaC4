@@ -154,7 +154,7 @@
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/memory/2026-08-03.md"
     mode: '0644'
     owner: '1000'
-    group: '1000'  
+    group: '1000'
 
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
 
