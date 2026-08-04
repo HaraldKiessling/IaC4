@@ -56,6 +56,7 @@
 - **C1:** `https://<fqdn>/code/` → HTTP 200 + Auth greift (Login-Seite/Passwort-Abfrage; TS-TLS, `curl -k --resolve` vom Runner, MagicDNS fehlt)
 - **C2:** `http://<Public-IP>:8443/` → kein HTTP-Response (Timeout/Filtered, Wirkungs-Check wie D9)
 - **C3 (optional):** `docker ps` → code-server `Up`, Image-Tag = Pin
+- **C4:** Plugin-Installation möglich: `install-extension`-Helper vorhanden, `/config/extensions` existiert + beschreibbar (read-only-Check)
 - **MUSS:** Feature-Skript `code-server.bdd.ps1` in `run-all.ps1` eingebunden, Testkonzept-Tabelle ergänzt
 - **Prüfung:** BDD-Lauf via Workflow `04-bdd-tests.yml` (target=dev) grün
 
@@ -64,6 +65,17 @@
 - **MUSS:** `.env.example` enthält CODE_SERVER_*-Zeilen (existiert bereits — prüfen auf Drift)
 - **SOLL:** arc42/08 oder ADR-Referenz: code-server-Exposition dokumentiert (falls neue Entscheidung: ADR)
 - **Prüfung:** grep auf veraltete „deaktiviert"-Kommentare in 04-services.yml
+
+### 2.8 Plugin-/Extension-Installation (Pflicht-Anforderung, Harald 2026-08-04)
+- **MUSS:** Nachträgliche Plugin-Installation über Code-Server-Mechanismen funktioniert:
+  - Web-UI: Extensions-View → Install (landet in `/config/extensions`)
+  - CLI: `install-extension <id>` (LinuxServer-Helper, `code-server --install-extension --extensions-dir /config/extensions`)
+- **MUSS:** Extensions-Pfad = `/config/extensions` (persistent) — Named Volume `code-server-data:/config`; **kein** `--extensions-dir` auf `/app/...` oder HOME (nicht persistent, Pitfall laut LinuxServer-Doku)
+- **MUSS:** Extensions überleben Container-Recreate/Image-Update (Pin-Bump) — Verifikation: Extension installieren → Recreate → noch da
+- **SOLL:** Optional Auto-Install-Liste via `/config/custom-cont-init.d/` (executable, Shebang; LinuxServer-Mechanismus, IaC3 nutzte custom-cont-init.d)
+- **SOLL:** BDD C4 (read-only): `/usr/local/bin/install-extension` existiert, `/config/extensions` existiert + beschreibbar für `abc` (`test -w`)
+- **Hinweis:** Runtime-Abhängigkeiten von Extensions (z.B. python3, gcc) sind NICHT Teil der Plugin-Installation — ohne sudo im Container nicht nachinstallierbar; falls benötigt: Basis-Image-Erweiterung separat entscheiden (nicht im Issue-#65-Scope)
+- **Prüfung:** Diff gegen IaC3-Compose (dort `custom-cont-init.d`-Mount + `.vsix`-Ordner); Vendor-Doku linuxserver.io (Extension-Installation) als Evidenz
 
 ## 3. Review-Ablauf (Methodik Schritt 6, Issue #37/#66)
 
@@ -81,8 +93,9 @@
 - ADR-017 (Pinning, Option B), ADR-019 (Router/Exposition-Muster, Dashboard-Lektion: Serve strippt Mount-Prefixe → Host-Rule-Ansatz)
 - Qdrant-Rolle (IaC4-Referenz: Pinning-Variable, Health-Wait, Serve-Muster)
 - Web-Recherche 2026-08-04: linuxserver/code-server `latest` = 4.131.0-ls354 (Docker-Hub, multi-arch)
+- Web-Recherche 2026-08-04: Extension-Installation/Persistenz (linuxserver.io Doku, coder FAQ): `/config/extensions`, `install-extension`-Helper, `custom-cont-init.d`; code-server hat KEIN Auto-Update (install.sh = offizieller Weg) — Updates nur via Image-Pull (ADR-017-konform)
 
 ## 5. Offene Fragen an Harald (falls beim Review unklar)
 
-- Q1: `SUDO_PASSWORD` fürs Terminal in code-server nötig/erwünscht (IaC3 hatte es) oder nur `PASSWORD`?
+- ~~Q1~~ **ENTSCHIEDEN (Harald 2026-08-04):** kein `SUDO_PASSWORD` — Plugin-Installation via Code-Server-Mechanismen braucht kein sudo (läuft als `abc` in `/config/extensions`); Updates via Pin-Workflow. `PASSWORD` (Web-UI) bleibt einzige Auth.
 - Q2: Workspace-Inhalt auf DEV: frisch leer ok, oder bestimmte Projekte einbinden (nur `/workspace`-Bind)?
