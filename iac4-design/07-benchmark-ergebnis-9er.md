@@ -14,15 +14,18 @@
 
 | Runde | Metrik | OC1 (Vanilla) | OC2 (Team flash) | OC3 (Team Mix) |
 |---|---|---|---|---|
-| **R1** #23 | Laufzeit (s) | 602* | 77 | 60 |
+| **R1** #23 | Turn1 (s) | 602* | 77 | 60 |
+| | **Time2Art (s)** | **887** | **708** | **890** |
 | | Artefakt | ✅ 31,0 KB | ✅ 26,6 KB | ✅ 24,8 KB |
 | | Qualität (6 Anf.) | 6/6 | 6/6 | 6/6 |
 | | Kosten (€) | 0,053 | 0,093 | 0,550 |
-| **R2** #42 | Laufzeit (s) | 345 | 98 | 144 |
+| **R2** #42 | Turn1 (s) | 345 | 98 | 144 |
+| | **Time2Art (s)** | **791** | **801** | **900** |
 | | Artefakt | ✅ 47,1 KB | ✅ 58,0 KB | ✅ 42,9 KB |
 | | Qualität | 6/6 | 6/6 | 6/6 |
 | | Kosten (€) | 0,092 | 0,141 | 0,711 |
-| **R3** #65 | Laufzeit (s) | 379 | 91 | 59 |
+| **R3** #65 | Turn1 (s) | 379 | 91 | 59 |
+| | **Time2Art (s)** | **371** | **1385** | **1464** |
 | | Artefakt | ✅ 33,6 KB | ✅ 36,5 KB | ✅ 34,2 KB |
 | | Qualität | 6/6 | 6/6 | 6/6 |
 | | Kosten (€) | 0,100 | 0,234 | 1,045 |
@@ -41,7 +44,7 @@
 1. **Setup reproduzierbar:** 9/9 Artefakte vollständig (18/18 Qualität je Arm), kein Ausfall.
 2. **OC2 (Team all-flash) = bester Gesamt-Arm:** 18/18 bei 0,47 € — bestes Kosten-Nutzen.
 3. **OC3 (pro für Arch/Rev) rechtfertigt den Preis NICHT:** 2,31 € (5–9×) bei gleicher Qualität.
-4. **OC1 (Single flash) solide + günstigste:** 18/18 für 0,25 €, aber langsamer (345–602s vs. 59–144s).
+4. **OC1 (Single flash) solide + günstigste:** 18/18 für 0,25 €. **Time2Art-Korrektur (2026-08-04):** OC1 ist in der GESAMTzeit oft schneller als Teams (R3: 371s vs. 1385–1464s) — Turn1 (345–602s) war irreführend, da Teams postTurn1 (Sub-Arbeit) hinzurechnen.
 5. **Qualität ≠ Delegationsgrad:** OC1 (2 Subs) und OC3 (13 Subs) beide 6/6 — Delegation kostet, steigert hier nicht messbar die Qualität.
 6. **Runner-Follow-up (S-2c) unverzichtbar:** 3–4 von 9 Läufen brauchten Follow-up; ohne wären Artefakte unvollständig.
 7. **CLI-Timeout-Lesson:** `openclaw agent`-Default 600s zu kurz für Single-Agent → `--timeout 900` im Runner.

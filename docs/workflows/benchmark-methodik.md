@@ -127,6 +127,17 @@ gh workflow run 04-service-deploy.yml -f target=prod -f playbook=openclaw -f ins
 
 **Kombination:** `clean=true` + `skip_bootstrap=true` (PR #76) = BOOTSTRAP.md weg + kein Persistenz-State → sauberster Benchmark-Start.
 
+## 4a. Zeitmessung (KORRIGIERT 2026-08-04 — Harald-Befund)
+
+**Problem:** `run.json durationMs` misst nur den CLI-Turn (Turn1). Die echte Laufzeit bis zum fertigen Artefakt umfasst Sub-Agent-Arbeit + Synthese + Recovery (postTurn1).
+
+**Pflicht-Metrik ab jetzt: `time_to_artifact`** (Session-Start → Artefakt-updatedAt):
+```bash
+python3 scripts/benchmark/benchmark-timing.py <task-log.json> <RUNDE>
+```
+- `Turn1` = CLI-Turn (nur Spawn+Plan) · `Time2Art` = echte Gesamtzeit · `postTurn1` = Synthese/Sub/Runner-Anteil · `SubWindow` = Sub-Agent-Arbeitsfenster
+- **Auswertungen berichten IMMER Time2Art** (nicht Turn1) — sonst wird „Team schneller" fälschlich behauptet (9er-Befund: OC1-Single ist in Time2Art oft schneller als Teams).
+
 ## 4b. Kostenmessung (Pflicht seit 2026-08-03, PR #83)
 
 **Jeder Benchmark-Lauf dokumentiert die LLM-Kosten je Instanz** — Hauptsession UND alle Sub-Sessions (Sub-Agent-Delegation ist der dominante Kostenfaktor, d07-Befund: OC3-Subs = 96 % der Kosten).
