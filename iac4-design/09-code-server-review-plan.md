@@ -57,6 +57,7 @@
 - **C2:** `http://<Public-IP>:8443/` → kein HTTP-Response (Timeout/Filtered, Wirkungs-Check wie D9)
 - **C3 (optional):** `docker ps` → code-server `Up`, Image-Tag = Pin
 - **C4:** Plugin-Installation möglich: `install-extension`-Helper vorhanden, `/config/extensions` existiert + beschreibbar (read-only-Check)
+- **C5:** sudo für Benutzer aktiv (read-only): `abc` in sudoers (`getent group sudo`), `/config/custom-cont-init.d` existiert; Persistenz-Mechanismus dokumentiert
 - **MUSS:** Feature-Skript `code-server.bdd.ps1` in `run-all.ps1` eingebunden, Testkonzept-Tabelle ergänzt
 - **Prüfung:** BDD-Lauf via Workflow `04-bdd-tests.yml` (target=dev) grün
 
@@ -76,6 +77,15 @@
 - **SOLL:** BDD C4 (read-only): `/usr/local/bin/install-extension` existiert, `/config/extensions` existiert + beschreibbar für `abc` (`test -w`)
 - **Hinweis:** Runtime-Abhängigkeiten von Extensions (z.B. python3, gcc) sind NICHT Teil der Plugin-Installation — ohne sudo im Container nicht nachinstallierbar; falls benötigt: Basis-Image-Erweiterung separat entscheiden (nicht im Issue-#65-Scope)
 - **Prüfung:** Diff gegen IaC3-Compose (dort `custom-cont-init.d`-Mount + `.vsix`-Ordner); Vendor-Doku linuxserver.io (Extension-Installation) als Evidenz
+
+### 2.9 Runtime-Dependencies & Benutzer-Update-Prozess (Pflicht, Harald 2026-08-04 12:09)
+- **MUSS:** `SUDO_PASSWORD` gesetzt (Benutzer `abc` in sudoers) — Benutzer kann im Container-Terminal `apt-get install` für Plugin-Runtime-Deps ausführen und Update-/Wartungs-Prozesse starten
+- **MUSS:** Persistenz über Container-Recreate/Image-Update (Pin-Bump): `/config/custom-cont-init.d/`-Skripte (root-owned, executable, Shebang) laufen bei jedem Start als root VOR code-server-Start — apt-Pakete aus der Writable-Layer überleben Recreate NICHT, Init-Skripte machen sie dauerhaft (LinuxServer-Mechanismus, [Doku](https://docs.linuxserver.io/general/container-customization/))
+- **MUSS:** Benutzer-selbstbedienbar ohne Nova/PR: Mit sudo im Terminal legt der Benutzer eigene Init-Skripte in `/config/custom-cont-init.d/` an → wirken ab nächstem Start (kein docker.sock nötig)
+- **MUSS:** Plugin-/Extension-Updates via Code-Server-Mechanismen (Extensions-UI/CLI) funktionieren und persistieren (`/config/extensions`)
+- **DOKUMENTIERTE GRENZE:** In-Place-Update der code-server-Binaries (install.sh im Container) = von LinuxServer unsupported + nicht persistent (App liegt im Image) → Container-Image-Update ausschließlich via Pin-Workflow/Deploy (extern, kein docker.sock); Update-Hinweis in der UI ist reine Info
+- **Security-Tradeoff (bewusste Entscheidung):** SUDO_PASSWORD = Root-Äquivalent im Container; Schaden begrenzt auf Container + `/workspace`-Bind; KEIN docker.sock → kein Host-Root (besser als IaC3-Kompromiss); Passwort als Env (docker inspect-sichtbar) → Rotation über Pin/Recreate möglich
+- **Prüfung:** Diff gegen IaC3-Compose (dort docker.sock + custom-cont-init.d-Mount); Vendor-Doku linuxserver.io Container-Customization
 
 ## 3. Review-Ablauf (Methodik Schritt 6, Issue #37/#66)
 
@@ -97,5 +107,5 @@
 
 ## 5. Offene Fragen an Harald (falls beim Review unklar)
 
-- ~~Q1~~ **ENTSCHIEDEN (Harald 2026-08-04):** kein `SUDO_PASSWORD` — Plugin-Installation via Code-Server-Mechanismen braucht kein sudo (läuft als `abc` in `/config/extensions`); Updates via Pin-Workflow. `PASSWORD` (Web-UI) bleibt einzige Auth.
+- ~~Q1~~ **REVIDIERT (Harald 2026-08-04, 12:09):** `SUDO_PASSWORD` **JA** — Benutzer muss Runtime-Dependencies für Plugins im Container installieren können (apt) und Update-Prozesse leichtgewichtig selbst starten können. Security-Tradeoff dokumentiert (§2.9): Container-Root, kein Host-Root (kein docker.sock), Schreibzugriff auf `/workspace`-Bind.
 - Q2: Workspace-Inhalt auf DEV: frisch leer ok, oder bestimmte Projekte einbinden (nur `/workspace`-Bind)?
