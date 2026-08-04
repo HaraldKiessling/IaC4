@@ -1,11 +1,15 @@
 # =============================================================================
-# 04 – Service-Deploy (Phase 2c/2d/2e, ADR-024)
-#   Ein Workflow mit Playbook-Selektion: docker-traefik | services | openclaw
-#   Reihenfolge (Operator-Verantwortung, ADR-024): 1. docker-traefik, 2. services, 3. openclaw
+# 04 – Service-Deploy (Phase 2c/2d/2e)
+#   Ein Workflow mit Playbook-Selektion – deployt Services auf den Ziel-VPS.
+#   Auswahl (playbook):
+#     docker-traefik : Docker-Engine + Traefik (Reverse Proxy)
+#     services       : Ollama, Qdrant (Code-Server deaktiviert bis Freigabe)
+#     openclaw       : OpenClaw-Gateways (instance: all | oc1 | oc2 | oc3)
+#   Reihenfolge (Operator-Verantwortung): 1. docker-traefik, 2. services, 3. openclaw
 #   Vorbedingung: Workflow 03 (Baseline) gelaufen, VPS via Tailscale erreichbar.
-#   Generierung: htpasswd -nbB <user> <passwort>  ->  user:$2y$05$...
+#   Optionen: skip_bootstrap (Benchmark), clean (destruktiv – PROD nur mit confirm_clean_prod)
 # =============================================================================
-name: "04 – Service-Deploy (Docker/Traefik/Ollama, ADR-024)"
+name: "04 – Service-Deploy (docker-traefik | services | openclaw)"
 
 on:
   workflow_dispatch:
