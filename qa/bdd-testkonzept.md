@@ -31,7 +31,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | 2a+2b | `02-tailscale-bootstrap.yml` | ✅ ja (Tailscale-Join, tag:ia4, SSH-Restrict) | `tailscale-bootstrap.bdd.ps1` |
 | 1 | `03-baseline-deploy.yml` | ✅ ja (System-Baseline) | `system-baseline.bdd.ps1` |
 | 2c | `03-docker-traefik.yml` | ❌ nein (Deploy Phase 4 offen); Feature implementiert (PR ADR-015..024) | `docker-traefik.bdd.ps1` (D1-D8) |
-| 2d | `04-services.yml` (ollama, qdrant; code-server deaktiviert bis Abnahme) | ❌ nein (Deploy Phase 4 offen); Ollama- **und** Qdrant-Feature implementiert | `docker-traefik.bdd.ps1` (O1-O3), `qdrant.bdd.ps1` (Q1-Q4) |
+| 2d | `04-services.yml` (ollama, qdrant, code-server – alle aktiv, Issue #65) | ❌ nein (Deploy Phase 4 offen); Features implementiert | `docker-traefik.bdd.ps1` (O1-O3), `qdrant.bdd.ps1` (Q1-Q5), `code-server.bdd.ps1` (C1-C5) |
 | 2e | `05-openclaw.yml` (openclaw-gateway, Container-Multi-Instanz ADR-025) | ❌ nein (Deploy offen); Feature implementiert | `openclaw.bdd.ps1` (O1-O4) |
 
 ## 4. Testkatalog (Features & Szenarien)
@@ -83,6 +83,16 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | Q4 | Collection `zoocode-3072d` existiert (RFC 0034b/#195) | `GET /collections/zoocode-3072d` → status ok, `3072`, `Cosine` |
 | Q5 | gRPC-Port 6334 erreichbar (TS-TCP-Forward) | Runner → TCP-Connect `100.x:6334` erfolgreich (WireGuard-verschlüsselt, kein TLS) |
 
+### Feature: Code-Server (`code-server.bdd.ps1`, implementiert 2026-08-04)
+
+| # | Szenario | Then-Assertion |
+| --- | --- | --- |
+| C1 | HTTPS `<fqdn>/code/` erreichbar – Auth greift (Login-Seite) | Runner → `curl -skL --resolve <fqdn>:443:<ts-ip> https://<fqdn>/code/` → HTTP 200 + Body enthält `password` (Login-Formular, Traefik-Router + stripprefix `/code`) |
+| C2 | Port 8443 von außen dicht (kein Host-Port-Publish) | Runner → `http://<Public-IP>:8443/` → kein HTTP-Response, TCP dicht (kein `8443:8443`) |
+| C3 | Container Up + Image-Pin (ADR-017) | `docker ps` → `Up`, Image `code-server:4.131.0-ls354` (= `code_server_version`) |
+| C4 | Extension-Infrastruktur | Container (read-only): `/usr/local/bin/install-extension` ausführbar; `/config/extensions` existiert + beschreibbar (`test -w`) |
+| C5 | Sudo + Init-Konvention (LinuxServer) | Container (read-only): `abc` in sudo-Gruppe; `/config/custom-cont-init.d` existiert |
+
 ### Feature: OpenClaw-Gateways (`openclaw.bdd.ps1`, implementiert 2026-08-01)
 
 | # | Szenario | Then-Assertion |
@@ -93,8 +103,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | O4 | Geplante Instanz nicht deployed | `docker ps` → kein Container `openclaw-oc3` (enabled=false) |
 
 ### Geplant (sobald Services deployt sind)
-- **CodeServer:** HTTP 200 auf Hostname, Passwort-Auth greift (401 ohne / 200 mit)
-- **OpenClaw:** Gateway `/health` → `{"ok":true}`, Agents erreichbar
+- **OpenClaw:** Agents erreichbar (Deep-Dive, über O1 hinaus)
 
 ## 5. Ausführung
 

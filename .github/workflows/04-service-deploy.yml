@@ -3,7 +3,7 @@
 #   Ein Workflow mit Playbook-Selektion – deployt Services auf den Ziel-VPS.
 #   Auswahl (playbook):
 #     docker-traefik : Docker-Engine + Traefik (Reverse Proxy)
-#     services       : Ollama, Qdrant (Code-Server deaktiviert bis Freigabe)
+#     services       : Ollama, Qdrant, Code-Server
 #     openclaw       : OpenClaw-Gateways (instance: all | oc1 | oc2 | oc3)
 #   Reihenfolge (Operator-Verantwortung): 1. docker-traefik, 2. services, 3. openclaw
 #   Vorbedingung: Workflow 03 (Baseline) gelaufen, VPS via Tailscale erreichbar.
@@ -78,6 +78,8 @@ jobs:
       SSH_KEY: ${{ secrets.SSH_KEY }}
       CODE_SERVER_PASSWORD: ${{ secrets.CODE_SERVER_PASSWORD }}
       CODE_SERVER_SUDO_PASSWORD: ${{ secrets.CODE_SERVER_SUDO_PASSWORD }}
+      # MagicDNS-FQDN (R3): vps-<target>.<TAILSCALE_TAILNET> – group_vars/all.yml lookup('env')
+      CODE_SERVER_HOSTNAME: vps-${{ inputs.target }}.${{ secrets.TAILSCALE_TAILNET }}
       DEV_DEEPSEEK_API_KEY: ${{ secrets.DEV_DEEPSEEK_API_KEY }}
       DEV_OPENROUTER_API_KEY: ${{ secrets.DEV_OPENROUTER_API_KEY }}
       DEV_OPENAI_API_KEY: ${{ secrets.DEV_OPENAI_API_KEY }}
@@ -246,6 +248,6 @@ jobs:
           echo "✅ Service-Deploy abgeschlossen (${{ inputs.playbook }})"
           ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
               "$VPS_USER@$VPS_TS_IP" \
-              "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'traefik|ollama|openclaw' || true"
+              "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'traefik|ollama|openclaw|code-server' || true"
           echo ""
           echo "▶️  Nächster Schritt: Workflow 04-bdd-tests.yml (BDD-Verifikation, qa/bdd-testkonzept.md)"

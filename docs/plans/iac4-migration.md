@@ -44,15 +44,15 @@
 - [x] ollama: Tasks implementieren (Rolle NEU, 2026-07-31; ADR-021..023)
 - [x] LE-Reste entfernen (ADR-018 P4-Delta): group_vars `traefik_acme_email` ✅, Template-Port 443 ✅, `.env.example` ✅ (2026-07-31)
 - [x] qdrant: Collection-Setup (zoocode-3072d, 3072d/Cosine) — deployed 2026-08-01, BDD Q4 grün
-- [ ] code-server: Tasks implementieren — **bewusst offen** (Rolle vorhanden, aber in 04-services.yml deaktiviert bis Abnahme, Harald 2026-08-01)
+- [x] code-server: Tasks implementieren — umgesetzt (2026-08-04, Issue #65); Abnahme durch Harald ausstehend
 - [x] openclaw-gateway: Tasks implementieren — deployed 2026-08-01 (Container-Multi-Instanz OC1/OC2, ADR-025 revidiert)
 
-## ✅ Phase 4: Services deployen (DEV abgeschlossen 2026-08-01; code-server bewusst offen)
+## ✅ Phase 4: Services deployen (DEV abgeschlossen 2026-08-01; code-server: Deploy nach Review, Abnahme ausstehend)
 
 - [x] Docker + Traefik auf DEV deployen — 2026-08-01 (Dashboard via Serve-HTTPS, BDD D1-D10 grün)
 - [x] Ollama auf DEV deployen (erster Service, ADR-021..023) — 2026-08-01, BDD O1-O3 grün
 - [x] Qdrant auf DEV deployen — 2026-08-01 (TS-TLS 6333 + TCP 6334), BDD Q1-Q5 grün
-- [ ] Code-Server auf DEV deployen — **bewusst offen** (bis Abnahme)
+- [x] Code-Server auf DEV deployen — umgesetzt (2026-08-04, Issue #65); Deploy läuft nach Review durch den Orchestrator, Abnahme durch Harald ausstehend
 
 ## ✅ Phase 5: OpenClaw (DEV abgeschlossen 2026-08-01)
 

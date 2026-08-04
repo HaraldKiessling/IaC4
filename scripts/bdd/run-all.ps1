@@ -30,6 +30,7 @@ Write-Host "Start: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')`n"
 & "$PSScriptRoot/system-baseline.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -ExpectedTz $ExpectedTz
 & "$PSScriptRoot/docker-traefik.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -PublicIp $PublicIp -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet
 & "$PSScriptRoot/qdrant.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet
+& "$PSScriptRoot/code-server.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -PublicIp $PublicIp -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet
 & "$PSScriptRoot/openclaw.bdd.ps1" -VpsIp $VpsIp -VpsUser $VpsUser -SshKeyPath $SshKeyPath -PublicIp $PublicIp -ExpectedHostname $ExpectedHostname -Tailnet $Tailnet -Instances $Instances -DisabledInstances $DisabledInstances
 
 Write-Host "`n═══ Zusammenfassung ═══" -ForegroundColor Cyan

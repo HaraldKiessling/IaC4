@@ -1,2 +1,6 @@
+---
 # Fallback (SSoT: group_vars/all.yml)
 docker_network: "traefik-network"
+
+# Code-Server (ADR-017) – Image-Pin (LinuxServer, Docker Hub – Stand 2026-08-04); Update = PR + Deploy
+code_server_version: "4.131.0-ls354"
