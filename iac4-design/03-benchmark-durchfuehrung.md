@@ -1,6 +1,6 @@
 # Design: Benchmark-Durchführung & Überwachung durch Nova (OC1/OC2/OC3)
 
-- **Status:** Vorgeschlagen (Review ausstehend)
+- **Status:** Umgesetzt — Nova-Operationsmodell durchgeführt: T1 (15 Läufe/45 Runs, Design 04), T2 (Reasoning-Level), 9er-Runde (Design 07). Referenziert von benchmark-methodik.md
 - **Datum:** 2026-08-01 (23:36)
 - **Autor:** ✨ Nova (Orchestrator)
 - **Bezug:** Design 01-oc2-oc3-benchmark (3 Arme, gemerged `a968a20`), ADR-025, Zugriffs-Design 2026-07-31 (TOOLS.md/MEMORY.md)
