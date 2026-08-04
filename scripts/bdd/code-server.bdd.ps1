@@ -13,9 +13,18 @@ param(
     [Parameter(Mandatory)][string]$PublicIp,
     [Parameter(Mandatory)][string]$ExpectedHostname,
     [Parameter(Mandatory)][string]$Tailnet,
-    # Pin – SSoT: ansible/group_vars/all.yml code_server_version (Update = PR + Deploy)
-    [string]$ExpectedImageVersion = "4.131.0-ls354"
+    # Pin – optional; wenn nicht gesetzt: aus SSoT ansible/group_vars/all.yml gelesen (K4-2)
+    [string]$ExpectedImageVersion = $null
 )
+
+# K4-2: Pin aus SSoT lesen (group_vars/all.yml) – Update = Pin-Bump dort, Test folgt automatisch
+if ([string]::IsNullOrEmpty($ExpectedImageVersion)) {
+    $gvPath = Join-Path $PSScriptRoot '../../ansible/group_vars/all.yml'
+    $m = Select-String -Path $gvPath -Pattern 'code_server_version:\s*"([^"]+)"' | Select-Object -First 1
+    if ($null -eq $m) { throw "code_server_version nicht in $gvPath gefunden (K4-2, SSoT-Verletzung)" }
+    $ExpectedImageVersion = $m.Matches[0].Groups[1].Value
+    Write-Host "ℹ️  Pin aus SSoT gelesen: $ExpectedImageVersion"
+}
 
 . "$PSScriptRoot/bdd-lib.ps1"
 
