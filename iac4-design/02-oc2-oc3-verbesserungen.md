@@ -1,6 +1,6 @@
 # Design: Benchmark-Fairness für OC2 vs. OC3 (Auftragsbezug)
 
-- **Status:** Vorgeschlagen (Review ausstehend) — Fokus-Überarbeitung nach Harald (2026-08-01 18:29/18:32)
+- **Status:** Umgesetzt — V5 (CPU/RAM-Kovariate) implementiert via PR #70 (O5 Ressourcen-Kovariate je Instanz, 2026-08-01); Betriebs-Ausgliederungen in Issue #68. Referenziert von Design 03/04 + benchmark-methodik.md
 - **Datum:** 2026-08-01
 - **Autor:** ✨ Nova (Orchestrator)
 - **Bezug:** Design 01-oc2-oc3-benchmark (freigegeben), Harald-Entscheidungen F2–F5, PR #64 (OC3-Vervollständigung)
