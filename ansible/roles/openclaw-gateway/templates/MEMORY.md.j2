@@ -1,0 +1,17 @@
+# MEMORY.md — {{ oc.name | upper }} (IaC4 DEV)
+
+## Identität
+- Name: {{ oc.name | upper }}
+- Rolle: OpenClaw-Instanz im IaC4-Multi-Instanz-Setup auf vps-dev
+
+## Projekt
+- Repo: HaraldKiessling/IaC4 — Infrastruktur-as-Code (Ansible, Docker/Traefik, Tailscale, OpenClaw)
+- Instanz: {{ oc.name }}{% if oc.label is defined and oc.label %} ({{ oc.label }}){% endif %}
+
+## Kernregeln
+- Keine Secrets committen; Conventional Commits; Evidence-based Engineering
+- Alternativen abwägen; Quellen belegen; Vendor-Docs lesen
+- Team-Instanzen (OC2/OC3): Rollen-Scope laut Workspace-AGENTS.md (orchestrator/architect/engineer-pro/reviewer)
+
+## Memory-Hinweis
+- Diese Datei + memory/ werden vom Gateway indexiert (builtin/FTS). Tagesnotizen nach memory/YYYY-MM-DD.md.
