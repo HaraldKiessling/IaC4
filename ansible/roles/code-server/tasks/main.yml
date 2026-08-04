@@ -50,3 +50,12 @@
   retries: 20
   delay: 3
   changed_when: false
+
+- name: /config/custom-cont-init.d anlegen (LinuxServer-Konvention, persistiert im Named Volume)
+  # LinuxServer fuehrt das Verzeichnis bei jedem Start als root aus, legt es aber NICHT
+  # selbst an. Ohne Vorab-Anlage kann der Benutzer (abc) keine Init-Skripte ablegen.
+  # mkdir -p + chown -> idempotent; Persistenz ueber Recreate via Volume code-server-data.
+  ansible.builtin.shell: >-
+    docker exec code-server sh -c
+    'mkdir -p /config/custom-cont-init.d && chown abc:abc /config/custom-cont-init.d'
+  changed_when: false

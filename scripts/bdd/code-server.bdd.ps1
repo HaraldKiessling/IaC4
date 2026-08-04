@@ -65,10 +65,11 @@ When "die Extension-Pfade im Container geprueft werden (read-only)"
 Then-True "install-extension vorhanden und ausfuehrbar" ($r.Output -match 'OK_IE') $r.Output
 Then-True "/config/extensions existiert und ist beschreibbar" ($r.Output -match 'OK_EXT') $r.Output
 
-# ── C5: abc in sudo-Gruppe + /config/custom-cont-init.d (read-only) ──
-Write-Host "`nScenario: Sudo fuer abc + custom-cont-init.d (LinuxServer-Konvention)" -ForegroundColor Yellow
-Given "PUID/PGID=1000 -> Benutzer abc; SUDO_PASSWORD aktiviert sudo; custom-cont-init.d wird beim Start ausgefuehrt"
-$r = Invoke-SSH "sudo docker exec code-server sh -c 'getent group sudo | grep -q abc && echo OK_SUDO; test -d /config/custom-cont-init.d && echo OK_INIT'" $VpsUser $VpsIp $SshKeyPath
-When "sudo-Gruppe und Init-Verzeichnis im Container geprueft werden (read-only)"
-Then-True "abc ist in sudo-Gruppe (SUDO_PASSWORD nutzbar)" ($r.Output -match 'OK_SUDO') $r.Output
-Then-True "/config/custom-cont-init.d existiert" ($r.Output -match 'OK_INIT') $r.Output
+# ── C5: sudo-Mechanik (LinuxServer: sudoers.d-Datei, NICHT sudo-Gruppe) + custom-cont-init.d ──
+Write-Host "`nScenario: Sudo fuer abc (sudoers.d-Mechanik) + custom-cont-init.d (LinuxServer-Konvention)" -ForegroundColor Yellow
+Given "SUDO_PASSWORD gesetzt -> /etc/sudoers.d/abc; custom-cont-init.d wird beim Start ausgefuehrt (nur wenn vorhanden)"
+$r = Invoke-SSH "sudo docker exec code-server sh -c 'test -n `"`$SUDO_PASSWORD`" && echo OK_ENV; test -f /etc/sudoers.d/abc && echo OK_SUDOERS; sudo -n -l -U abc >/dev/null 2>&1 && echo OK_SUDO_L; test -d /config/custom-cont-init.d && echo OK_INIT'" $VpsUser $VpsIp $SshKeyPath
+When "SUDO_PASSWORD-Env, sudoers.d und Init-Verzeichnis im Container geprueft werden (read-only)"
+Then-True "SUDO_PASSWORD-Env ist durchgereicht (Secret im Container)" ($r.Output -match 'OK_ENV') $r.Output
+Then-True "sudo aktiv (maßgeblich: sudo -n -l -U abc liefert Regeln; sudoers.d-Datei als Diagnose)" ($r.Output -match 'OK_SUDO_L') $r.Output
+Then-True "/config/custom-cont-init.d existiert (Rolle legt es an, BDD-Befund 2026-08-04)" ($r.Output -match 'OK_INIT') $r.Output
