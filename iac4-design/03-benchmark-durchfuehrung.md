@@ -91,6 +91,6 @@ Nova führt den OC1/OC2/OC3-Benchmark (T1–T4, Design 01 Kap. 6) **selbst durch
 ## 8. Referenzen & Evidenz
 
 - Design 01-oc2-oc3-benchmark (Kap. 6, gemerged), Design 02 V2/Issue #68 (Token-Divergenz)
-- TOOLS.md (Felix-Ansprache via Gateway-Token: `OPENCLAW_GATEWAY_TOKEN=... openclaw agent --agent ... --message ...`; Zugriffs-Design 2026-07-31)
+- Gateway-API-Ansprache statt Felix/TOOLS.md: Instanz-Ansprache über die Gateway-API (dedizierte Nova-Tokens, Tailscale-HTTPS) — Mechanik in Kap. 2/3 dieses Designs. TOOLS.md existiert nicht mehr; Referenz bereinigt 2026-08-04
 - ADR-025 (Gateway-Config/Docker/Multi-Instanz); Token-Assert in `ansible/roles/openclaw-gateway/tasks/instance.yml` (nicht in ADR-025 — Reviewer MINOR-3), PR #56/#64/#70/#72 (Infrastruktur, Kovariate, OC1-Arm)
 - Harald-Entscheidungen F2–F5 (2026-08-01; F2 = eigenes PR, F3 = PROD unberührt, F4 = parallel+Kovariate, F5 = Seed-Defekte — Antworten auf Design-01-Fragen; Reviewer MINOR-5)
