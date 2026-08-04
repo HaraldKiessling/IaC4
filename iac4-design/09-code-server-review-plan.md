@@ -1,0 +1,88 @@
+# Review-Plan: Code-Server auf DEV (Issue #65)
+
+> **Status:** Vorschlag (Review ausstehend)
+> **Datum:** 2026-08-04 · **Autor:** ✨ Nova (Orchestrator)
+> **Bezug:** Issue #65, RFC 0012 (IaC3), ADR-017 (Pinning), ADR-019 (Router-Muster), qa/bdd-testkonzept.md, docs/plans/iac4-migration.md (Phase 3/4)
+> **Zweck:** Definiert die Prüfkriterien und den Ablauf des Reviews der Code-Server-Umsetzung, BEVOR sie auf DEV deployed und abgenommen wird.
+
+---
+
+## 1. Review-Objekt (Umsetzungs-PR zu Issue #65)
+
+| # | Artefakt | Pfad | Review-Fokus |
+|---|---|---|---|
+| R1 | Rolle Code-Server | `ansible/roles/code-server/` (defaults, tasks, templates) | Pinning, Secrets, Idempotenz, kein docker.sock |
+| R2 | Router-Konfiguration | `docker-compose.yml.j2` (Traefik-Labels) | Host+PathPrefix `/code`, stripprefix, Priority, Port 8443 |
+| R3 | Secrets-Fluss | `ansible/group_vars/all.yml` + GH-Secrets + Workflow-Env-Mapping | `CODE_SERVER_PASSWORD`/`SUDO_PASSWORD` von GH-Secret → Container-Env, kein Default-Credential |
+| R4 | Aktivierung | `ansible/playbooks/04-services.yml` | code-server-Rolle aktiv, Reihenfolge (nach ollama/qdrant) |
+| R5 | Workspace | Host-Bind `/workspace`, `DEFAULT_WORKSPACE` | frisch auf DEV, kein docker.sock |
+| R6 | BDD-Tests | `scripts/bdd/code-server.bdd.ps1` + `qa/bdd-testkonzept.md` | C1 (200 + Auth), C2 (Port dicht von außen) |
+| R7 | Doku (P4/Living-Docs) | Migrationsplan, arc42 (bei Bedarf) | „bewusst offen" → deployed, ADR-Bezüge |
+
+## 2. Prüfkriterien (evidenzbasiert, Issue #66)
+
+### 2.1 Pinning (ADR-017, P1)
+- **MUSS:** Image = `lscr.io/linuxserver/code-server:{{ code_server_version }}` — Variable in `group_vars/all.yml` (SSoT), **kein `latest`**
+- **MUSS:** Aktueller Pin-Wert: `4.131.0-ls354` (code-server 4.131.0, Build 2026-07-30; Quelle: Docker-Hub-Metadaten, abgerufen 2026-08-04 via web_search) — ODER neuerer Stand mit Quellenangabe
+- **SOLL:** Upgrade nur via Pin-Bump + PR (ADR-017 Konsequenzen), Release-Notes-Check
+- **Prüfung:** `grep code_server_version ansible/group_vars/all.yml`; Template referenziert Variable, kein hartkodierter Tag
+
+### 2.2 Router / Exposition (ADR-019-Muster, IaC3 RFC 0012 v0.3)
+- **MUSS:** Rule = `Host(\`<fqdn>\`) && PathPrefix(\`/code\`)` + stripprefix `/code` + `priority=100` (IaC3-Muster, Bugfix 18)
+- **MUSS:** `loadbalancer.server.port=8443` (intern; TLS-Terminierung durch Tailscale Serve — TS-TLS, Qdrant-Muster)
+- **MUSS:** Kein Host-Port-Publish (kein `ports:` → `8443:8443`); Erreichbarkeit nur via Tailnet/Traefik-Netzwerk
+- **MUSS:** UFW/DOCKER-USER: Port 8443 von außen dicht (BDD C2)
+- **Prüfung:** Compose-Labels gegen IaC3-Referenz + ADR-019-Konsequenzen; `ss -tlnp` nach Deploy
+
+### 2.3 Secrets (P1, sst.mdc, secrets.mdc)
+- **MUSS:** `PASSWORD`/`SUDO_PASSWORD` aus `CODE_SERVER_PASSWORD`/`CODE_SERVER_SUDO_PASSWORD` (GH-Secrets, Env-Lookup wie `code_server_hostname`-Muster) — **kein** `changeme`-Fallback, Fail-Fast-Assert bleibt
+- **MUSS:** Workflow `04-service-deploy.yml` mappt die Secrets in die Runner-Env (analog `DEV_OCx_*`-Muster)
+- **MUSS:** Keine Secrets im Repo, in Logs oder PR-Body
+- **Prüfung:** grep auf `changeme`/Klartext-Passwort; `gh secret list`; Template-Render-Test (Jinja2)
+
+### 2.4 Security (Harald-Entscheidung 2026-08-01)
+- **MUSS:** **KEIN** `/var/run/docker.sock`-Mount (auch nicht `:ro`) — Updates ausschließlich über Pin → Deploy-Workflow, Rollback = alten Pin
+- **MUSS:** Kein `OPENAI_API_KEY`/`GH_TOKEN`/`GOOGLE_API_KEY`-Env (IaC3-Kompromiss entfällt — nur PASSWORD/SUDO/DEFAULT_WORKSPACE/TZ/PUID/PGID)
+- **SOLL:** PUID/PGID explizit (1000), TZ Europe/Berlin (IaC3-Referenz)
+- **Prüfung:** Diff gegen IaC3-Compose: jede entfernte Zeile begründet (docker.sock, API-Keys)
+
+### 2.5 Idempotenz & Betrieb (Methodik Schritt 6)
+- **MUSS:** 2. Lauf = 1. Lauf (kein Container-Recreate ohne Config-Drift; `docker_compose_v2 state: present`)
+- **MUSS:** `restart: unless-stopped`, Named Volume `code-server-data` (Persistenz `/config`)
+- **MUSS:** Health-Wait nach Start (Qdrant-Muster: uri-Check mit retries) — Ziel: `GET /code/` → 200
+- **Prüfung:** Playbook 2× ausführen (DEV), Diff der Compose-Datei, `docker ps` stabil
+
+### 2.6 BDD (qa/bdd-testkonzept.md)
+- **C1:** `https://<fqdn>/code/` → HTTP 200 + Auth greift (Login-Seite/Passwort-Abfrage; TS-TLS, `curl -k --resolve` vom Runner, MagicDNS fehlt)
+- **C2:** `http://<Public-IP>:8443/` → kein HTTP-Response (Timeout/Filtered, Wirkungs-Check wie D9)
+- **C3 (optional):** `docker ps` → code-server `Up`, Image-Tag = Pin
+- **MUSS:** Feature-Skript `code-server.bdd.ps1` in `run-all.ps1` eingebunden, Testkonzept-Tabelle ergänzt
+- **Prüfung:** BDD-Lauf via Workflow `04-bdd-tests.yml` (target=dev) grün
+
+### 2.7 Doku (P4/Living-Docs, Issue #66 A.4)
+- **MUSS:** Migrationsplan: Checkbox „code-server: Tasks implementieren" + „Code-Server auf DEV deployen" abgehakt
+- **MUSS:** `.env.example` enthält CODE_SERVER_*-Zeilen (existiert bereits — prüfen auf Drift)
+- **SOLL:** arc42/08 oder ADR-Referenz: code-server-Exposition dokumentiert (falls neue Entscheidung: ADR)
+- **Prüfung:** grep auf veraltete „deaktiviert"-Kommentare in 04-services.yml
+
+## 3. Review-Ablauf (Methodik Schritt 6, Issue #37/#66)
+
+1. **Autor ≠ Reviewer:** Umsetzung durch 🔧 Engineer (Branch `session-*/code-server-deploy`), Review durch 🔍 Reviewer + 🏗️ Architect (IaC3-Workspace, unabhängig)
+2. **Evidenz-Pflicht:** Vendor-Docs (linuxserver.io code-server), Docker-Hub-Tags, ADR-017/019 lesen; keine Annahmen (R1–R5)
+3. **Befund-Format:** K1–K3 (Merge-Blocker) vs. K4–K8; 5W, Alternativen (2–4), Button-Empfehlung
+4. **Gate 1 (vor Merge):** CI grün + Review-Freigabe dokumentiert im PR-Thread (Signatur-Regel)
+5. **Gate 2 (nach Deploy DEV):** BDD grün (C1/C2/C3), Verifikation via Workflow-Log (kein direkter VPS-Zugriff, Zugriffs-Design 2026-07-31)
+6. **Abnahme:** Harald-Freigabe (Feature-Parität IaC3: `/code`, Passwort-Auth, Tailnet-only)
+
+## 4. Referenzen & Evidenz
+
+- Issue #65 (Anforderungen, Umfang, Zugriff: `https://vps-dev.tailcfea8a.ts.net/code/`)
+- RFC 0012 (IaC3) + `services/code-server/docker-compose.yml` (IaC3-IST, docker.sock = zu entfernender Kompromiss)
+- ADR-017 (Pinning, Option B), ADR-019 (Router/Exposition-Muster, Dashboard-Lektion: Serve strippt Mount-Prefixe → Host-Rule-Ansatz)
+- Qdrant-Rolle (IaC4-Referenz: Pinning-Variable, Health-Wait, Serve-Muster)
+- Web-Recherche 2026-08-04: linuxserver/code-server `latest` = 4.131.0-ls354 (Docker-Hub, multi-arch)
+
+## 5. Offene Fragen an Harald (falls beim Review unklar)
+
+- Q1: `SUDO_PASSWORD` fürs Terminal in code-server nötig/erwünscht (IaC3 hatte es) oder nur `PASSWORD`?
+- Q2: Workspace-Inhalt auf DEV: frisch leer ok, oder bestimmte Projekte einbinden (nur `/workspace`-Bind)?
