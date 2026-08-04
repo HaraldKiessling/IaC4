@@ -26,9 +26,12 @@ qdrant_collection_size: 3072
 qdrant_collection_distance: Cosine
 qdrant_cert_dir: /opt/qdrant/certs
 
-# Code-Server – Zugangsdaten (MÜSSEN via Extra-Vars oder GH Secrets gesetzt werden)
+# Code-Server (Issue #65) – Image-Pin ADR-017; Zugangsdaten MÜSSEN via GH Secrets gesetzt werden
+code_server_version: "4.131.0-ls354"        # LinuxServer-Pin (Docker Hub, Stand 2026-08-04); Update = PR + Deploy
 code_server_password: "{{ lookup('env', 'CODE_SERVER_PASSWORD') }}"
 code_server_sudo_password: "{{ lookup('env', 'CODE_SERVER_SUDO_PASSWORD') }}"
+# Hostname = MagicDNS-FQDN vps-<target>.<TAILSCALE_TAILNET> (Workflow 04 setzt CODE_SERVER_HOSTNAME;
+# DEV: https://vps-dev.tailcfea8a.ts.net/code/). code.example.com nur Fallback (nie deployen).
 code_server_hostname: "{{ lookup('env', 'CODE_SERVER_HOSTNAME') | default('code.example.com', true) }}"
 
 # Tailscale – Auth (wird dynamisch im Workflow generiert)
