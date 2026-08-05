@@ -140,17 +140,23 @@
     group: '1000'
   when: true
 
-- name: "{{ oc.name }}: Design 06 – MEMORY.md + memory/ ins Root-Workspace deployen (ALLE Instanzen, auch OC1) (nach Clean!)"
-  ansible.builtin.copy:
-    src: "agent-workspaces/orchestrator/{{ item.src }}"
-    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ item.dest }}"
+- name: "{{ oc.name }}: MEMORY.md ins Root-Workspace deployen (neutral, instanz-spezifisch – KEINE Nova-Identitaet, Persistenz: nur anlegen)"
+  ansible.builtin.template:
+    src: MEMORY.md.j2
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/MEMORY.md"
     mode: '0644'
     owner: '1000'
     group: '1000'
-  loop:
-    - {src: 'MEMORY.md', dest: 'MEMORY.md'}
-    - {src: 'memory/2026-08-03.md', dest: 'memory/2026-08-03.md'}
-  when: true
+    force: false   # Persistenz: gelerntes Memory des Agents bleibt bei Re-Deploys erhalten (Harald 2026-08-04)
+
+- name: "{{ oc.name }}: memory/2026-08-03.md deployen (Design-06-Kontext; nur anlegen – Agent-Dateien bleiben)"
+  ansible.builtin.copy:
+    src: "agent-workspaces/orchestrator/memory/2026-08-03.md"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/memory/2026-08-03.md"
+    mode: '0644'
+    owner: '1000'
+    group: '1000'
+    force: false   # Persistenz: Agent-Dateien/Tagesnotizen nicht plattmachen (Harald 2026-08-04)
 
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
 
