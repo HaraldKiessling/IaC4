@@ -131,16 +131,16 @@
     state: absent
   when: oc_gh_token | length == 0
 
-- name: "{{ oc.name }}: Design 06 – memory/-Verzeichnis anlegen (Copy-Ziel, alle Instanzen)"
+- name: "{{ oc.name }}: Design 06 – memory/-Verzeichnis anlegen (Copy-Ziel, nur wenn Seed aktiv K4-2)"
   ansible.builtin.file:
     path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/memory"
     state: directory
     mode: '0755'
     owner: '1000'
     group: '1000'
-  when: true
+  when: oc.memory_seed | default(openclaw_memory_seed, true) | default(false, true)
 
-- name: "{{ oc.name }}: Design 06 – MEMORY.md + memory/ ins Root-Workspace deployen (ALLE Instanzen, auch OC1) (nach Clean!)"
+- name: "{{ oc.name }}: Design 06 – MEMORY.md + memory/ ins Root-Workspace deployen (nur Seed-Aktiv, K4-2)"
   ansible.builtin.copy:
     src: "agent-workspaces/orchestrator/{{ item.src }}"
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ item.dest }}"
@@ -150,7 +150,16 @@
   loop:
     - {src: 'MEMORY.md', dest: 'MEMORY.md'}
     - {src: 'memory/2026-08-03.md', dest: 'memory/2026-08-03.md'}
-  when: true
+  when: oc.memory_seed | default(openclaw_memory_seed, true) | default(false, true)
+
+- name: "{{ oc.name }}: Design 06 – Seed aus Root-Workspace entfernen (Seed inaktiv – prod vanilla, K4-2; raeumt Alt-Deploy ab)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ item }}"
+    state: absent
+  loop:
+    - "MEMORY.md"
+    - "memory"
+  when: not (oc.memory_seed | default(openclaw_memory_seed, true) | default(false, true))
 
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
 

@@ -43,6 +43,11 @@ tailscale_auth_key: "{{ lookup('env', 'TAILSCALE_AUTH_KEY') | default('', true) 
 openclaw_image: "ghcr.io/openclaw/openclaw"
 openclaw_image_version: "2026.7.1"          # Pin (ADR-017); Update = Variable + Deploy. GHCR-Tag bei Deploy verifizieren
 openclaw_qmd_version: "2.5.3"              # Pin (K3-2, PR #83): QMD-Sidecar im Container; Pilot-verifiziert 2026-08-03
+# Memory-Seed-Gate (Design 06 K4-2, PR #83-Fix): DEV-Benchmark-Wissen (MEMORY.md + memory/)
+# NUR in DEV-Instanz-Arme deployen. prod bleibt vanilla (Design 01 Z.65) – der Seed wuerde
+# sonst von qmd-Backend + local memorySearch indexiert und DEV-Wissen auf prod liefern.
+# DEV ueberschreibt via group_vars/vps-dev.yml; Einzelinstanz-Override via oc.memory_seed.
+openclaw_memory_seed: false
 # Agent-Modell-Matrix (Stand 2026-08-01, bisherige Instanz) – je Instanz referenzierbar
 openclaw_agent_models:
   Orchestrator:

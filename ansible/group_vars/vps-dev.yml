@@ -1,6 +1,10 @@
 ---
 env: dev
 
+# Memory-Seed aktiv (Design 06 K4-2): DEV-Benchmark-Arme indexieren den Seed
+# (qmd-Backend + local memorySearch); prod bleibt vanilla (Default all.yml = false).
+openclaw_memory_seed: true
+
 # OpenClaw-Instanzen DEV (Harald 2026-08-01: getrennt je Target deploybar)
 # Secrets-Konvention: <TARGET>_<PROVIDER>_API_KEY (optional, NUR gesetzte Keys landen in der Config)
 # Ollama braucht keinen Key (lokal, Docker-DNS); baseUrl-Override via DEV_OLLAMA_BASEURL optional
