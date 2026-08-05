@@ -38,6 +38,9 @@ jobs:
           python3 -m pip install --quiet pyyaml jinja2
           python3 scripts/validate-openclaw-templates.py
 
+      - name: Persona-Check (deployte Seed-Dateien, 8b)
+        run: bash scripts/validate/persona-check.sh
+
       - name: Check arc42 Living Docs (hart)
         run: |
           echo "Prüfe ob docs/arc42/ alle 12 Kapitel enthält…"
