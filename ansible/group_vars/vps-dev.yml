@@ -20,6 +20,9 @@ openclaw_instances:
     enabled: true
     port: 18789
     label: "OC1 – Creator/Vanilla-Baseline (Benchmark-Arm, Design 01-oc2-oc3-benchmark Kap. 6.1)"
+    # OC1 = Vanilla-Baseline bleibt ohne Seed (User-Entscheidung 2026-08-05; Konzept v3.1 Frage 6 —
+    # Benchmark-Stoervariable eliminiert; dev-oc2/oc3 behalten Seed via vps-dev.yml-Z.4-6)
+    memory_seed: false               # Instanz-Override; Gate-Ausdruck instance.yml Z.141/153 wertet oc.memory_seed vor openclaw_memory_seed aus
     llm_provider: deepseek            # aktiver Provider (Key Pflicht: DEV_DEEPSEEK_API_KEY)
     websearch_api_key_env: "DEV_OC1_WEBSEARCH_API_KEY"
     gateway_token_env: "DEV_OC1_GATEWAY_TOKEN"
