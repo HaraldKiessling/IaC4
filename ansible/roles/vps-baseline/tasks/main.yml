@@ -17,12 +17,15 @@
     state: present
 
 - name: requiretty für deploy-user deaktivieren (Pipelining)
+  # sudo >= 1.9.12 (Ubuntu 24.04: sudo 1.9.15) hat requiretty entfernt,
+  # daher schlägt `visudo -cf` dort fehl (Run 30982601447: failed=1)
   ansible.builtin.lineinfile:
     path: /etc/sudoers
     state: present
     regexp: '^Defaults:deploy-user !requiretty'
     line: 'Defaults:deploy-user !requiretty'
     validate: 'visudo -cf %s'
+  when: ansible_facts.distribution_major_version | int < 24
 
 - name: Swap einrichten
   ansible.builtin.shell: |
