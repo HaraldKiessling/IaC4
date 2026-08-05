@@ -1,6 +1,10 @@
 ---
 env: dev
 
+# Memory-Seed aktiv (Design 06 K4-2): DEV-Benchmark-Arme indexieren den Seed
+# (qmd-Backend + local memorySearch); prod bleibt vanilla (Default all.yml = false).
+openclaw_memory_seed: true
+
 # OpenClaw-Instanzen DEV (Harald 2026-08-01: getrennt je Target deploybar)
 # Secrets-Konvention: <TARGET>_<PROVIDER>_API_KEY (optional, NUR gesetzte Keys landen in der Config)
 # Ollama braucht keinen Key (lokal, Docker-DNS); baseUrl-Override via DEV_OLLAMA_BASEURL optional
@@ -16,6 +20,9 @@ openclaw_instances:
     enabled: true
     port: 18789
     label: "OC1 – Creator/Vanilla-Baseline (Benchmark-Arm, Design 01-oc2-oc3-benchmark Kap. 6.1)"
+    # OC1 = Vanilla-Baseline bleibt ohne Seed (User-Entscheidung 2026-08-05; Konzept v3.1 Frage 6 —
+    # Benchmark-Stoervariable eliminiert; dev-oc2/oc3 behalten Seed via vps-dev.yml-Z.4-6)
+    memory_seed: false               # Instanz-Override; Gate-Ausdruck instance.yml Z.141/153 wertet oc.memory_seed vor openclaw_memory_seed aus
     llm_provider: deepseek            # aktiver Provider (Key Pflicht: DEV_DEEPSEEK_API_KEY)
     websearch_api_key_env: "DEV_OC1_WEBSEARCH_API_KEY"
     gateway_token_env: "DEV_OC1_GATEWAY_TOKEN"
