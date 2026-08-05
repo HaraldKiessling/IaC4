@@ -9,7 +9,8 @@
 #   Design-Konzept memory-neu-deployment-v3.1, Frage 8b) verletzen.
 #
 # Aufruf:
-#   bash scripts/validate/persona-check.sh
+#   bash scripts/validate/persona-check.sh            – echter Scan (CI-Guard)
+#   bash scripts/validate/persona-check.sh --selftest – Selbsttest beider Fälle
 #
 # Exit-Codes:
 #   0 – keine Persona-Namen gefunden (CI-Guard grün)
@@ -17,15 +18,58 @@
 set -euo pipefail
 
 FORBIDDEN_PATTERN='nova|felix|petrus'
-SEED_DIR='ansible/roles/openclaw-gateway/files/agent-workspaces'
+SEED_DIR="${SEED_DIR:-ansible/roles/openclaw-gateway/files/agent-workspaces}"
 
-hits=$(grep -rniE "$FORBIDDEN_PATTERN" "$SEED_DIR" --include='*.md' || true)
+# run_check <dir> – scannt <dir> auf Persona-Namen, gibt Fundstellen aus
+#   return 0: keine Treffer
+#   return 1: Treffer gefunden (FEHLER-Zeile + Fundstellen)
+run_check() {
+  local dir="$1"
+  local hits
+  hits=$(grep -rniE "$FORBIDDEN_PATTERN" "$dir" --include='*.md' || true)
 
-if [ -n "$hits" ]; then
-  echo "FEHLER: Persona-Namen in deployten Seed-Dateien:"
-  echo "$hits"
-  exit 1
+  if [ -n "$hits" ]; then
+    echo "FEHLER: Persona-Namen gefunden in <$dir>:"
+    echo "$hits"
+    return 1
+  fi
+
+  echo "OK: keine Persona-Namen in <$dir>"
+  return 0
+}
+
+# Modus: --selftest – beide Fälle in einem temporären Fixture-Verzeichnis nachweisen
+if [ "${1:-}" = "--selftest" ]; then
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+
+  mkdir -p "$tmp/dirty" "$tmp/clean"
+  printf '%s\n' 'Name: Nova (Orchestrator)' >"$tmp/dirty/seed.md"
+  printf '%s\n' '# Clean' >"$tmp/clean/seed.md"
+
+  set +e
+  run_check "$tmp/dirty"
+  rc_dirty=$?
+  set -e
+
+  set +e
+  run_check "$tmp/clean"
+  rc_clean=$?
+  set -e
+
+  if [ "$rc_dirty" -ne 1 ]; then
+    echo "SELFTEST FEHLGESCHLAGEN: dirty rc=$rc_dirty (erwartet 1)"
+    exit 1
+  fi
+
+  if [ "$rc_clean" -ne 0 ]; then
+    echo "SELFTEST FEHLGESCHLAGEN: clean rc=$rc_clean (erwartet 0)"
+    exit 1
+  fi
+
+  echo "SELFTEST OK: beide Faelle bestaetigt (dirty→Exit 1, clean→Exit 0)"
+  exit 0
 fi
 
-echo "OK: keine Persona-Namen (nova|felix|petrus) in deployten Seed-Dateien"
-exit 0
+# Standard-Modus: echter Scan der deployten Seed-Dateien
+run_check "$SEED_DIR"

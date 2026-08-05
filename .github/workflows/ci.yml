@@ -41,6 +41,9 @@ jobs:
       - name: Persona-Check (deployte Seed-Dateien, 8b)
         run: bash scripts/validate/persona-check.sh
 
+      - name: Persona-Check Selftest (beide Faelle, 8b)
+        run: bash scripts/validate/persona-check.sh --selftest
+
       - name: Check arc42 Living Docs (hart)
         run: |
           echo "Prüfe ob docs/arc42/ alle 12 Kapitel enthält…"
