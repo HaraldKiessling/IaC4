@@ -138,7 +138,7 @@
     mode: '0755'
     owner: '1000'
     group: '1000'
-  when: oc.memory_seed | default(openclaw_memory_seed, true) | default(false, true)
+  when: oc.memory_seed | default(openclaw_memory_seed) | default(false, true)
 
 - name: "{{ oc.name }}: Design 06 – MEMORY.md + memory/ ins Root-Workspace deployen (nur Seed-Aktiv, K4-2)"
   ansible.builtin.copy:
@@ -150,7 +150,7 @@
   loop:
     - {src: 'MEMORY.md', dest: 'MEMORY.md'}
     - {src: 'memory/2026-08-03.md', dest: 'memory/2026-08-03.md'}
-  when: oc.memory_seed | default(openclaw_memory_seed, true) | default(false, true)
+  when: oc.memory_seed | default(openclaw_memory_seed) | default(false, true)
 
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
 
