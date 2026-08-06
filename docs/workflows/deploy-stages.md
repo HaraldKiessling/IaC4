@@ -62,4 +62,7 @@ aus dem Node-Hostnamen (`vps-dev`) auf – ein `VPS_DEV_HOST`-Secret ist dafür 
 2. `01-tailscale-terraform.yml`        → Tailscale OAuth + ACLs (Terraform Plan/Apply, einmalig)
 3. `02-tailscale-bootstrap.yml`        → Phase 2a + 2b (via Public-IP, schliesst SSH 🔒)
 4. `03-baseline-deploy.yml`            → Phase 1 (via Tailscale-IP 🔒)
-5. Danach: weitere Services via Tailscale (04-service-deploy, 05-openclaw-install geplant)
+5. Danach: weitere Services via Tailscale (04-service-deploy; OpenClaw-Instanz-Deployment
+   via `04-service-deploy` playbook=openclaw, deployed 2026-08-01 – siehe
+   `docs/plans/iac4-migration.md`; Workflow 05 = Freigabe (Telegram-Pairing +
+   Device-Approve, v2.2 – siehe `docs/plans/issue-device-approve-telegram.md`)
