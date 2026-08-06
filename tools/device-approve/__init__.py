@@ -1,11 +1,15 @@
-"""Device-Approve v2.2 – Unified ID-basierte Freigabe (Telegram-Pairing + Device-Approve).
+"""Device-Approve v3.0 – Unified ID-basierte Freigabe (Ein-Job-Fast-Path).
 
-Package `tools/device-approve` (Design 05 v2.2, Minor #8):
-- discovery.py    – Discovery-Kern v2.2 (getrennte Quellen pairing list/devices list,
-                    Typ-Ableitung aus ID-Format, GITHUB_OUTPUT)
-- approve_step.py – Approve-only (typ-spezifisch: pairing approve telegram <CODE>
-                    vs. devices approve <ID>, Major #2-Rollen-Trennung)
-- approve.py      – CLI-Fassade (--discover-only, --summary, lokaler Modus)
+Package `tools/device-approve` (Design 05 v3.0, Workflow-05-Optimierung,
+Review R01-R08 aufgelöst):
+- discovery.py    – Ein-Job-Kern v3.0 (group_by_vps, build_ein_job_remote_cmd,
+                    parse_ein_job_output, run_remote_ssh, run_discovery;
+                    1 SSH pro VPS, Approve in der Session, kein jq)
+- approve_step.py – Approve-only-Library (typ-spezifisch: pairing approve
+                    telegram <CODE> vs. devices approve <ID>; wird vom
+                    Workflow NICHT mehr aufgerufen – R03-E12)
+- approve.py      – CLI-Fassade (--full-run Ein-Job, --discover-only,
+                    --summary, lokaler Modus)
 - summary.py      – Markdown-Summary aus einheitlichem JSON-Schema (Minor #7)
 
 Import in Scripts (if __name__ == "__main__"):
@@ -13,4 +17,4 @@ Import in Scripts (if __name__ == "__main__"):
   from discovery import ...
 """
 
-__version__ = "2.2.0"
+__version__ = "3.0.0"

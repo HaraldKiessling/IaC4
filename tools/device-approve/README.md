@@ -1,13 +1,20 @@
-# Device-Approve v2.2 – Lokale Testanleitung
+# Device-Approve v3.0 – Ein-Job-Fast-Path (Lokale Testanleitung)
 
-Package `tools/device-approve/` (Design 05 v2.2) – Unified ID-basierte Freigabe
-(Telegram-Pairing + Device-Approve) als standalone, lokal testbare CLI.
+Package `tools/device-approve/` (Design 05 v3.0, Workflow-05-Performance-Optimierung)
+– Unified ID-basierte Freigabe (Telegram-Pairing + Device-Approve) als
+standalone, lokal testbare CLI.
 
-**v2.2-Korrektur (CLI-Fakten, 2026-08-06):** Telegram-Pairing läuft über den
-getrennten CLI-Pfad `openclaw pairing` (Kurzcode `QVDCXJEM`, Approve
-`openclaw pairing approve telegram <CODE>`), Device-Pairing über
-`openclaw devices` (Hex-ID, Approve `openclaw devices approve <ID>`).
-Die v2.1-Annahme (einheitliches `devices approve`) war falsch.
+**v3.0 (Ein-Job-Design, 2026-08-06):** Discovery + Approve laufen in EINEM
+Workflow-Job und in EINER SSH-Session pro VPS (1-SSH-pro-VPS-Optimierung,
+`group_by_vps` + `build_ein_job_remote_cmd`). Der Approve wird direkt beim
+Fund in der Session ausgeführt – auch auf prod (Owner-Entscheidung: kein
+Environment-Gate, kein Required Reviewer). `approve.py --full-run` ist der
+Workflow-Standard; `approve_step.py` bleibt als Library erhalten, wird aber
+vom Workflow nicht mehr aufgerufen.
+
+**Kein jq auf den VPS (R08):** Der Remote-ID-Match läuft über `grep` auf das
+JSON-Textfeld (POSIX-Tools), die autoritative Verifikation macht der
+Python-Parser (`parse_ein_job_output`). jq ist NICHT erforderlich.
 
 ## Schnellstart (lokaler Modus)
 
@@ -55,11 +62,16 @@ python3 tools/device-approve/approve.py --help
   --target-filter {dev,prod,both}
   --instance-filter {all,oc1,oc2,...}
   --instance-map PATH     SSoT-Instanz-Map (sonst sot_parser)
+  --full-run              Ein-Job: Discovery + Approve in einem Aufruf
+                          (Workflow-Standard v3.0; 1 SSH pro VPS)
   --discover-only         Nur Discovery, kein Approve
   --summary               Markdown-Summary in $GITHUB_STEP_SUMMARY
   --local                 Lokaler Modus ohne SSH (env APPROVE_LOCAL=1)
   --vps-user, --ssh-key, --ts-tailnet, --ts-client-id, --ts-client-secret
 ```
+
+`--full-run` und `--discover-only` schließen sich aus. Ohne `--discover-only`
+ist der SSH-Modus immer Discovery + Approve (Ein-Job).
 
 ## Discovery-Quellen (Δ1, empirisch verifiziert 2026-08-06)
 
@@ -72,12 +84,28 @@ Empirisch (Sandbox): `pairing list telegram --json` → `{"channel": "telegram",
 (RC=0; F10 beantwortet – Feld ist `requests`). `devices list --json` → `{"pending": [...], "paired": [...]}`.
 Der Parser liest `requests` mit Fallback auf `pending` (F1a: Eintragsfelder offen).
 
-## Approve-Kommandos (Δ2)
+## Approve-Kommandos (Δ2, Templates in discovery.py – Single Source of Truth)
 
 | Typ | Approve-Kommando |
 |---|---|
 | telegram | `openclaw pairing approve telegram <CODE>` |
 | device | `openclaw devices approve <ID>` |
+
+## Ein-Job-Remote-Loop (v3.0)
+
+`run_discovery()` gruppiert die Instanz-Map nach VPS (`group_by_vps`) und führt
+pro VPS EINEN SSH-Call mit dem Remote-Skript aus (`build_ein_job_remote_cmd`):
+
+- Pro Instanz JSON-Block mit der Discovery-Quelle; bei `type=both` werden
+  `pairing list` UND `devices list` in derselben Session abgefragt (R02).
+- ID-Match im Textpfad (grep, kein jq – R08); bei Fund läuft der Approve
+  direkt in der Session (APPROVE-BEGIN/END-Marker) und die Schleife bricht ab
+  (Break-Semantik, erster Fund stoppt).
+- Marker-Format: `---JSON-BEGIN:<inst>:<typ>---` … `---JSON-END:<inst>:<typ>---`,
+  `---APPROVE-BEGIN:<inst>:<typ>---` … `---APPROVE-END:<inst>:<typ>---`,
+  `---FOUND:1|0---` (Typ-Suffix macht type=both eindeutig parsebar).
+- `|| true` = fail-safe bei Instanz-Down (leere Ausgabe → kein Match, Scan
+  geht zur nächsten Instanz weiter).
 
 ## Beispiele
 
@@ -111,6 +139,10 @@ export TS_CLIENT_ID="..."
 export TS_CLIENT_SECRET="..."
 export APPROVE_ID="..."
 
+# Ein-Job: Discovery + Approve in einem Aufruf (1 SSH pro VPS)
+python3 tools/device-approve/approve.py --full-run
+
+# Nur Discovery (Debug/Test)
 python3 tools/device-approve/approve.py --discover-only
 ```
 
@@ -139,9 +171,9 @@ python3 -m pytest tests/device-approve/ -v
 
 | Modul | Zweck |
 |---|---|
-| `discovery.py` | Discovery-Kern v2.2 (getrennte Quellen, Typ-Ableitung, GITHUB_OUTPUT, --validate-id) |
-| `approve_step.py` | Approve-only, typ-spezifisch (Major #2, Δ2) |
-| `approve.py` | CLI-Fassade (--discover-only, --summary, --local) |
+| `discovery.py` | Ein-Job-Kern v3.0 (group_by_vps, build_ein_job_remote_cmd, parse_ein_job_output, run_remote_ssh, run_discovery, --validate-id, --approve) |
+| `approve_step.py` | Approve-only-Library (typ-spezifisch; NICHT mehr vom Workflow aufgerufen, R03-E12) |
+| `approve.py` | CLI-Fassade (--full-run Ein-Job, --discover-only, --summary, --local) |
 | `summary.py` | Markdown-Summary-Generator (Minor #7) |
 
 ## Rueckgabe-Schema
@@ -159,7 +191,7 @@ python3 -m pytest tests/device-approve/ -v
 ## Import
 
 ```python
-# Device-Approve v2.2 (Tests):
+# Device-Approve v3.0 (Tests):
 sys.path.insert(0, "tools/device-approve")
 from discovery import run_discovery, validate_and_classify_id, derive_type
 ```
