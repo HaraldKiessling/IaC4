@@ -1,0 +1,173 @@
+---
+# 06 – Device-Pairing (Telegram)
+#   Telegram-Trigger fuer Device-Approve (Design 05, reviewed Konzept §2.1).
+#   Bot (tools/telegram-approve-bot/, M4) feuert repository_dispatch 'device-approve'
+#   mit client_payload {id, telegram_user_id}. Dieser Workflow leitet aus der EINEN
+#   Request-ID target + Instanz per Discovery-Scan ueber alle enabled Instanzen ab (D1).
+#
+#   Sicherheits-Gates (Review aufgeloest):
+#   - Blocker #1: Nicht-Leer-Pruefung TG_USER_ID VOR Whitelist-Grep
+#   - Blocker #2: echtes Environment-Gate job-level (prod-approve Required Reviewer)
+#   - Blocker #3: Request-ID-Regex ^[a-zA-Z0-9_-]{8,64}$ (Bot + hier)
+#   - Major #6:  Tailscale-API fields=hostname,addresses,lastSeen + '-1'-Suffix-Fallback
+#   - Major #7:  SSoT-Mapping mit dynamischem Globbing glob('vps-*.yml')
+#   - Major #8:  Environment 'dev-approve' (OHNE Protection) + 'prod-approve' (Required
+#                Reviewer) anlegen (M2), sonst schlagen alle Runs fehl
+#   - Major #5:  Idempotenz V0 (vor M3 empirisch auf vps-dev/oc1 pruefen, ob
+#                'openclaw devices approve' bei doppelter ID harmlos ist; je nach
+#                Ergebnis '|| true' oder Pre-Check 'bereits confirmed' einbauen)
+#   - Minor #15: UNREACHABLE-Liste in Fehlerausgabe
+name: "06 – Device-Pairing (Telegram)"
+
+on:
+  repository_dispatch:
+    types: [device-approve]
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    name: "Discovery (Request-ID suchen)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+      TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+      TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+    outputs:
+      found_target: ${{ steps.discover.outputs.found_target }}
+      found_instance: ${{ steps.discover.outputs.found_instance }}
+      found_vps_ip: ${{ steps.discover.outputs.found_vps_ip }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 🔴 Blocker #1 geloest: Nicht-Leer-Pruefung VOR Whitelist-Grep (leere User-ID
+      #   darf nie den Grep erreichen – der matcht sonst alles).
+      - name: Auth-Check – Nur autorisierte Telegram-User
+        id: auth
+        env:
+          REQUEST_ID: ${{ github.event.client_payload.id }}
+          TG_USER_ID: ${{ github.event.client_payload.telegram_user_id }}
+          AUTHORIZED_USERS: ${{ secrets.TELEGRAM_APPROVE_USERS }}
+        run: |
+          set -euo pipefail
+          # Blocker #1: Nicht-Leer-Pruefung VOR Whitelist-Grep (leere User-ID
+          # matcht sonst alles). Zusaetzlich: Telegram-User-IDs sind numerisch –
+          # Regex-Injection wie '.*' im Grep wird damit ausgeschlossen.
+          if [ -z "$TG_USER_ID" ]; then
+            echo "❌ Keine Telegram-User-ID im Payload"; exit 1
+          fi
+          if ! echo "$TG_USER_ID" | grep -qE '^[0-9]+$'; then
+            echo "❌ Telegram-User-ID muss numerisch sein: '$TG_USER_ID'"; exit 1
+          fi
+          if ! echo "$REQUEST_ID" | grep -qE '^[a-zA-Z0-9_-]{8,64}$'; then
+            echo "❌ Ungültiges Request-ID-Format: '$REQUEST_ID'"; exit 1
+          fi
+          if ! echo "$AUTHORIZED_USERS" | grep -qE "(^|,)$TG_USER_ID($|,)"; then
+            echo "❌ Telegram-User $TG_USER_ID nicht authorisiert"; exit 1
+          fi
+          echo "APPROVE_REQUEST_ID=$REQUEST_ID" >> "$GITHUB_ENV"
+
+      # Major #7 geloest: dynamisches Globbing (tools/telegram-approve-bot/sot_parser.py,
+      # geteilt mit den Unit-Tests) statt fester Dateiliste; SSoT bleibt Single-Source-
+      # of-Truth (group_vars/vps-*.yml), kein zusaetzliches Mapping.
+      - name: Instanz-Mapping laden (SSoT)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+          python3 tools/telegram-approve-bot/sot_parser.py . > /tmp/instance-map.txt
+          cat /tmp/instance-map.txt
+          echo "INSTANCE_COUNT=$(wc -l < /tmp/instance-map.txt)" >> "$GITHUB_ENV"
+
+      - name: Connect Runner to Tailnet
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: SSH-Key vorbereiten
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      # Major #6 geloest: fields=hostname,addresses,lastSeen + '-1'-Suffix-Fallback
+      # (konsistent mit Workflows 04/05); Minor #15: UNREACHABLE-Liste in Fehlerausgabe.
+      - name: Discovery – Request-ID auf allen Instanzen suchen
+        id: discover
+        run: |
+          set -euo pipefail
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          FOUND_INSTANCE=""
+          FOUND_TARGET=""
+          FOUND_VPS_IP=""
+          UNREACHABLE=""
+          while IFS='|' read -r inst target; do
+            NODE="vps-${target}"
+            TS_IP=$(curl -sS --max-time 30 "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses,lastSeen" \
+              -H "Authorization: Bearer ${TS_TOKEN}" | jq -r --arg n "$NODE" \
+              '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | .[0].addresses[0] // empty')
+            if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
+              UNREACHABLE="$UNREACHABLE $NODE"
+              echo "⚠️  VPS $NODE nicht erreichbar, überspringe"
+              continue
+            fi
+            echo "🔍 Suche in $target/$inst (VPS $NODE)..."
+            RESULT=$(ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
+              "$VPS_USER@$TS_IP" "sudo docker exec openclaw-${inst} openclaw devices list 2>/dev/null" 2>/dev/null || echo "")
+            if echo "$RESULT" | grep -q "$APPROVE_REQUEST_ID"; then
+              FOUND_INSTANCE="$inst"
+              FOUND_TARGET="$target"
+              FOUND_VPS_IP="$TS_IP"
+              echo "✅ Request-ID in $target/$inst gefunden!"
+              break
+            fi
+          done < /tmp/instance-map.txt
+          # Minor #15: unreachable VPS in Fehlerausgabe ausgeben
+          if [ -z "$FOUND_INSTANCE" ]; then
+            echo "❌ Request-ID '$APPROVE_REQUEST_ID' auf keiner enabled Instanz gefunden"
+            echo "   Übersprungen (VPS down): ${UNREACHABLE:-keine}"
+            exit 1
+          fi
+          echo "found_instance=$FOUND_INSTANCE" >> "$GITHUB_OUTPUT"
+          echo "found_target=$FOUND_TARGET" >> "$GITHUB_OUTPUT"
+          echo "found_vps_ip=$FOUND_VPS_IP" >> "$GITHUB_OUTPUT"
+
+  approve:
+    name: "Approve (prod = Environment-Gate)"
+    needs: discover
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # 🔴 Blocker #2 + Major #8 geloest: echtes Environment-Gate job-level.
+    #   prod-approve MIT Required Reviewer (Harald bestaetigt in GH-UI), dev-approve
+    #   OHNE Protection (M2) – fehlt dev-approve, schlagen alle dev-Runs fehl.
+    environment: ${{ needs.discover.outputs.found_target == 'prod' && 'prod-approve' || 'dev-approve' }}
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+    steps:
+      - name: SSH-Key vorbereiten
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      # Major #5 (Idempotenz, V0): Vor M3 empirisch auf vps-dev/oc1 pruefen, ob
+      # 'openclaw devices approve' bei bereits bestaetigter ID harmlos ist (dann
+      # bleibt der Call ohne '|| true') oder fehlschlaeagt (dann Pre-Check
+      # 'bereits confirmed' bzw. '|| true'). Ergebnis im Workflow-Kommentar fixieren.
+      - name: Approve – Request-ID bestätigen
+        run: |
+          set -euo pipefail
+          echo "🔐 Approve ${{ github.event.client_payload.id }} auf ${{ needs.discover.outputs.found_target }}/${{ needs.discover.outputs.found_instance }}"
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
+            "$VPS_USER@${{ needs.discover.outputs.found_vps_ip }}" \
+            "sudo docker exec openclaw-${{ needs.discover.outputs.found_instance }} openclaw devices approve ${{ github.event.client_payload.id }}"
