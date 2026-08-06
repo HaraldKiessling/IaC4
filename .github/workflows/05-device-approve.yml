@@ -104,10 +104,10 @@ jobs:
             --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
             "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
           NODE="vps-${{ inputs.target }}"
-          TS_IP=$(curl -sS --max-time 30 "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses,lastSeen" \
+          TS_IP=$(curl -sS --max-time 30 "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses,lastSeen" \
             -H "Authorization: Bearer $TS_TOKEN" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n)] | .[0].addresses[0]')
           [ -n "$TS_IP" ] || { echo "❌ Keine Tailscale-IP für $NODE"; exit 1; }
-          echo "VPS_TS_IP=$TS_IP" >> $GITHUB_ENV
+          echo "VPS_TS_IP=$TS_IP" >> "$GITHUB_ENV"
 
       - name: SSH-Key vorbereiten
         run: |
