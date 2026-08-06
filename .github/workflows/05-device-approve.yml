@@ -1,94 +1,143 @@
 ---
-# 05 – OpenClaw Device-Pairing (Control-UI-Freigabe)
-#   Workflow-basierte Gerätekopplung (IaC4-Zugriffs-Design: kein direkter VPS-Zugriff).
-#   Flow: Control-UI zeigt "pairing required" + requestId -> diesen Workflow starten
-#   (request_id aus der UI), Workflow listet pending Devices und approved die Request-ID.
+# 05 – Unified Freigabe: Telegram-Pairing + Device-Approve (ID-basiert)
+#   v2.2 (korrigiert nach CLI-Fakten, 2026-08-06 – v2.1-Annahme widerlegt):
+#   - Telegram-Pairing: SEPARATER CLI-Pfad `openclaw pairing`
+#       Discovery:  openclaw pairing list telegram --json   (ID-Feld: code)
+#       Approve:    openclaw pairing approve telegram <KURZCODE>
+#   - Device-Pairing: `openclaw devices`
+#       Discovery:  openclaw devices list --json            (ID-Feld: deviceId)
+#       Approve:    openclaw devices approve <HEX-ID>
+#   - Typ-Ableitung aus ID-Format (Kurzcode ^[A-Z0-9]{6,12}$ -> telegram,
+#     Device-ID ^[0-9a-fA-F-]{36,128}$ -> device), expliziter type-Input
+#     (auto|telegram|device|both) überschreibt (Δ9: default auto).
+#   - Zwei Jobs (discover -> approve) für das prod-Environment-Gate;
+#     approve-Job nutzt approve_step.py (Rollen-Trennung, Major #2),
+#     request_id kommt aus needs.discover.outputs (Minor #6).
+#   - Ersetzt: 05-device-approve.yml (v1) + 06-device-approve-telegram.yml (v1)
 #
-#   M1a (Design 05 / reviewed Konzept §2.2):
-#   - SSoT-Validierung der Instanz gegen ansible/group_vars/vps-<target>.yml (C1)
-#   - Request-ID-Regex ^[a-zA-Z0-9_-]{8,64}$ (blockiert Injection-Versuche)
-#   - Environment-Gate job-level: prod -> 'prod-approve' (Required Reviewer),
-#     dev -> 'dev-approve' (OHNE Protection). Beide Environments anlegen (M2):
-#     Settings -> Environments. Fehlt dev-approve, schlagen alle dev-Runs fehl (MAJOR #8).
-#   - instance bleibt type: choice (MAJOR #9: M1a/M1b-Split, Umstellung auf
-#     type: string erst M1b nach M3-Stabilisierung)
-#   - Fehler-Handling "devices list": stiller Fehler (|| echo) behoben, Container-
-#     Existenz-Pre-Check via docker inspect (Analyse-Befund #3)
-name: "05 – OpenClaw Device-Pairing"
+#   Sicherheits-Gates: Whitelist (repository_dispatch), Regex-Sperre je Typ,
+#   Environment-Gate job-level (prod-approve Required Reviewer / dev-approve
+#   ohne Protection – beide Environments M2 anlegen), Tailscale-only SSH,
+#   keine Secrets in Logs, Audit = GH Actions Run.
+name: "05 – Freigabe (Telegram-Pairing + Device-Approve)"
 
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: 'Ziel-VPS'
+      id:
+        description: 'Request-ID (Pairing-Code QVDCXJEM ODER Device-ID 9df47d69…)'
         required: true
-        default: 'dev'
-        type: choice
-        options: [dev, prod]
-      instance:
-        description: 'OpenClaw-Instanz'
-        required: true
-        default: 'oc1'
-        type: choice
-        options: [oc1, oc2, oc3]
-      request_id:
-        description: 'Request-ID aus der Control-UI (leer = nur Liste anzeigen)'
+        type: string
+      type:
+        description: 'Typ (auto = aus ID-Format ableiten)'
         required: false
-        default: ''
+        default: 'auto'
+        type: choice
+        options: [auto, telegram, device, both]
+      target:
+        description: 'Ziel-VPS (dev | prod | both)'
+        required: false
+        default: 'both'
+        type: choice
+        options: [both, dev, prod]
+      instance:
+        description: 'OC-Instanz (all = alle, oder oc1…ocN)'
+        required: false
+        default: 'all'
+        type: string
+  repository_dispatch:
+    types: [device-approve]
 
 permissions:
   contents: read
 
 jobs:
-  pairing:
-    name: "Device-Pairing (target: ${{ inputs.target }}, ${{ inputs.instance }})"
+  discover:
+    name: "Discovery – ID suchen (pairing list + devices list)"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # M1a (MAJOR #8): echtes Environment-Gate statt Platzhalter. prod-approve mit
-    # Required Reviewer (Harald bestätigt in GH-UI), dev-approve ohne Protection.
-    environment: ${{ inputs.target == 'prod' && 'prod-approve' || 'dev-approve' }}
+    timeout-minutes: 15
     env:
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
       TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
       TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
       TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+    outputs:
+      request_id: ${{ steps.approve_py.outputs.request_id }}
+      found_target: ${{ steps.approve_py.outputs.found_target }}
+      found_instance: ${{ steps.approve_py.outputs.found_instance }}
+      found_vps_ip: ${{ steps.approve_py.outputs.found_vps_ip }}
+      found_type: ${{ steps.approve_py.outputs.found_type }}
+      derived_type: ${{ steps.approve_py.outputs.derived_type }}
     steps:
       - uses: actions/checkout@v4
 
-      # M1a (Konzept §2.2): Fail-Fast VOR Tailscale-Connect – kein unnötiger
-      # Tailscale-Aufbau bei Tippfehlern; klare Fehlermeldung mit verfügbaren Instanzen.
-      - name: Instanz gegen SSoT validieren
+      # v2.2: Zwei-Format-Validierung + Typ-Ableitung über das getestete Modul
+      # (discovery.py --validate-id, DRY mit approve.py); Auth-Check nur für den
+      # Telegram-Pfad (repository_dispatch mit telegram_user_id).
+      - name: Eingaben validieren + normalisieren + Typ ableiten
+        id: inputs
+        env:
+          INPUT_ID: ${{ github.event.inputs.id || github.event.client_payload.id }}
+          INPUT_TYPE: ${{ github.event.inputs.type || github.event.client_payload.type || 'auto' }}
+          INPUT_TARGET: ${{ github.event.inputs.target || github.event.client_payload.target || 'both' }}
+          INPUT_INSTANCE: ${{ github.event.inputs.instance || github.event.client_payload.instance || 'all' }}
+          TG_USER_ID: ${{ github.event.client_payload.telegram_user_id || '' }}
+          AUTHORIZED_USERS: ${{ secrets.TELEGRAM_APPROVE_USERS }}
         run: |
           set -euo pipefail
-          INST="${{ inputs.instance }}"
-          TARGET="${{ inputs.target }}"
-          SSOT_FILE="ansible/group_vars/vps-${TARGET}.yml"
-          python3 -m pip install --quiet pyyaml
-          python3 -c "
-          import sys, yaml
-          with open('${SSOT_FILE}', encoding='utf-8') as f:
-              data = yaml.safe_load(f) or {}
-          instances = [i['name'] for i in data.get('openclaw_instances', []) if i.get('enabled', False)]
-          if '${INST}' not in instances:
-              print(f'❌ Instanz \"${INST}\" in ${TARGET} nicht gefunden oder disabled.')
-              print(f'   Verfügbare enabled Instanzen (${SSOT_FILE}): {instances}')
-              sys.exit(1)
-          print(f'✅ Instanz \"${INST}\" ist in ${TARGET} enabled (SSoT)')
-          "
 
-      # M1a (Konzept §2.2): Request-ID-Format – Regex blockiert Shell-Injection
-      # (keine Metazeichen, 8-64 Zeichen, alphanumerisch + '_' + '-').
-      - name: Request-ID-Format validieren
-        if: inputs.request_id != ''
+          # Auth nur für repository_dispatch (Telegram-Pfad): Nicht-Leer-Prüfung +
+          # numerisch VOR Whitelist-Grep (Blocker #1 gelöst, auth_check.sh getestet)
+          if [ -n "$TG_USER_ID" ]; then
+            export TG_USER_ID REQUEST_ID="$INPUT_ID" AUTHORIZED_USERS
+            bash tools/telegram-approve-bot/auth_check.sh
+          fi
+
+          # ID-Validierung + Typ-Ableitung (Zwei-Format-Regex, keine Shell)
+          DERIVED_TYPE=$(python3 tools/device-approve/discovery.py \
+            --validate-id "$INPUT_ID" --type "$INPUT_TYPE")
+
+          # Instanz-Validierung: 'all' oder oc[1-9][0-9]* (kein oc0, Minor #4)
+          if [ "$INPUT_INSTANCE" != "all" ]; then
+            if ! printf '%s' "$INPUT_INSTANCE" | grep -qE '^oc[1-9][0-9]*$'; then
+              echo "❌ Ungültige Instanz: '$INPUT_INSTANCE'" >&2
+              echo "   Erlaubt: 'all' oder 'oc1', 'oc2', … (kein 'oc0')" >&2
+              exit 1
+            fi
+          fi
+
+          {
+            echo "APPROVE_ID=$INPUT_ID"
+            echo "DERIVED_TYPE=$DERIVED_TYPE"
+            echo "APPROVE_TARGET=$INPUT_TARGET"
+            echo "APPROVE_INSTANCE=$INPUT_INSTANCE"
+          } >> "$GITHUB_ENV"
+          echo "✅ Eingaben validiert (id=$INPUT_ID, derived_type=$DERIVED_TYPE, target=$INPUT_TARGET, instance=$INPUT_INSTANCE)"
+
+      # SSoT-Mapping (Major #7: dynamisches Globbing vps-*.yml) + Filter target/instance
+      - name: Instanz-Mapping laden (SSoT) + filtern
         run: |
           set -euo pipefail
-          if ! echo "${{ inputs.request_id }}" | grep -qE '^[a-zA-Z0-9_-]{8,64}$'; then
-            echo "❌ Ungültiges Request-ID-Format: '${{ inputs.request_id }}'"
-            echo "   Erlaubt: alphanumerisch, '-' und '_', 8-64 Zeichen"
-            exit 1
-          fi
-          echo "✅ Request-ID-Format ok"
+          python3 -m pip install --quiet pyyaml
+          python3 tools/telegram-approve-bot/sot_parser.py . > /tmp/instance-map-full.txt
+
+          python3 -c "
+          target_filter = '$APPROVE_TARGET'
+          inst_filter = '$APPROVE_INSTANCE'
+          with open('/tmp/instance-map-full.txt') as f:
+              for line in f:
+                  name, _, target = line.strip().partition('|')
+                  if not name:
+                      continue
+                  if target_filter not in ('both', target):
+                      continue
+                  if inst_filter not in ('all', name):
+                      continue
+                  print(f'{name}|{target}')
+          " > /tmp/instance-map.txt
+
+          cat /tmp/instance-map.txt
 
       - name: Connect Runner to Tailnet
         uses: tailscale/github-action@v4.1.3
@@ -97,17 +146,51 @@ jobs:
           oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           tags: tag:ci,tag:ia4
 
-      - name: Tailscale-OAuth-Token + VPS-IP ermitteln
+      - name: SSH-Key vorbereiten
         run: |
           set -euo pipefail
-          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
-            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
-            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
-          NODE="vps-${{ inputs.target }}"
-          TS_IP=$(curl -sS --max-time 30 "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses,lastSeen" \
-            -H "Authorization: Bearer $TS_TOKEN" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n)] | .[0].addresses[0]')
-          [ -n "$TS_IP" ] || { echo "❌ Keine Tailscale-IP für $NODE"; exit 1; }
-          echo "VPS_TS_IP=$TS_IP" >> "$GITHUB_ENV"
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      # Discovery (approve.py = discovery-only, Δ6): typ-spezifische Quelle
+      # (pairing list telegram | devices list), schreibt $GITHUB_OUTPUT
+      # (request_id, found_target, found_instance, found_vps_ip, found_type,
+      # derived_type) + Markdown nach $GITHUB_STEP_SUMMARY (--summary, File-Open).
+      # Exit-Code: 0 = gefunden, 1 = nicht gefunden.
+      - name: Discovery – ID mit typ-spezifischem CLI-Befehl suchen
+        id: approve_py
+        run: |
+          set -euo pipefail
+          python3 tools/device-approve/approve.py \
+            --instance-map /tmp/instance-map.txt \
+            --request-id "$APPROVE_ID" \
+            --type-filter "$DERIVED_TYPE" \
+            --target-filter "$APPROVE_TARGET" \
+            --instance-filter "$APPROVE_INSTANCE" \
+            --vps-user "$VPS_USER" \
+            --ssh-key ~/.ssh/id_ed25519 \
+            --ts-tailnet "$TS_TAILNET" \
+            --ts-client-id "$TS_CLIENT_ID" \
+            --ts-client-secret "$TS_CLIENT_SECRET" \
+            --discover-only \
+            --summary
+
+  approve:
+    name: "Approve (prod = Environment-Gate)"
+    needs: discover
+    if: needs.discover.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Blocker #2 + Major #8 gelöst: echtes Environment-Gate job-level.
+    #   prod -> 'prod-approve' (Required Reviewer), dev -> 'dev-approve' (ohne
+    #   Protection). Fehlt dev-approve, schlagen alle dev-Runs fehl.
+    environment: ${{ needs.discover.outputs.found_target == 'prod' && 'prod-approve' || 'dev-approve' }}
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+    steps:
+      - uses: actions/checkout@v4
 
       - name: SSH-Key vorbereiten
         run: |
@@ -116,18 +199,32 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-      # M1a (Analyse-Befund #3): Pre-Check Container-Existenz via docker inspect,
-      # Exit 1 mit klarer Meldung statt stiller Fehler-Schluckung (|| echo).
-      - name: Pending Devices auflisten
+      # Δ2: typ-spezifisches Approve-Kommando (pairing approve telegram <CODE>
+      # vs. devices approve <ID>) via approve_step.py; request_id aus dem
+      # validierten discover-Output (Minor #6). Validierung defense-in-depth.
+      - name: Approve – Typ-spezifisches Kommando ausführen
+        id: approve
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
-            "$VPS_USER@$VPS_TS_IP" \
-            "sudo docker inspect openclaw-${{ inputs.instance }} >/dev/null 2>&1 || { echo \"❌ Container openclaw-${{ inputs.instance }} existiert nicht auf vps-${{ inputs.target }}\" >&2; exit 1; }; sudo docker exec openclaw-${{ inputs.instance }} openclaw devices list"
+          echo "🔐 Approve ${{ needs.discover.outputs.request_id }}"
+          echo "   Typ:     ${{ needs.discover.outputs.found_type }}"
+          echo "   Instanz: ${{ needs.discover.outputs.found_target }}/${{ needs.discover.outputs.found_instance }}"
+          echo "   VPS:     ${{ needs.discover.outputs.found_vps_ip }}"
+          python3 tools/device-approve/approve_step.py \
+            --request-id "${{ needs.discover.outputs.request_id }}" \
+            --found-type "${{ needs.discover.outputs.found_type }}" \
+            --found-instance "${{ needs.discover.outputs.found_instance }}" \
+            --target "${{ needs.discover.outputs.found_target }}" \
+            --vps-ip "${{ needs.discover.outputs.found_vps_ip }}" \
+            --vps-user "$VPS_USER" \
+            --ssh-key ~/.ssh/id_ed25519
 
-      - name: Request-ID approved (falls angegeben)
-        if: inputs.request_id != ''
+      - name: Job-Summary – Freigabe-Ergebnis
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
-            "$VPS_USER@$VPS_TS_IP" "sudo docker exec openclaw-${{ inputs.instance }} openclaw devices approve ${{ inputs.request_id }}"
+          {
+            echo ""
+            echo "| **Freigegeben um** | $(date -u +%Y-%m-%dT%H:%M:%SZ) |"
+            echo ""
+            echo "✅ **Freigabe erfolgreich.**"
+          } >> "$GITHUB_STEP_SUMMARY"
