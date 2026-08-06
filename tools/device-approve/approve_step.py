@@ -5,10 +5,10 @@ Korrigiert nach CLI-Fakten (Δ2, 2026-08-06):
   telegram → `sudo docker exec openclaw-<inst> openclaw pairing approve telegram <CODE>`
   device   → `sudo docker exec openclaw-<inst> openclaw devices approve <ID>`
 
-v3.0 (Ein-Job-Design): Der Workflow 05 ruft dieses Modul NICHT mehr auf – der
-Approve läuft direkt in der Ein-Job-SSH-Session (build_ein_job_remote_cmd in
-discovery.py, R03-E12). Dieses Modul bleibt als Library erhalten (lokale/
-manuelle SSH-Approve-Aufrufe, Tests):
+v3.0 (Ein-Job-Design): **DEPRECATED für Workflow-Aufrufe** (M3, 2. Review) –
+der Workflow 05 ruft dieses Modul NICHT mehr auf; der Approve läuft direkt in
+der Ein-Job-SSH-Session (build_ein_job_remote_cmd in discovery.py, inkl.
+Exit-Code-Prüfung B2). Dieses Modul bleibt als Library erhalten:
   - build_approve_cmd / validate_and_build_cmd / run_approve_ssh
   - APPROVE_CMD_TEMPLATES werden aus discovery.py re-exportiert (Single Source
     of Truth – die Ein-Job-Remote-Schleife nutzt dieselben Templates).
@@ -162,6 +162,13 @@ def build_approve_result(
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = list(sys.argv[1:]) if argv is None else argv
+    # M3 (2. Review): Deprecated-Hinweis – Workflow 05 ruft dieses Modul nicht
+    # mehr auf (Ein-Job-Design); nur noch für lokale/manuelle Aufrufe + Tests.
+    print(
+        "⚠️  approve_step.py: DEPRECATED für Workflow-Aufrufe (Ein-Job-Design "
+        "v3.0 – Approve läuft in der SSH-Session). Nur noch als Library nutzen.",
+        file=sys.stderr,
+    )
     parser = argparse.ArgumentParser(
         description="SSH-only Approve v2.2 (Major #2, Rollen-Trennung)"
     )
