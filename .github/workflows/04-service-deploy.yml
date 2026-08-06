@@ -64,6 +64,14 @@ on:
         options:
           - 'false'
           - 'true'
+      verify_token:
+        description: 'Gateway-Token-Verifikation nach Deploy (temporär, Session 2026-08-06): Container-ENV vs GH-Secret (sha256) + echte HTTP-API-Auth (/v1/models, Bearer). Keine Klartextwerte in Logs.'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: read
@@ -251,3 +259,123 @@ jobs:
               "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'traefik|ollama|openclaw|code-server' || true"
           echo ""
           echo "▶️  Nächster Schritt: Workflow 04-bdd-tests.yml (BDD-Verifikation, qa/bdd-testkonzept.md)"
+
+  # ── Temporäre Verifikation (Session 2026-08-06, Owner-Auftrag Gateway-Token-Verifikation) ──
+  # Läuft NUR mit verify_token=true. Quellen: docs.openclaw.ai/gateway (Runbook) +
+  # gateway/configuration-reference (gateway.auth.token; allowTailscale: HTTP-API nutzt
+  # normalen Auth-Modus). Ports SSoT: ansible/group_vars/vps-prod.yml (oc1=18789, oc2=18790).
+  gateway-token-verify:
+    name: "Gateway-Token-Verify (target: ${{ inputs.target }}, ${{ inputs.instance }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: service-deploy
+    if: inputs.verify_token == 'true'
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+      TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+      TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+      TARGET: ${{ inputs.target }}
+      INSTANCE: ${{ inputs.instance }}
+    steps:
+      - name: Connect Runner to Tailnet
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: VPS-IP + Instanz-Metadaten (Port/Secret-Hash) ermitteln
+        env:
+          SECRET_OC1: ${{ secrets.PROD_OC1_GATEWAY_TOKEN }}
+          SECRET_OC2: ${{ secrets.PROD_OC2_GATEWAY_TOKEN }}
+          SECRET_OC3: ${{ secrets.PROD_OC3_GATEWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          echo "::add-mask::$TS_TOKEN"
+          NODE="vps-$TARGET"
+          VPS_TS_IP=$(curl -sS "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses,lastSeen" \
+            -H "Authorization: Bearer $TS_TOKEN" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n)] | .[0].addresses[0]')
+          [ -n "$VPS_TS_IP" ] && [ "$VPS_TS_IP" != "null" ] || { echo "❌ Keine Tailscale-IP für $NODE"; exit 1; }
+          echo "VPS_TS_IP=$VPS_TS_IP" >> "$GITHUB_ENV"
+          case "$INSTANCE" in
+            oc1) PORT=18789; SECRET="$SECRET_OC1" ;;
+            oc2) PORT=18790; SECRET="$SECRET_OC2" ;;
+            oc3) PORT=18791; SECRET="$SECRET_OC3" ;;
+            *) echo "❌ Unbekannte Instanz: $INSTANCE"; exit 1 ;;
+          esac
+          echo "PORT=$PORT" >> "$GITHUB_ENV"
+          echo "SECRET_LEN=${#SECRET}" >> "$GITHUB_ENV"
+          echo "SECRET_PREFIX=${SECRET:0:4}" >> "$GITHUB_ENV"
+          echo "SECRET_SHA256=$(printf '%s' "$SECRET" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          # Token-Wert selbst wird nie gespeichert/gedruckt (nur Länge/Prefix/Hash)
+
+      - name: SSH-Key vorbereiten
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: "A) Container-ENV-Token vs GH-Secret (sha256, keine Klartexte)"
+        run: |
+          set -euo pipefail
+          CONTAINER_SHA=$(ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
+            "$VPS_USER@$VPS_TS_IP" "sudo docker exec openclaw-$INSTANCE printenv OPENCLAW_GATEWAY_TOKEN | sha256sum | cut -d' ' -f1")
+          echo "container_env_sha256=$CONTAINER_SHA"
+          echo "gh_secret_sha256=$SECRET_SHA256"
+          if [ "$CONTAINER_SHA" = "$SECRET_SHA256" ]; then
+            echo "✅ A: Container-ENV == GH-Secret (sha256=$SECRET_SHA256)"
+          else
+            echo "❌ A: Container-ENV != GH-Secret (container=$CONTAINER_SHA secret=$SECRET_SHA256)"
+            exit 1
+          fi
+
+      - name: "B) HTTP-API ohne Token -> 401/403 erwartet (Auth aktiv)"
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 15 "https://$VPS_TS_IP:$PORT/v1/models")
+          echo "GET https://$VPS_TS_IP:$PORT/v1/models (ohne Token): HTTP $CODE"
+          case "$CODE" in
+            401|403) echo "✅ B: Auth aktiv (HTTP $CODE ohne Token)" ;;
+            *) echo "❌ B: Erwartet 401/403, bekommen $CODE"; exit 1 ;;
+          esac
+
+      - name: "C) HTTP-API mit Bearer-Token -> 200 erwartet (Token VALIDE)"
+        env:
+          SECRET_OC1: ${{ secrets.PROD_OC1_GATEWAY_TOKEN }}
+          SECRET_OC2: ${{ secrets.PROD_OC2_GATEWAY_TOKEN }}
+          SECRET_OC3: ${{ secrets.PROD_OC3_GATEWAY_TOKEN }}
+        run: |
+          set -euo pipefail
+          case "$INSTANCE" in oc1) SECRET="$SECRET_OC1";; oc2) SECRET="$SECRET_OC2";; oc3) SECRET="$SECRET_OC3";; esac
+          echo "::add-mask::$SECRET"
+          CODE=$(curl -sk -o /tmp/models.json -w '%{http_code}' --max-time 15 \
+            -H "Authorization: Bearer $SECRET" "https://$VPS_TS_IP:$PORT/v1/models")
+          echo "GET /v1/models (Bearer): HTTP $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "✅ C: Token VALIDE – Authentifizierung erfolgreich (Header: Authorization: Bearer)"
+            jq -c '{model_ids: [.data[].id], count: (.data | length)}' /tmp/models.json 2>/dev/null || head -c 400 /tmp/models.json
+          else
+            echo "❌ C: Bearer-Auth fehlgeschlagen (HTTP $CODE), Fallback-Header-Test:"
+            CODE2=$(curl -sk -o /tmp/models2.json -w '%{http_code}' --max-time 15 \
+              -H "x-openclaw-token: $SECRET" "https://$VPS_TS_IP:$PORT/v1/models")
+            echo "GET /v1/models (x-openclaw-token): HTTP $CODE2"
+            if [ "$CODE2" = "200" ]; then
+              echo "✅ C: Token VALIDE (Header: x-openclaw-token)"
+              jq -c '{model_ids: [.data[].id], count: (.data | length)}' /tmp/models2.json 2>/dev/null || head -c 400 /tmp/models2.json
+            else
+              head -c 300 /tmp/models.json || true
+              exit 1
+            fi
+          fi
+
+      - name: "D) /health ohne Auth (Erreichbarkeit)"
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 15 "https://$VPS_TS_IP:$PORT/health")
+          echo "GET /health: HTTP $CODE"
+          [ "$CODE" = "200" ] && echo "✅ D: Gateway erreichbar" || echo "⚠️ D: /health lieferte HTTP $CODE (nicht kritisch für Token-Validität)"
