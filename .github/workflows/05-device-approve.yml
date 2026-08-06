@@ -19,6 +19,32 @@
 #     (DEPRECATED für Workflow-Aufrufe, M3), wird aber nicht mehr vom Workflow
 #     aufgerufen (R03-E12).
 #
+#   v3.1 (Listen-Modus, 2026-08-06 – Design 05-workflow-listen-modus.md,
+#   Review-Befunde R01-R09 aufgelöst):
+#   - NEUER Input `mode` (approve|list, default approve). Bei mode=list wird
+#     KEINE Request-ID benötigt (`id` required: false): aggregiert über alle
+#     (gefilterten) Instanzen je VPS-SSH alle pending Requests
+#     (pairing requests[] + devices pending[]) → Job-Summary-Tabelle + JSON.
+#     KEIN Approve; Exit 0 auch bei leerer Liste (grün).
+#   - R01: JSON-Block-Generierung geteilt (discovery.py
+#     _build_json_collection_block) – build_ein_job_remote_cmd (Approve) und
+#     build_list_remote_cmd (List) nutzen dieselbe Quelle.
+#   - R02 Mapping mode→CLI: approve → --full-run --request-id $APPROVE_ID
+#     (--validate-id im Validate-Step); list → --list-only (OHNE --request-id;
+#     gefüllte `id` wird im Validate-Step NICHT validiert und NICHT in
+#     GITHUB_ENV geschrieben). type=auto wird im Listen-Modus zu 'both' (O3:
+#     keine ID zum Ableiten).
+#   - R06 Concurrency: Der Listen-Modus teilt die Concurrency-Group
+#     `device-approve` (cancel-in-progress: false) → serielle Ausführung. Ein
+#     List-Run wird hinter einem laufenden Approve-Run in die Queue gestellt –
+#     konservativ-korrekt (kein stale read), kann aber zu Wartezeiten führen.
+#   - R09 Timeout: identisch zum Approve-Modus – timeout-minutes: 15
+#     (Workflow), SSH_TIMEOUT=60s (Python). Worst-Case bei 5 unerreichbaren
+#     VPS: ~5×60s ≈ 5 Min. (List-Mode hat keinen Approve-Schritt → kürzer
+#     als Approve-Mode).
+#   - Auth-Gates UNVERÄNDERT: Whitelist (repository_dispatch, auth_check.sh),
+#     Tailscale-only SSH; --validate-id NUR im Approve-Modus.
+#
 #   Secrets (Ist-Zustand, M2): TAILSCALE_OAUTH_CLIENT_ID /
 #   TAILSCALE_OAUTH_CLIENT_SECRET (Tailscale-Action v4.1.3, NICHT TS_OAUTH_*),
 #   VPS_USER, SSH_KEY, TELEGRAM_APPROVE_USERS (Whitelist für den Telegram-Pfad,
@@ -32,17 +58,23 @@
 #   Debug/Audit im Run-Log.
 name: "05 – Freigabe (Telegram-Pairing + Device-Approve, Ein-Job)"
 
-run-name: "approve ${{ inputs.id || github.event.client_payload.id }}"
+run-name: "${{ inputs.mode || 'approve' }} ${{ inputs.id || github.event.client_payload.id || '' }}"
 
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'Modus (approve = Freigabe einer ID, list = alle pending Requests anzeigen)'
+        required: false
+        default: 'approve'
+        type: choice
+        options: [approve, list]
       id:
-        description: 'Request-ID (Pairing-Code QVDCXJEM ODER Device-ID 9df47d69…)'
-        required: true
+        description: 'Request-ID (Pairing-Code QVDCXJEM ODER Device-ID 9df47d69…) – nur bei mode=approve'
+        required: false
         type: string
       type:
-        description: 'Typ (auto = aus ID-Format ableiten)'
+        description: 'Typ (auto = aus ID-Format ableiten; bei mode=list default both)'
         required: false
         default: 'auto'
         type: choice
@@ -65,17 +97,19 @@ permissions:
   contents: read
 
 # ★ Concurrency-Group: verhindert parallele Approve-Runs (Design §5).
-#   cancel-in-progress: false → neue Runs warten in der Queue, statt einen
-#   laufenden Approve abzubrechen (konservativ, kein Doppel-Approve).
+#   R06: Auch der Listen-Modus teilt diese Gruppe (seriell, kein stale read) –
+#   ein List-Run wartet hinter einem laufenden Approve-Run in der Queue.
+#   cancel-in-progress: false → neue Runs warten, statt einen laufenden
+#   Approve abzubrechen (konservativ, kein Doppel-Approve).
 concurrency:
   group: device-approve
   cancel-in-progress: false
 
 jobs:
   discover-and-approve:
-    name: "Discovery + Approve (${{ inputs.target || 'both' }})"
+    name: "${{ inputs.mode == 'list' && 'Pending-Requests listen' || 'Discovery + Approve' }} (${{ inputs.target || 'both' }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 15  # R09: identisch zum Approve-Modus (Worst-Case 5 unerreichbare VPS ≈ 5 Min.)
     # ★ KEIN environment:-Attribut – Owner-Entscheidung: kein Gate nötig.
     env:
       VPS_USER: ${{ secrets.VPS_USER }}
@@ -89,6 +123,9 @@ jobs:
       # Eingaben validieren + normalisieren + Typ ableiten (R01: Input-Name
       # bleibt `id` – client_payload.id; R07: Auth-Check via auth_check.sh,
       # ID-Validierung + Typ-Ableitung via discovery.py --validate-id).
+      # v3.1 (R02): Mode-abhängig – bei mode=list wird eine gefüllte `id`
+      # NICHT validiert und NICHT in GITHUB_ENV geschrieben (approve.py
+      # erhält kein --request-id). --validate-id läuft NUR im Approve-Modus.
       - name: Eingaben validieren + normalisieren + Typ ableiten
         id: inputs
         env:
@@ -96,6 +133,7 @@ jobs:
           INPUT_TYPE: ${{ github.event.inputs.type || github.event.client_payload.type || 'auto' }}
           INPUT_TARGET: ${{ github.event.inputs.target || github.event.client_payload.target || 'both' }}
           INPUT_INSTANCE: ${{ github.event.inputs.instance || github.event.client_payload.instance || 'all' }}
+          INPUT_MODE: ${{ inputs.mode || 'approve' }}
           TG_USER_ID: ${{ github.event.client_payload.telegram_user_id || '' }}
           AUTHORIZED_USERS: ${{ secrets.TELEGRAM_APPROVE_USERS }}
         run: |
@@ -113,11 +151,7 @@ jobs:
             bash tools/telegram-approve-bot/auth_check.sh
           fi
 
-          # ID-Validierung + Typ-Ableitung (Zwei-Format-Regex, keine Shell)
-          DERIVED_TYPE=$(python3 tools/device-approve/discovery.py \
-            --validate-id "$INPUT_ID" --type "$INPUT_TYPE")
-
-          # Instanz-Validierung: 'all' oder oc[1-9][0-9]* (kein oc0)
+          # Instanz-Validierung (BEIDE Modi): 'all' oder oc[1-9][0-9]* (kein oc0)
           if [ "$INPUT_INSTANCE" != "all" ]; then
             if ! printf '%s' "$INPUT_INSTANCE" | grep -qE '^oc[1-9][0-9]*$'; then
               echo "❌ Ungültige Instanz: '$INPUT_INSTANCE'" >&2
@@ -126,13 +160,34 @@ jobs:
             fi
           fi
 
-          {
-            echo "APPROVE_ID=$INPUT_ID"
-            echo "DERIVED_TYPE=$DERIVED_TYPE"
-            echo "APPROVE_TARGET=$INPUT_TARGET"
-            echo "APPROVE_INSTANCE=$INPUT_INSTANCE"
-          } >> "$GITHUB_ENV"
-          echo "✅ Eingaben validiert (id=$INPUT_ID, derived_type=$DERIVED_TYPE, target=$INPUT_TARGET, instance=$INPUT_INSTANCE)"
+          if [ "$INPUT_MODE" = "list" ]; then
+            # ── Listen-Modus (v3.1, R02) ──
+            # id wird ignoriert: NICHT validieren, NICHT in GITHUB_ENV schreiben,
+            # NICHT an approve.py übergeben. type=auto → both (O3: keine ID zum
+            # Ableiten – Diagnose will ALLES sehen).
+            LIST_TYPE="$INPUT_TYPE"
+            [ "$LIST_TYPE" = "auto" ] && LIST_TYPE="both"
+            {
+              echo "APPROVE_ID="
+              echo "DERIVED_TYPE=$LIST_TYPE"
+              echo "APPROVE_TARGET=$INPUT_TARGET"
+              echo "APPROVE_INSTANCE=$INPUT_INSTANCE"
+            } >> "$GITHUB_ENV"
+            echo "📋 Listen-Modus: id='${INPUT_ID:-}' ignoriert (keine Validierung, R02), type=$LIST_TYPE"
+          else
+            # ── Approve-Modus (unverändert) ──
+            # ID-Validierung + Typ-Ableitung (Zwei-Format-Regex, keine Shell)
+            DERIVED_TYPE=$(python3 tools/device-approve/discovery.py \
+              --validate-id "$INPUT_ID" --type "$INPUT_TYPE")
+
+            {
+              echo "APPROVE_ID=$INPUT_ID"
+              echo "DERIVED_TYPE=$DERIVED_TYPE"
+              echo "APPROVE_TARGET=$INPUT_TARGET"
+              echo "APPROVE_INSTANCE=$INPUT_INSTANCE"
+            } >> "$GITHUB_ENV"
+            echo "✅ Eingaben validiert (id=$INPUT_ID, derived_type=$DERIVED_TYPE, target=$INPUT_TARGET, instance=$INPUT_INSTANCE)"
+          fi
 
       # SSoT-Mapping (dynamisches Globbing vps-*.yml) + Filter target/instance
       - name: Instanz-Mapping laden (SSoT) + filtern
@@ -180,8 +235,10 @@ jobs:
       #   1 = error (Infrastruktur/Auth/Approve-Fehler – roter Run).
       # not_found wird NICHT separat behandelt und NICHT mit `|| true`
       # maskiert – approve.py liefert dafuer Exit-Code 0.
+      # v3.1: läuft NUR im Approve-Modus (mode=list überspringt diesen Step).
       - name: Discovery + Approve (Ein-Job)
         id: full_run
+        if: ${{ inputs.mode != 'list' }}
         run: |
           set -euo pipefail
           {
@@ -215,3 +272,27 @@ jobs:
             echo ""
             echo "✅ **Ein-Job-Design: Direktfreigabe in der SSH-Session – kein separater Approve-Job, kein Environment-Gate.**"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # ★ Listen-Modus (v3.1): --list-only aggregiert ALLE pending Requests
+      # über alle (gefilterten) Instanzen (1 SSH pro VPS, build_list_remote_cmd
+      # – KEIN Approve). JSON auf stdout (Run-Log), Markdown-Tabelle via
+      # --summary in die Job-Summary. Exit-Code-Vertrag: 0 = Liste erstellt
+      # (auch leer = grün), 1 = Infrastruktur/Auth, 2 = Config.
+      - name: Pending-Requests listen (Listen-Modus)
+        id: list_run
+        if: ${{ inputs.mode == 'list' }}
+        run: |
+          set -euo pipefail
+
+          python3 tools/device-approve/approve.py \
+            --list-only \
+            --instance-map /tmp/instance-map.txt \
+            --type-filter "$DERIVED_TYPE" \
+            --target-filter "$APPROVE_TARGET" \
+            --instance-filter "$APPROVE_INSTANCE" \
+            --vps-user "$VPS_USER" \
+            --ssh-key ~/.ssh/id_ed25519 \
+            --ts-tailnet "$TS_TAILNET" \
+            --ts-client-id "$TS_CLIENT_ID" \
+            --ts-client-secret "$TS_CLIENT_SECRET" \
+            --summary
