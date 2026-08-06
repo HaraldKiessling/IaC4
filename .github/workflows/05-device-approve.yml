@@ -195,6 +195,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Blocker #2 (Runs 31111249899/31111433571): approve-Job hatte keinen
+      # Tailnet-Connect -> SSH zur Tailscale-IP 100.77.47.98 scheiterte mit
+      # rc=255 (Connection timed out). Schritt identisch zum discover-Job:
+      # Runner zuerst ins Tailnet, DANN SSH-Approve.
+      - name: Connect Runner to Tailnet
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
       - name: SSH-Key vorbereiten
         run: |
           set -euo pipefail
