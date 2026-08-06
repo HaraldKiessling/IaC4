@@ -16,6 +16,14 @@ vom Workflow nicht mehr aufgerufen.
 JSON-Textfeld (POSIX-Tools), die autoritative Verifikation macht der
 Python-Parser (`parse_ein_job_output`). jq ist NICHT erforderlich.
 
+**v3.1 – Listen-Modus (`--list-only`, Design 05-workflow-listen-modus.md,
+Review R01–R09):** Statt einer ID zu suchen/freizugeben werden ALLE pending
+Requests über alle (gefilterten) Instanzen aggregiert (Telegram `requests[]`
++ Device `pending[]`, 1 SSH pro VPS via `build_list_remote_cmd`) und als
+Markdown-Tabelle (Job-Summary) + JSON ausgegeben. KEIN Approve; Exit 0 auch
+bei leerer Liste (grün). Die JSON-Block-Generierung ist mit dem Approve-Modus
+geteilt (`_build_json_collection_block`, R01).
+
 ## Schnellstart (lokaler Modus)
 
 ```bash
@@ -65,13 +73,88 @@ python3 tools/device-approve/approve.py --help
   --full-run              Ein-Job: Discovery + Approve in einem Aufruf
                           (Workflow-Standard v3.0; 1 SSH pro VPS)
   --discover-only         Nur Discovery, kein Approve
+  --list-only             Listen-Modus (v3.1): ALLE pending Requests auflisten
+                          (kein Approve, keine ID; schliesst --full-run/--discover-only
+                          aus; --request-id wird ignoriert, type=auto → both)
   --summary               Markdown-Summary in $GITHUB_STEP_SUMMARY
   --local                 Lokaler Modus ohne SSH (env APPROVE_LOCAL=1)
   --vps-user, --ssh-key, --ts-tailnet, --ts-client-id, --ts-client-secret
 ```
 
-`--full-run` und `--discover-only` schließen sich aus. Ohne `--discover-only`
-ist der SSH-Modus immer Discovery + Approve (Ein-Job).
+`--full-run`, `--discover-only` und `--list-only` schließen sich gegenseitig
+aus. Ohne `--discover-only`/`--list-only` ist der SSH-Modus immer Discovery +
+Approve (Ein-Job).
+
+## Listen-Modus (v3.1, `--list-only`)
+
+Diagnose-Sicht „WAS pendet gerade WO?“ – vor einem Approve oder nach einem
+`not_found`. Workflow-Input `mode: list` (Workflow 05) bzw. CLI:
+
+```bash
+# SSH: alle pending Requests ueber alle VPS (keine ID noetig)
+python3 tools/device-approve/approve.py --list-only \
+  --instance-map /tmp/instance-map.txt \
+  --type-filter both --target-filter both --instance-filter all \
+  --vps-user "$VPS_USER" --ssh-key ~/.ssh/id_ed25519 \
+  --ts-tailnet "$TS_TAILNET" --ts-client-id "$TS_CLIENT_ID" \
+  --ts-client-secret "$TS_CLIENT_SECRET" --summary
+
+# Lokal (Ergaenzung fuer Diagnose auf dem Gateway, kein TS-SSH noetig)
+python3 tools/device-approve/approve.py --list-only --local
+```
+
+### Mapping mode → CLI-Flags (R02, verbindlich)
+
+| Workflow-Input `mode` | CLI-Flags | `--request-id` |
+|---|---|---|
+| `approve` (default) | `--full-run --request-id $APPROVE_ID` | required, validiert (`--validate-id`) |
+| `list` | `--list-only` | **NICHT übergeben** – wird ignoriert (Warning, keine Validierung) |
+
+`--list-only` schließt `--full-run`/`--discover-only` aus (argparse-Fehler,
+Exit 2). `--list-only` + `--request-id` → Warning auf stderr, ID wird nie
+validiert/verwendet (R02). `type=auto` wird im Listen-Modus zu `both` (O3:
+keine ID zum Ableiten – Diagnose will ALLES sehen).
+
+### Darstellungs-Konventionen (R03/R04)
+
+- **Sortierung (R03):** `createdAtMs` DESC (neueste zuerst); Sekundärschlüssel
+  (target, instance, type, id) – deterministisch und stabil (in
+  `summary.list_result_to_markdown` dokumentiert).
+- **Platform (R04):** JSON `platform: ""` ist die Wahrheit (Telegram hat kein
+  platform-Feld); die Tabelle rendert `""` → `—` (Darstellung).
+- **Erstellt:** UTC (YYYY-MM-DD HH:MM); fehlendes `createdAtMs` → `—`.
+- Lange IDs (>24 Zeichen) werden in der Tabelle gekürzt – die Voll-ID steht im
+  JSON-Output (Run-Log).
+
+### Exit-Code-Vertrag (Listen-Modus)
+
+| Exit | Bedeutung |
+|---|---|
+| 0 | Liste erstellt – **auch leer** (grüner Run, „Keine offenen Requests“) |
+| 1 | Infrastruktur-/Auth-Fehler (SSH/Tailscale down, roter Run) |
+| 2 | Validierungs-/Config-Fehler (fehlende Credentials, CLI-Missbrauch) |
+
+Listen-Modus hat NIE `not_found`-Status (es gibt keine Such-ID); leere Liste
+ist ein gültiges Ergebnis.
+
+### Concurrency + Timeout (R06/R09)
+
+- **R06:** Der Listen-Modus teilt die Concurrency-Group `device-approve`
+  (cancel-in-progress: false) → serielle Ausführung. Ein List-Run wartet
+  hinter einem laufenden Approve-Run in der Queue – konservativ-korrekt (kein
+  stale read), kann aber zu Wartezeiten führen.
+- **R09:** Timeout identisch zum Approve-Modus (15 Min Workflow, 60s SSH).
+  Worst-Case bei 5 unerreichbaren VPS: ~5×60s ≈ 5 Min.
+
+### Listen-JSON-Schema (Design §11)
+
+```json
+{"status": "list_ok", "entries": [{"instance": "oc1", "target": "dev",
+ "type": "telegram", "id": "QVDCXJEM", "platform": "",
+ "createdAtMs": 1785900000000, "vps_ip": "100.64.0.1"}],
+ "scanned": ["dev/oc1"], "unreachable": [],
+ "filters_applied": {"type": "both", "target": "both", "instance": "all"}}
+```
 
 ## Discovery-Quellen (Δ1, empirisch verifiziert 2026-08-06)
 
@@ -177,8 +260,8 @@ python3 -m pytest tests/device-approve/ -v
 |---|---|
 | `discovery.py` | Ein-Job-Kern v3.0 (group_by_vps, build_ein_job_remote_cmd, parse_ein_job_output, run_remote_ssh, run_discovery, --validate-id, --approve) |
 | `approve_step.py` | Approve-only-Library (typ-spezifisch; NICHT mehr vom Workflow aufgerufen, R03-E12) |
-| `approve.py` | CLI-Fassade (--full-run Ein-Job, --discover-only, --summary, --local) |
-| `summary.py` | Markdown-Summary-Generator (Minor #7) |
+| `approve.py` | CLI-Fassade (--full-run Ein-Job, --discover-only, --list-only v3.1, --summary, --local) |
+| `summary.py` | Markdown-Summary-Generator (Minor #7 + list_result_to_markdown v3.1) |
 
 ## Rueckgabe-Schema
 
