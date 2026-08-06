@@ -101,11 +101,27 @@ class TestBuildEinJobRemoteCmd:
         assert f"openclaw pairing approve telegram {TG_CODE}" in cmd
         assert "---JSON-BEGIN:${inst}:telegram---" in cmd
         assert "---APPROVE-BEGIN:${inst}:telegram---" in cmd
+        assert "---APPROVE-FAILED:${inst}:telegram---" in cmd  # B2: Fehler sichtbar
         assert "---FOUND:${FOUND}---" in cmd
-        assert "|| true" in cmd      # fail-safe (Instanz-Down)
-        assert "break" in cmd        # Break-Semantik
+        assert "|| true" in cmd          # fail-safe NUR für die Discovery-Quelle
+        assert "break" in cmd            # Break-Semantik
         assert "devices list --json" not in cmd
-        assert "jq" not in cmd       # R08: keine jq-Dependency
+        assert "jq" not in cmd           # R08: keine jq-Dependency
+
+    def test_approve_exit_code_checked_no_or_true(self):
+        """B2 (2. Review, Blocker): Approve-Erfolg wird geprüft – KEIN `|| true`
+        um den Approve; FOUND=1 erst nach Exit-Code 0; APPROVE-FAILED-Marker."""
+        cmd = discovery.build_ein_job_remote_cmd("telegram", ["oc1"], TG_CODE)
+        approve_line = f"sudo docker exec openclaw-${{inst}} openclaw pairing approve telegram {TG_CODE} 2>&1"
+        # KEIN || true um den Approve-Befehl
+        assert f"{approve_line} || true" not in cmd
+        assert "|| true" in cmd  # bleibt für die Discovery-Quelle (fail-safe)
+        # Approve läuft in einer if-Abfrage auf den Exit-Code
+        assert f"if {approve_line}; then" in cmd
+        assert "FOUND=1" in cmd
+        assert "---APPROVE-FAILED:${inst}:telegram---" in cmd
+        # Reihenfolge: FOUND=1 NACH dem if (Approve-Erfolg), nicht davor
+        assert cmd.index("if sudo docker exec") < cmd.index("FOUND=1")
 
     def test_device_template(self):
         cmd = discovery.build_ein_job_remote_cmd("device", ["oc1"], DEVICE_UUID)
@@ -124,6 +140,7 @@ class TestBuildEinJobRemoteCmd:
         assert f"openclaw devices approve {DEVICE_UUID}" in cmd
         assert "---JSON-BEGIN:${inst}:telegram---" in cmd
         assert "---JSON-BEGIN:${inst}:device---" in cmd
+        assert "---APPROVE-FAILED:${inst}:device---" in cmd  # B2: beide Typen
 
     def test_discover_only_has_no_approve(self):
         cmd = discovery.build_ein_job_remote_cmd("telegram", ["oc1"], TG_CODE, approve=False)
@@ -211,6 +228,34 @@ class TestParseEinJobOutput:
     def test_malformed_json_fail_safe(self):
         stdout = ein_job_stdout("oc1", "telegram", "{broken", found=0)
         assert discovery.parse_ein_job_output(stdout, "telegram", request_id=TG_CODE, target="dev") is None
+
+    def test_approve_failure_detected(self):
+        """B2 (2. Review, Blocker): Approve-Exit-Code != 0 → APPROVE-FAILED-
+        Marker + FOUND=0 → approved=False, Fehler-Output bleibt sichtbar."""
+        stdout = (
+            json_block("oc1", "telegram", pairing_json(TG_CODE))
+            + "---APPROVE-BEGIN:oc1:telegram---\n"
+            + "ERROR: pairing already approved / denied\n"
+            + "---APPROVE-END:oc1:telegram---\n"
+            + "---APPROVE-FAILED:oc1:telegram---\n"
+            + "---FOUND:0---\n"
+        )
+        result = discovery.parse_ein_job_output(stdout, "telegram", request_id=TG_CODE, target="dev")
+        assert result is not None
+        assert result.approved is False
+        assert "ERROR: pairing already approved / denied" in result.approve_output
+
+    def test_approve_failed_marker_forces_not_approved(self):
+        """Auch bei inkonsistentem FOUND=1: APPROVE-FAILED-Marker → nicht approved."""
+        stdout = (
+            json_block("oc1", "telegram", pairing_json(TG_CODE))
+            + "---APPROVE-BEGIN:oc1:telegram---\nboom\n---APPROVE-END:oc1:telegram---\n"
+            + "---APPROVE-FAILED:oc1:telegram---\n"
+            + "---FOUND:1---\n"
+        )
+        result = discovery.parse_ein_job_output(stdout, "telegram", request_id=TG_CODE, target="dev")
+        assert result is not None
+        assert result.approved is False
 
     def test_both_types_in_one_session(self):
         """R02: beide Quellen in einer Session; Fund im device-Pfad."""

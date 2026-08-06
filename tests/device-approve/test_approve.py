@@ -486,6 +486,30 @@ class TestApproveCli:
         data = json.loads(capsys.readouterr().out)
         assert data["status"] == "error"
 
+    def test_ssh_mode_full_run_approve_failure_surfaces_error(self, tmp_path, monkeypatch, capsys, ssh_env):
+        """B2 (2. Review): Approve-Exit-Code != 0 in der Session → status error,
+        exit 1, Approve-Output wird auf stderr gezeigt (kein falscher Erfolg)."""
+        monkeypatch.setenv("APPROVE_ID", TG_CODE)
+        map_path = self._write_map(tmp_path, ["oc1|dev"])
+        monkeypatch.setenv("INSTANCE_MAP", map_path)
+        monkeypatch.setattr(approve, "fetch_tailscale_token", lambda cid, cs: "tok")
+        monkeypatch.setattr(approve, "resolve_vps_ip",
+                            lambda tailnet, tok, node, timeout=30: "100.64.0.1")
+        failed_stdout = (
+            "---JSON-BEGIN:oc1:telegram---\n" + fake_pairing_json(TG_CODE) + "\n---JSON-END:oc1:telegram---\n"
+            "---APPROVE-BEGIN:oc1:telegram---\nERROR: denied\n---APPROVE-END:oc1:telegram---\n"
+            "---APPROVE-FAILED:oc1:telegram---\n"
+            "---FOUND:0---\n"
+        )
+        monkeypatch.setattr(approve, "run_remote_ssh",
+                            lambda ip, user, key, cmd: failed_stdout)
+        rc = approve.main(["--full-run"])
+        assert rc == 1
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["status"] == "error"
+        assert "ERROR: denied" in captured.err  # Approve-Output sichtbar
+
     def test_full_run_conflicts_with_discover_only(self, monkeypatch, capsys, ssh_env):
         monkeypatch.setenv("APPROVE_ID", TG_CODE)
         with pytest.raises(SystemExit) as excinfo:
