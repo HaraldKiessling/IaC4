@@ -98,47 +98,23 @@ jobs:
 
       # Major #6 geloest: fields=hostname,addresses,lastSeen + '-1'-Suffix-Fallback
       # (konsistent mit Workflows 04/05); Minor #15: UNREACHABLE-Liste in Fehlerausgabe.
+      # Discovery-Kern als getesteter Python-Code (tools/telegram-approve-bot/discovery.py,
+      # unit-getestet mit gemockten Netzwerk-/SSH-Calls – Nachtrag 2026-08-06, Realfall
+      # Request-ID lokal nicht pending). Abweichung vom Bash-Loop des Konzepts §2.1:
+      # identische Semantik (fields, -1-Fallback, break, UNREACHABLE, GITHUB_OUTPUT),
+      # aber testbar und ohne Regex-Overmatch beim Substring-Match.
       - name: Discovery – Request-ID auf allen Instanzen suchen
         id: discover
         run: |
           set -euo pipefail
-          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
-            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
-            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
-          FOUND_INSTANCE=""
-          FOUND_TARGET=""
-          FOUND_VPS_IP=""
-          UNREACHABLE=""
-          while IFS='|' read -r inst target; do
-            NODE="vps-${target}"
-            TS_IP=$(curl -sS --max-time 30 "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses,lastSeen" \
-              -H "Authorization: Bearer ${TS_TOKEN}" | jq -r --arg n "$NODE" \
-              '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | .[0].addresses[0] // empty')
-            if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
-              UNREACHABLE="$UNREACHABLE $NODE"
-              echo "⚠️  VPS $NODE nicht erreichbar, überspringe"
-              continue
-            fi
-            echo "🔍 Suche in $target/$inst (VPS $NODE)..."
-            RESULT=$(ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
-              "$VPS_USER@$TS_IP" "sudo docker exec openclaw-${inst} openclaw devices list 2>/dev/null" 2>/dev/null || echo "")
-            if echo "$RESULT" | grep -q "$APPROVE_REQUEST_ID"; then
-              FOUND_INSTANCE="$inst"
-              FOUND_TARGET="$target"
-              FOUND_VPS_IP="$TS_IP"
-              echo "✅ Request-ID in $target/$inst gefunden!"
-              break
-            fi
-          done < /tmp/instance-map.txt
-          # Minor #15: unreachable VPS in Fehlerausgabe ausgeben
-          if [ -z "$FOUND_INSTANCE" ]; then
-            echo "❌ Request-ID '$APPROVE_REQUEST_ID' auf keiner enabled Instanz gefunden"
-            echo "   Übersprungen (VPS down): ${UNREACHABLE:-keine}"
-            exit 1
-          fi
-          echo "found_instance=$FOUND_INSTANCE" >> "$GITHUB_OUTPUT"
-          echo "found_target=$FOUND_TARGET" >> "$GITHUB_OUTPUT"
-          echo "found_vps_ip=$FOUND_VPS_IP" >> "$GITHUB_OUTPUT"
+          python3 tools/telegram-approve-bot/discovery.py \
+            --instance-map /tmp/instance-map.txt \
+            --request-id "$APPROVE_REQUEST_ID" \
+            --vps-user "$VPS_USER" \
+            --ssh-key ~/.ssh/id_ed25519 \
+            --ts-tailnet "$TS_TAILNET" \
+            --ts-client-id "$TS_CLIENT_ID" \
+            --ts-client-secret "$TS_CLIENT_SECRET"
 
   approve:
     name: "Approve (prod = Environment-Gate)"
