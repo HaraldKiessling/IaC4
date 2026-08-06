@@ -1,10 +1,9 @@
 # PR-Body: 05 v2.2 – Unified Freigabe: Telegram-Pairing + Device-Approve (ID-basiert)
 
-> **Hinweis:** Erstellt als Datei (Engineer, 2026-08-06), da `gh`-CLI/Token in der
-> Ausführungsumgebung nicht verfügbar sind (`gh auth status` → nicht vorhanden).
-> Inhalt = fertiger PR-Body für den Branch `session-20260806/device-approve-telegram`
-> (Repo `HaraldKiessling/IaC4`). Nach GitHub einfügen; Ziel-Branch: `main` (kein
-> Merge durch den Engineer – Entscheidung Owner/Orchestrator).
+> **Hinweis:** PR #108 wurde nach Token-Analyse (fine-grained PAT, `Contents: write`)
+> per GitHub REST API erstellt (Engineer, 2026-08-06). Branch
+> `session-20260806/device-approve-telegram` (Repo `HaraldKiessling/IaC4`),
+> Ziel-Branch: `main`. Kein Merge durch den Engineer – Entscheidung Owner/Orchestrator.
 
 ---
 
@@ -91,4 +90,4 @@ verifiziert (OpenClaw 2026.7.1 + Owner-Pairing-Beleg `QVDCXJEM`):
 
 - [x] Conventional Commits, Evidenz in Commit-Messages
 - [x] Keine Secrets committet
-- [x] Kein Merge nach main, kein Deploy, kein Push (kein gh-Token vorhanden)
+- [x] Kein Merge nach main, kein Deploy (Entscheidung Owner/Orchestrator)
