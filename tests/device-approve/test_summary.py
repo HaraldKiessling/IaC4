@@ -135,7 +135,10 @@ class TestSummaryCli:
         assert rc == 2
 
     def test_cli_local_fallback(self, tmp_path, monkeypatch, capsys):
-        """Ohne GITHUB_STEP_SUMMARY → Markdown auf stdout (lokaler Modus)."""
+        """Ohne GITHUB_STEP_SUMMARY → Markdown auf stdout (lokaler Modus).
+        CI-Regression: GitHub Actions setzt GITHUB_STEP_SUMMARY fuer jeden
+        Step – delenv macht den Test deterministisch (stdout-Fallback)."""
+        monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
         monkeypatch.setattr(
             summary.sys.stdin, "read",
             lambda: json.dumps(make_result("found"))
