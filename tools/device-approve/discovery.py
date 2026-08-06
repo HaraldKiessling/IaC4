@@ -25,6 +25,14 @@ Korrigiert/erweitert nach CLI-Fakten + Review-Befunden R01-R08 (2026-08-06):
   (--validate-id), UNREACHABLE-Liste, Break-Semantik, injizierbare
   Netzwerk-/SSH-Calls (unit-testbar ohne echte Tailscale-/SSH-Zugriffe).
 
+v3.1 (Listen-Modus, Design 05-workflow-listen-modus.md, Review R01-R09):
+  - build_list_remote_cmd(): wie build_ein_job_remote_cmd, aber NUR
+    JSON-Blöcke (kein ID-Match, kein Approve, kein FOUND) – gemeinsame
+    Block-Generierung _build_json_collection_block (R01).
+  - parse_list_output() / run_list_discovery(): aggregieren ALLE pending
+    Eintraege ueber alle VPS (PendingEntry/ListDiscoveryResult); leere Liste
+    ist ein gueltiges Ergebnis (Exit 0, gruen).
+
 Empirisch (Sandbox, OpenClaw 2026.7.1, 2026-08-06):
   - `openclaw pairing list telegram --json` → {"channel": "telegram", "requests": []}
   - `openclaw devices list --json` → {"pending": [...], "paired": [...]}
@@ -339,6 +347,37 @@ def _source_specs(typ: str) -> List[Tuple[str, str, str]]:
     ]
 
 
+def _source_var(typ: str, src_typ: str) -> str:
+    """Variablenname der JSON-Ausgabe je Quelle im Remote-Skript.
+
+    Eine Quelle → RESULT; mehrere (type=both) → RESULT_TG / RESULT_DEV
+    (disjunkt, damit beide JSON-Bloecke in derselben Session erhalten bleiben).
+    """
+    if len(_source_specs(typ)) == 1:
+        return "RESULT"
+    return "RESULT_TG" if src_typ == "telegram" else "RESULT_DEV"
+
+
+def _build_json_collection_block(src_typ: str, list_tmpl: str, var: str) -> List[str]:
+    """JSON-Block-Zeilen (Marker + List-Cmd + printf) fuer EINE Quelle.
+
+    Gemeinsame Basis von build_ein_job_remote_cmd (Approve-Modus) und
+    build_list_remote_cmd (Listen-Modus) – R01 (Review Listen-Modus):
+    Marker-Format, List-Cmd-Escaping und printf-Ausgabe existieren NUR hier
+    (keine ~60%-Duplikation; Aenderungen/Bugfixes an EINER Stelle).
+
+    Die Zeilen laufen innerhalb der `for inst in ...`-Remote-Schleife;
+    ${inst} setzt die Remote-Shell. `|| true` = fail-safe bei Instanz-Down.
+    """
+    list_cmd = list_tmpl.format(instance="${inst}")
+    return [
+        f'  echo "---JSON-BEGIN:${{inst}}:{src_typ}---"',
+        f"  {var}=$({list_cmd} || true)",
+        f"  printf '%s\\n' \"${var}\"",
+        f'  echo "---JSON-END:${{inst}}:{src_typ}---"',
+    ]
+
+
 def build_ein_job_remote_cmd(
     typ: str,
     instances: List[str],
@@ -350,7 +389,8 @@ def build_ein_job_remote_cmd(
 
     Pro Instanz:
       - JSON-Block je Quelle (telegram → pairing list, device → devices list;
-        type=both → beide Quellen in derselben Session, R02)
+        type=both → beide Quellen in derselben Session, R02) – gemeinsame
+        Block-Generierung via _build_json_collection_block (R01)
       - bei approve: ID-Match im Textpfad (grep auf das JSON-Feld des
         relevanten Arrays, KEIN jq – R08) → Approve direkt in der Session
         (---APPROVE-BEGIN/END-Marker), break-Semantik (erster Fund stoppt)
@@ -371,18 +411,13 @@ def build_ein_job_remote_cmd(
         validate_instance(inst)
     validate_request_id(request_id, typ)
 
-    single_source = len(_source_specs(typ)) == 1
     lines = ["FOUND=0", "for inst in " + " ".join(instances) + "; do"]
     for src_typ, list_tmpl, approve_tmpl in _source_specs(typ):
-        var = "RESULT" if single_source else ("RESULT_TG" if src_typ == "telegram" else "RESULT_DEV")
+        var = _source_var(typ, src_typ)
         array_key = _SOURCE_ARRAY_KEY[src_typ]
         id_field = _SOURCE_ID_FIELD[src_typ]
-        list_cmd = list_tmpl.format(instance="${inst}")
 
-        lines.append(f'  echo "---JSON-BEGIN:${{inst}}:{src_typ}---"')
-        lines.append(f"  {var}=$({list_cmd} || true)")
-        lines.append(f"  printf '%s\\n' \"${var}\"")
-        lines.append(f'  echo "---JSON-END:${{inst}}:{src_typ}---"')
+        lines.extend(_build_json_collection_block(src_typ, list_tmpl, var))
 
         if approve:
             approve_cmd = approve_tmpl.format(instance="${inst}", request_id=request_id)
