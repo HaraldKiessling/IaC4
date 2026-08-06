@@ -15,12 +15,21 @@
 #   - Tailscale-Action v4.1.3 (R05); Auth via tools/telegram-approve-bot/
 #     auth_check.sh + discovery.py --validate-id (R07); kein jq auf den VPS
 #     (R08 – Remote-Match per grep, Verifikation in Python).
-#   - Ersetzt: v2.2 (Zwei-Job) – approve_step.py bleibt als Library erhalten,
-#     wird aber nicht mehr vom Workflow aufgerufen (R03-E12).
+#   - Ersetzt: v2.2 (Zwei-Job) – approve_step.py bleibt als Library erhalten
+#     (DEPRECATED für Workflow-Aufrufe, M3), wird aber nicht mehr vom Workflow
+#     aufgerufen (R03-E12).
+#
+#   Secrets (Ist-Zustand, M2): TAILSCALE_OAUTH_CLIENT_ID /
+#   TAILSCALE_OAUTH_CLIENT_SECRET (Tailscale-Action v4.1.3, NICHT TS_OAUTH_*),
+#   VPS_USER, SSH_KEY, TELEGRAM_APPROVE_USERS (Whitelist für den Telegram-Pfad,
+#   M1: wird im Validate-Step als AUTHORIZED_USERS an auth_check.sh gereicht).
 #
 #   Sicherheits-Gates: Whitelist (repository_dispatch, auth_check.sh),
 #   Regex-Sperre je Typ (discovery.py --validate-id), Tailscale-only SSH,
 #   keine Secrets in Logs, Audit = GH Actions Run.
+#   Job-Outputs (m3): entfallen mit dem zweiten Job – kein externer Consumer
+#   (kein needs.discover); approve.py schreibt GITHUB_OUTPUT nur noch für
+#   Debug/Audit im Run-Log.
 name: "05 – Freigabe (Telegram-Pairing + Device-Approve, Ein-Job)"
 
 run-name: "approve ${{ inputs.id || github.event.client_payload.id }}"
@@ -93,9 +102,12 @@ jobs:
           set -euo pipefail
 
           # Auth nur für repository_dispatch (Telegram-Pfad): auth_check.sh prüft
-          # NUR die User-ID (Nicht-Leer + numerisch VOR Whitelist-Grep). Die
-          # Request-ID-Validierung ist an discovery.py --validate-id delegiert
-          # (Single Source of Truth – auch 6-7-stellige Pairing-Kurzcodes).
+          # NUR die User-ID (Nicht-Leer + numerisch VOR Whitelist-Grep). M1: der
+          # Whitelist-Check bleibt in auth_check.sh (R07-bevorzugt statt
+          # Python-Migration) – TELEGRAM_APPROVE_USERS-Secret wird oben als
+          # AUTHORIZED_USERS referenziert. Die Request-ID-Validierung ist an
+          # discovery.py --validate-id delegiert (Single Source of Truth – auch
+          # 6-7-stellige Pairing-Kurzcodes).
           if [ -n "$TG_USER_ID" ]; then
             export TG_USER_ID AUTHORIZED_USERS
             bash tools/telegram-approve-bot/auth_check.sh

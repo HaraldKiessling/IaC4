@@ -99,13 +99,17 @@ pro VPS EINEN SSH-Call mit dem Remote-Skript aus (`build_ein_job_remote_cmd`):
 - Pro Instanz JSON-Block mit der Discovery-Quelle; bei `type=both` werden
   `pairing list` UND `devices list` in derselben Session abgefragt (R02).
 - ID-Match im Textpfad (grep, kein jq – R08); bei Fund läuft der Approve
-  direkt in der Session (APPROVE-BEGIN/END-Marker) und die Schleife bricht ab
-  (Break-Semantik, erster Fund stoppt).
+  direkt in der Session (APPROVE-BEGIN/END-Marker). **B2 (2. Review): Der
+  Approve-Erfolg wird über den Exit-Code geprüft (KEIN `|| true` um den
+  Approve) – erst nach Exit-Code 0 wird `FOUND=1` gesetzt; bei Fehler wird
+  `---APPROVE-FAILED:<inst>:<typ>---` emittiert und der Workflow meldet
+  status=error statt falschen Erfolgs.** Break-Semantik: erster Fund stoppt.
 - Marker-Format: `---JSON-BEGIN:<inst>:<typ>---` … `---JSON-END:<inst>:<typ>---`,
   `---APPROVE-BEGIN:<inst>:<typ>---` … `---APPROVE-END:<inst>:<typ>---`,
-  `---FOUND:1|0---` (Typ-Suffix macht type=both eindeutig parsebar).
-- `|| true` = fail-safe bei Instanz-Down (leere Ausgabe → kein Match, Scan
-  geht zur nächsten Instanz weiter).
+  `---APPROVE-FAILED:<inst>:<typ>---`, `---FOUND:1|0---` (Typ-Suffix macht
+  type=both eindeutig parsebar).
+- `|| true` NUR an der Discovery-Quelle = fail-safe bei Instanz-Down (leere
+  Ausgabe → kein Match, Scan geht zur nächsten Instanz weiter).
 
 ## Beispiele
 
