@@ -300,10 +300,16 @@ jobs:
             "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
           echo "::add-mask::$TS_TOKEN"
           NODE="vps-$TARGET"
-          VPS_TS_IP=$(curl -sS "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses,lastSeen" \
-            -H "Authorization: Bearer $TS_TOKEN" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n)] | .[0].addresses[0]')
+          TS_DEVICES=$(curl -sS "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,name,addresses,lastSeen" \
+            -H "Authorization: Bearer $TS_TOKEN")
+          VPS_TS_IP=$(printf '%s' "$TS_DEVICES" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n)] | .[0].addresses[0]')
+          # MagicDNS-FQDN (name) statt roher IP für HTTPS-Tests: Tailscale-Serve validiert SNI,
+          # rohe IP -> curl exit 35 (TLS-Handshake-Abbruch, Session-Befund 2026-08-06 oc1+oc2)
+          VPS_TS_HOST=$(printf '%s' "$TS_DEVICES" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n)] | .[0].name')
           [ -n "$VPS_TS_IP" ] && [ "$VPS_TS_IP" != "null" ] || { echo "❌ Keine Tailscale-IP für $NODE"; exit 1; }
+          [ -n "$VPS_TS_HOST" ] && [ "$VPS_TS_HOST" != "null" ] || { echo "❌ Kein MagicDNS-FQDN für $NODE"; exit 1; }
           echo "VPS_TS_IP=$VPS_TS_IP" >> "$GITHUB_ENV"
+          echo "VPS_TS_HOST=$VPS_TS_HOST" >> "$GITHUB_ENV"
           case "$INSTANCE" in
             oc1) PORT=18789; SECRET="$SECRET_OC1" ;;
             oc2) PORT=18790; SECRET="$SECRET_OC2" ;;
@@ -347,7 +353,7 @@ jobs:
           case "$INSTANCE" in oc1) SECRET="$SECRET_OC1";; oc2) SECRET="$SECRET_OC2";; oc3) SECRET="$SECRET_OC3";; esac
           echo "::add-mask::$SECRET"
           CODE=$(curl -sk -o /tmp/models.json -w '%{http_code}' --max-time 20 \
-            -H "Authorization: Bearer $SECRET" "https://$VPS_TS_IP:$PORT/v1/models")
+            -H "Authorization: Bearer $SECRET" "https://$VPS_TS_HOST:$PORT/v1/models")
           echo "GET /v1/models (Bearer): HTTP $CODE"
           echo "AUTH_CODE=$CODE" >> "$GITHUB_ENV"
           if [ "$CODE" = "200" ]; then
@@ -356,7 +362,7 @@ jobs:
           else
             echo "❌ C: Bearer-Auth fehlgeschlagen (HTTP $CODE), Fallback-Header-Test:"
             CODE2=$(curl -sk -o /tmp/models2.json -w '%{http_code}' --max-time 20 \
-              -H "x-openclaw-token: $SECRET" "https://$VPS_TS_IP:$PORT/v1/models")
+              -H "x-openclaw-token: $SECRET" "https://$VPS_TS_HOST:$PORT/v1/models")
             echo "GET /v1/models (x-openclaw-token): HTTP $CODE2"
             echo "AUTH_CODE=$CODE2" >> "$GITHUB_ENV"
             if [ "$CODE2" = "200" ]; then
@@ -370,8 +376,8 @@ jobs:
       - name: "B) HTTP-API ohne Token -> 401/403/429 erwartet (Auth aktiv)"
         run: |
           set -euo pipefail
-          CODE=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 15 "https://$VPS_TS_IP:$PORT/v1/models")
-          echo "GET https://$VPS_TS_IP:$PORT/v1/models (ohne Token): HTTP $CODE"
+          CODE=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 15 "https://$VPS_TS_HOST:$PORT/v1/models")
+          echo "GET https://$VPS_TS_HOST:$PORT/v1/models (ohne Token): HTTP $CODE"
           case "$CODE" in
             401|403) echo "✅ B: Auth aktiv (HTTP $CODE ohne Token)" ;;
             429) echo "✅ B: Auth aktiv (HTTP 429 = Rate-Limiter, Auth erforderlich)" ;;
@@ -381,7 +387,7 @@ jobs:
       - name: "D) /health ohne Auth (Erreichbarkeit)"
         run: |
           set -euo pipefail
-          CODE=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 15 "https://$VPS_TS_IP:$PORT/health")
+          CODE=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 15 "https://$VPS_TS_HOST:$PORT/health")
           echo "GET /health: HTTP $CODE"
           [ "$CODE" = "200" ] && echo "✅ D: Gateway erreichbar" || echo "⚠️ D: /health lieferte HTTP $CODE (nicht kritisch für Token-Validität)"
 
