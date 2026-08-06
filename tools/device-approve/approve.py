@@ -31,6 +31,11 @@ Env-Vars (statt GH-Context, fuer lokale Owner-Testlaeufe):
 Rueckgabe-Schema (Minor #7):
   {"status": "approved|found|not_found|error", "id": "...", "found": [...],
    "scanned": [...], "filters_applied": {type, target, instance}}
+
+Exit-Code-Vertrag (Owner-Vereinbarung 2026-08-06 15:06, Run-#6-Befund):
+  - 0 = approved ODER found ODER not_found  (not_found = gruener Run, kein Fehler)
+  - 1 = error (Infrastruktur/Auth/Injection/Approve-Fehler – bleibt rot)
+  - 2 = Validierungs-/Config-Fehler (CLI-Missbrauch, fehlende Credentials)
 """
 
 from __future__ import annotations
@@ -313,7 +318,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 scanned=stats["scanned"],
                 filters_applied=filters,
             )
-            return emit(result, 1)
+            # Owner-Vereinbarung 15:06: not_found = gruener Run (Exit 0),
+            # nur error bleibt rot (Exit 1).
+            return emit(result, 0)
 
         if opts.discover_only:
             result = build_result_json(
@@ -400,7 +407,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             scanned=scanned,
             filters_applied=filters,
         )
-        return emit(result, 1)
+        # Owner-Vereinbarung 15:06: not_found = gruener Run (Exit 0) – gilt
+        # fuer --full-run UND --discover-only (Run-#6-Befund: conclusion rot).
+        return emit(result, 0)
     except ValueError as exc:
         print(f"❌ {exc}", file=sys.stderr)
         return 2

@@ -175,7 +175,11 @@ jobs:
       # ★ EINZIGER Discovery+Approve-Schritt (Ein-Job, v3.0): --full-run ruft
       # discovery.py-run_discovery mit VPS-Gruppierung auf (1 SSH pro VPS);
       # der Approve läuft direkt in der SSH-Session beim Fund – auch bei prod
-      # (kein Gate). Exit-Code: 0 = approved, 1 = nicht gefunden/Fehler.
+      # (kein Gate). Exit-Code-Vertrag (Owner-Vereinbarung 15:06):
+      #   0 = approved ODER not_found (gruener Run – Status im JSON/stdout),
+      #   1 = error (Infrastruktur/Auth/Approve-Fehler – roter Run).
+      # not_found wird NICHT separat behandelt und NICHT mit `|| true`
+      # maskiert – approve.py liefert dafuer Exit-Code 0.
       - name: Discovery + Approve (Ein-Job)
         id: full_run
         run: |

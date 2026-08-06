@@ -41,7 +41,8 @@ def status_header(status: str, result: Optional[dict] = None) -> str:
     mapping = {
         "approved": f"## ✅ {label}-Freigabe — Erfolgreich",
         "found": f"## ✅ {label}-Freigabe — Gefunden (Discovery)",
-        "not_found": f"## ❌ {label}-Freigabe — Kein Treffer",
+        # not_found ist kein Fehler (Owner-Vereinbarung 15:06, gruener Run)
+        "not_found": f"## 🔎 {label}-Freigabe — Kein Treffer",
         "error": f"## ❌ {label}-Freigabe — Fehler",
     }
     return mapping.get(status, f"## ℹ️ {label}-Freigabe — {status}")
@@ -64,7 +65,7 @@ def result_to_markdown(result: dict) -> str:
     status_label = {
         "approved": "✅ Freigegeben",
         "found": "✅ Gefunden",
-        "not_found": "❌ Nicht gefunden",
+        "not_found": "🔎 Nicht gefunden",
         "error": "❌ Fehler",
     }.get(status, status)
     lines.append(f"| **Status** | {status_label} |")

@@ -6,6 +6,9 @@ lokaler Modus (APPROVE_LOCAL=1, openclaw CLI), not_found-Pfad mit Test-IDs
 (QVDCXJEM → pairing-Pfad; b0999c46-.../2e68bca9-... → device-Pfad; erwartet
 not_found lokal), Typ-Ableitung (auto), Env-Var-Modus, Filter, Validierung.
 
+Exit-Code-Vertrag (Owner-Vereinbarung 2026-08-06 15:06): not_found → 0
+(gruener Run, lokal + SSH/--full-run/--discover-only), error → 1 (rot).
+
 v3.0 (R03-Migration): SSH-Pfad mockt run_remote_ssh (Ein-Job-Remote-Skript mit
 JSON-/APPROVE-/FOUND-Markern) statt list_entries_ssh/run_approve_ssh –
 Discovery + Approve laufen in EINEM Aufruf.
@@ -33,6 +36,8 @@ TG_CODE = "QVDCXJEM"
 DEVICE_HEX_64 = "9df47d697653fb4069407734e06849b342738ed3e9ec4b172402aca911925392"
 REAL_ID = "b0999c46-ebe3-4c46-a72b-8b0a7c1df2d5"
 ALT_ID = "2e68bca9-4965-4e29-9a9d-d1a12644d644"
+# Testlauf #6 (2026-08-06, Run 31115433242): nicht gefunden via voller Pipeline
+RUN6_ID = "cc2868b4-ab46-489b-8a8a-8a9e21935f17"
 
 
 class FakeCompletedProcess:
@@ -242,7 +247,7 @@ class TestApproveCli:
         assert data["status"] == "not_found"
         assert data["id"] == TG_CODE
         assert data["filters_applied"]["type"] == "telegram"
-        assert rc == 1
+        assert rc == 0  # not_found = gruener Run (Owner-Vereinbarung 15:06)
 
     def test_local_discover_only_found_device(self, monkeypatch, capsys, local_env):
         monkeypatch.setenv("APPROVE_ID", REAL_ID)
@@ -321,7 +326,7 @@ class TestApproveCli:
         assert data["status"] == "not_found"
         assert data["id"] == ALT_ID
         assert data["filters_applied"]["type"] == "device"
-        assert rc == 1
+        assert rc == 0  # not_found = gruener Run (Owner-Vereinbarung 15:06)
 
     def test_local_real_id_not_found(self, monkeypatch, capsys, local_env):
         """Test-ID b0999c46... → not_found lokal (Beleg Testbarkeit)."""
@@ -334,7 +339,7 @@ class TestApproveCli:
         data = json.loads(capsys.readouterr().out)
         assert data["status"] == "not_found"
         assert data["id"] == REAL_ID
-        assert rc == 1
+        assert rc == 0  # not_found = gruener Run (Owner-Vereinbarung 15:06)
 
     # ── Validierung (v2.2: Zwei-Format) ──
 
@@ -380,7 +385,7 @@ class TestApproveCli:
         monkeypatch.setattr(approve, "run_remote_ssh",
                             lambda ip, user, key, cmd: ein_job_stdout("oc1", "device", json.dumps({"pending": [], "paired": []}), found=0))
         rc = approve.main(["--discover-only"])
-        assert rc == 1  # not_found
+        assert rc == 0  # not_found = gruener Run (Owner-Vereinbarung 15:06)
         data = json.loads(capsys.readouterr().out)
         assert data["status"] == "not_found"
         assert data["filters_applied"]["type"] == "device"
@@ -485,6 +490,40 @@ class TestApproveCli:
         assert rc == 1
         data = json.loads(capsys.readouterr().out)
         assert data["status"] == "error"
+
+    def test_ssh_mode_full_run_run6_regression_not_found_exits_zero(self, tmp_path, monkeypatch, capsys, ssh_env):
+        """Run-#6-Regression (31115433242): not_found via voller Pipeline
+        (--full-run, type=auto, target=both, instance=all) → status not_found,
+        Exit 0 → Workflow-Conclusion SUCCESS (gruener Run). Vorher: Exit 1 →
+        conclusion failure (Befund Testlauf #6)."""
+        monkeypatch.setenv("APPROVE_ID", RUN6_ID)
+        monkeypatch.setenv("APPROVE_TYPE", "auto")
+        monkeypatch.setenv("APPROVE_TARGET", "both")
+        monkeypatch.setenv("APPROVE_INSTANCE", "all")
+        map_path = self._write_map(tmp_path, ["oc1|dev", "oc2|prod"])
+        monkeypatch.setenv("INSTANCE_MAP", map_path)
+        monkeypatch.setattr(approve, "fetch_tailscale_token", lambda cid, cs: "tok")
+        ips = {"vps-dev": "100.64.0.1", "vps-prod": "100.64.0.2"}
+        monkeypatch.setattr(approve, "resolve_vps_ip",
+                            lambda tailnet, tok, node, timeout=30: ips[node])
+
+        def fake_remote(ip, user, key, cmd):
+            # Run #6: ID auf keiner Instanz -> kein JSON-Match, FOUND=0
+            return ein_job_stdout(
+                "oc1", "device",
+                json.dumps({"pending": [], "paired": []}), found=0,
+            )
+
+        monkeypatch.setattr(approve, "run_remote_ssh", fake_remote)
+        rc = approve.main(["--full-run"])
+        assert rc == 0  # not_found = gruener Run
+        data = json.loads(capsys.readouterr().out)
+        assert data["status"] == "not_found"
+        assert data["id"] == RUN6_ID
+        assert data["found"] == []
+        assert "oc1/dev" in data["scanned"]
+        assert data["filters_applied"] == {
+            "type": "device", "target": "both", "instance": "all"}
 
     def test_ssh_mode_full_run_approve_failure_surfaces_error(self, tmp_path, monkeypatch, capsys, ssh_env):
         """B2 (2. Review): Approve-Exit-Code != 0 in der Session → status error,
