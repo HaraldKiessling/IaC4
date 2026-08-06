@@ -1,0 +1,3 @@
+# Telegram-Device-Approve-Bot (Design 05, M4-Vorbereitung)
+# Deployment offen (F1); pinning grob, Requests >= 2.31 wegen timeout-Param.
+requests>=2.31
