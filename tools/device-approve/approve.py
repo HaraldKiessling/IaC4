@@ -9,6 +9,11 @@ Modi:
   2. Lokaler Modus (--local / APPROVE_LOCAL=1): openclaw CLI direkt auf dem
      Gateway (Owner-Testläufe ohne SSH/Tailscale).
   3. --discover-only: Discovery ohne Approve (Debug/Test).
+  4. --list-only (NEU, v3.1): Listen-Modus – ALLE pending Requests ueber alle
+     Instanzen auflisten (kein Approve, keine ID noetig). --request-id wird
+     ignoriert (Warning, R02), type=auto → both (O3). Exit 0 auch bei leerer
+     Liste (gruen); JSON auf stdout, --summary = Markdown-Tabelle in
+     $GITHUB_STEP_SUMMARY.
 
 --summary: JSON auf stdout + Markdown direkt in $GITHUB_STEP_SUMMARY via
 File-Open (Review Major #3, Δ7).
@@ -69,16 +74,20 @@ def _load_sibling_module(filename: str, unique_name: str):
 
 
 discovery = _load_sibling_module("discovery.py", "device_approve.discovery")
-from summary import result_to_markdown  # type: ignore[import-untyped]
+from summary import list_result_to_markdown, result_to_markdown  # type: ignore[import-untyped]
 
 DiscoveryResult = discovery.DiscoveryResult
 RequestNotFoundError = discovery.RequestNotFoundError
+PendingEntry = discovery.PendingEntry
+build_list_result_json = discovery.build_list_result_json
 build_result_json = discovery.build_result_json
 derive_type = discovery.derive_type
 fetch_tailscale_token = discovery.fetch_tailscale_token
 filter_instance_map = discovery.filter_instance_map
+parse_entries = discovery.parse_entries
 resolve_vps_ip = discovery.resolve_vps_ip
 run_discovery = discovery.run_discovery
+run_list_discovery = discovery.run_list_discovery
 run_remote_ssh = discovery.run_remote_ssh
 validate_and_classify_id = discovery.validate_and_classify_id
 validate_instance = discovery.validate_instance
@@ -222,6 +231,61 @@ def run_local_approve(
     return proc.returncode
 
 
+def run_local_list_discovery(
+    derived_type: str,
+    *,
+    runner=None,
+    log: Optional[Callable[[str], None]] = None,
+    timeout: int = LOCAL_TIMEOUT,
+) -> Tuple[List[PendingEntry], dict]:
+    """Lokale Listen-Discovery: ALLE pending Eintraege der Gateway-Instanz.
+
+    Ergaenzung zum SSH-Pfad (Design §1/2c): `--local --list-only` diagnostiziert
+    die Gateway-eigenen pending Requests (der Orchestrator hat kein TS-SSH).
+    Telegram → `openclaw pairing list telegram --json` (Feld code),
+    Device → `openclaw devices list --json` (Feld deviceId). Defensiv wie
+    run_local_discovery: CLI nicht verfuegbar / Fehler / kaputtes JSON →
+    Quelle wird uebersprungen (R07).
+
+    Returns:
+        (entries, stats) – stats: {"scanned": [...], "unreachable": [...]}
+    """
+    log = log or (lambda _msg: None)
+    stats = {"scanned": ["local/local"], "unreachable": []}
+    entries: List[PendingEntry] = []
+
+    types_to_try = ["telegram", "device"] if derived_type == "both" else [derived_type]
+    for typ in types_to_try:
+        cmd_list = _local_list_cmd(typ)
+        log(f"🔍 Lokale Discovery ({typ}): {' '.join(cmd_list)}")
+        try:
+            proc = (runner or subprocess.run)(  # noqa: S603 – keine Shell
+                cmd_list, capture_output=True, text=True, timeout=timeout
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            log(f"⚠️  openclaw CLI nicht verfuegbar/Timeout: {exc}")
+            continue
+        if proc.returncode != 0:
+            log(f"⚠️  {typ}-Liste fehlgeschlagen (rc={proc.returncode}) – uebersprungen")
+            continue
+        try:
+            data = json.loads(proc.stdout) if proc.stdout.strip() else {}
+        except json.JSONDecodeError as exc:
+            log(f"⚠️  JSON-Parse-Fehler lokal ({typ}): {exc}")
+            continue
+        for entry in parse_entries(data, typ):
+            entries.append(PendingEntry(
+                instance="local",
+                target="local",
+                vps_ip=None,
+                entry_type=typ,
+                entry_id=entry.get("code") or entry.get("deviceId") or "?",
+                platform=entry.get("platform", "") or "",
+                created_at_ms=entry.get("createdAtMs", 0) or 0,
+            ))
+    return entries, stats
+
+
 # ── Haupt-CLI ──
 
 
@@ -242,6 +306,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--ts-client-id", help="Tailscale-OAuth-Client-ID (env TS_CLIENT_ID)")
     ap.add_argument("--ts-client-secret", help="Tailscale-OAuth-Client-Secret (env TS_CLIENT_SECRET)")
     ap.add_argument("--discover-only", action="store_true", help="Nur Discovery, kein Approve")
+    ap.add_argument("--list-only", action="store_true",
+                    help="Listen-Modus (v3.1): ALLE pending Requests auflisten (kein Approve, "
+                         "keine ID noetig). Schliesst --full-run/--discover-only aus; "
+                         "--request-id wird ignoriert (R02); type=auto → both (O3)")
     ap.add_argument("--full-run", action="store_true",
                     help="Ein-Job: Discovery + Approve in einem Aufruf (Workflow-Standard v3.0)")
     ap.add_argument("--summary", action="store_true", help="Markdown-Summary in $GITHUB_STEP_SUMMARY")
@@ -266,34 +334,68 @@ def main(argv: Optional[List[str]] = None) -> int:
     ssot_root = opts.ssot_root or os.environ.get("SSOT_ROOT", ".")
     is_local = opts.local or os.environ.get("APPROVE_LOCAL", "") == "1"
 
-    # ── Validierung (v2.2: Zwei-Format-Regex, Fail-Fast) ──
-    if not rid:
-        print("❌ Keine Request-ID – --request-id oder APPROVE_ID setzen.", file=sys.stderr)
-        return 2
-    try:
-        validate_type(type_f)
-    except ValueError as exc:
-        print(f"❌ {exc}", file=sys.stderr)
-        return 2
-    valid, derived_type, err = validate_and_classify_id(rid, type_f)
-    if not valid:
-        print(f"❌ {err}", file=sys.stderr)
-        return 2
-
-    if inst_f != "all":
+    # ── Listen-Modus (--list-only, v3.1): KEINE Request-ID noetig ──
+    # R02 (Review Listen-Modus): Mapping mode=list → --list-only; eine evtl.
+    # gesetzte ID wird weder validiert noch uebergeben (Warning statt Fehler).
+    if opts.list_only:
+        if opts.full_run:
+            ap.error("--list-only und --full-run schliessen sich aus")
+        if opts.discover_only:
+            ap.error("--list-only und --discover-only schliessen sich aus")
+        if rid:
+            print(f"⚠️  --request-id '{rid}' wird im Listen-Modus ignoriert "
+                  f"(keine Such-ID, keine Validierung – R02)", file=sys.stderr)
+        # O3: type=auto hat im Listen-Modus keine ID zum Ableiten → both
+        if type_f == "auto":
+            type_f = "both"
         try:
-            validate_instance(inst_f)
+            validate_type(type_f)
         except ValueError as exc:
             print(f"❌ {exc}", file=sys.stderr)
             return 2
+        if inst_f != "all":
+            try:
+                validate_instance(inst_f)
+            except ValueError as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 2
+        derived_type = type_f
+        filters = {"type": derived_type, "target": target_f, "instance": inst_f}
+    else:
+        # ── Approve-Modus-Validierung (unverändert, v2.2: Fail-Fast) ──
+        if not rid:
+            print("❌ Keine Request-ID – --request-id oder APPROVE_ID setzen.", file=sys.stderr)
+            return 2
+        try:
+            validate_type(type_f)
+        except ValueError as exc:
+            print(f"❌ {exc}", file=sys.stderr)
+            return 2
+        valid, derived_type, err = validate_and_classify_id(rid, type_f)
+        if not valid:
+            print(f"❌ {err}", file=sys.stderr)
+            return 2
 
-    filters = {"type": derived_type, "target": target_f, "instance": inst_f}
+        if inst_f != "all":
+            try:
+                validate_instance(inst_f)
+            except ValueError as exc:
+                print(f"❌ {exc}", file=sys.stderr)
+                return 2
+
+        filters = {"type": derived_type, "target": target_f, "instance": inst_f}
 
     def log(msg: str) -> None:
         print(msg, file=sys.stderr)
 
     def write_summary(result: dict) -> None:
-        md = result_to_markdown(result)
+        # v3.1: Listen-Modus → list_result_to_markdown (Tabellen-Schema),
+        # Approve-/Discovery-Modus → result_to_markdown (Minor #7-Schema).
+        md = (
+            list_result_to_markdown(result)
+            if result.get("status") == "list_ok"
+            else result_to_markdown(result)
+        )
         sm = os.environ.get("GITHUB_STEP_SUMMARY", "")
         if sm:
             # Δ7 / Major #3: File-Open, KEIN >>-Redirect
@@ -307,6 +409,66 @@ def main(argv: Optional[List[str]] = None) -> int:
         if opts.summary:
             write_summary(result)
         return rc
+
+    # ── Listen-Modus (--list-only): aggregiert pending ueber alle VPS ──
+    if opts.list_only:
+        if is_local:
+            # Ergaenzung (Design §1/2c): Gateway-eigene pending Requests
+            entries, stats = run_local_list_discovery(derived_type, log=log)
+            result = build_list_result_json(
+                status="list_ok",
+                entries=entries,
+                scanned=stats["scanned"],
+                unreachable=stats["unreachable"],
+                filters_applied=filters,
+            )
+            return emit(result, 0)
+
+        if inst_map_path:
+            instance_map = load_instance_map_from_file(inst_map_path)
+        else:
+            instance_map = load_instance_map_from_ssot(ssot_root)
+
+        filtered_map = filter_instance_map(
+            instance_map, target_filter=target_f, instance_filter=inst_f
+        )
+        if not filtered_map:
+            print("❌ Keine Instanzen nach Filter (target/instance) uebrig.", file=sys.stderr)
+            return 2
+
+        if not all([vps_user, ssh_key, ts_tailnet, ts_cid, ts_csec]):
+            print(
+                "❌ SSH-Modus benoetigt VPS_USER, SSH_KEY_PATH, TS_TAILNET, "
+                "TS_CLIENT_ID, TS_CLIENT_SECRET (env oder --flags).",
+                file=sys.stderr,
+            )
+            return 2
+
+        token = fetch_tailscale_token(ts_cid, ts_csec)
+
+        def resolve_ip(node: str) -> Optional[str]:
+            return resolve_vps_ip(ts_tailnet, token, node)
+
+        def run_remote(ip: str, remote_cmd: str) -> str:
+            return run_remote_ssh(ip, vps_user, ssh_key, remote_cmd)
+
+        list_result = run_list_discovery(
+            filtered_map,
+            derived_type=derived_type,
+            resolve_ip=resolve_ip,
+            run_remote=run_remote,
+            log=log,
+        )
+        result = build_list_result_json(
+            status="list_ok",
+            entries=list_result.entries,
+            scanned=list_result.scanned,
+            unreachable=list_result.unreachable,
+            filters_applied=filters,
+        )
+        # Exit-Code-Vertrag Listen-Modus: 0 = Liste erstellt (auch leer), 1 =
+        # Infrastruktur-Fehler, 2 = Config-Fehler – leere Liste ist gruen.
+        return emit(result, 0)
 
     # ── Lokaler Modus ──
     if is_local:

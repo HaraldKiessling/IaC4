@@ -7,6 +7,12 @@ Mapping:
   found            → Tabelle mit Instanz/Typ/VPS
   status           → Ueberschrift-Status (✅ Gefunden / ❌ Fehler / ❌ Nicht gefunden)
 
+v3.1 (Listen-Modus): list_result_to_markdown() rendert das Listen-Schema
+({"status": "list_ok", "entries": [...], "scanned": [...],
+"unreachable": [...], "filters_applied": {...}}) als Job-Summary-Tabelle.
+Konventionen (Review R03/R04): Sortierung createdAtMs DESC (Sekundaerschluessel
+stabil), platform "" → "—" in der Tabelle (JSON = Wahrheit).
+
 v2.2: Status-Ueberschrift typ-spezifisch – found[0].type == "telegram" →
 "Telegram-Pairing-Freigabe", sonst "Device-Freigabe" (Δ7, Design §3e).
 
@@ -20,7 +26,35 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from typing import Optional
+
+
+# Listen-Modus: Typ-Label mit Emoji (Design §5.2)
+_LIST_TYPE_LABELS = {"telegram": "✈️ Telegram", "device": "📱 Device"}
+
+
+def _fmt_created(created_at_ms: int) -> str:
+    """createdAtMs (Millisekunden) → lesbares UTC-Datum (O2).
+
+    0 / fehlend → "—" (Darstellung, kein Datenpunkt).
+    """
+    if not created_at_ms:
+        return "—"
+    return datetime.fromtimestamp(
+        created_at_ms / 1000, tz=timezone.utc
+    ).strftime("%Y-%m-%d %H:%M")
+
+
+def _fmt_list_id(entry_id: str) -> str:
+    """ID in der Tabelle: lang (>24 Zeichen, v.a. Device-UUIDs) gekuerzt.
+
+    Darstellung nur – die Voll-ID steht im JSON-Output (Run-Log).
+    """
+    if len(entry_id) > 24:
+        return f"`{entry_id[:24]}…`"
+    return f"`{entry_id}`"
+
 
 
 def _found_type(result: dict) -> str:
@@ -88,6 +122,80 @@ def result_to_markdown(result: dict) -> str:
         lines.append(f"**Discovery-Scan:** {count} Instanz(en) geprueft — {scan_list}")
 
     # Filter
+    if filters:
+        filter_parts = [f"{k}={v}" for k, v in filters.items()]
+        lines.append(f"**Filter:** {' | '.join(filter_parts)}")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def list_result_to_markdown(result: dict) -> str:
+    """Listen-Ergebnis → Markdown-Tabelle (Job-Summary, Listen-Modus v3.1).
+
+    Erwartetes Eingabe-Schema (Design §11, build_list_result_json):
+    {
+      "status": "list_ok",
+      "entries": [{"instance": "oc1", "target": "dev", "type": "telegram",
+                    "id": "QVDCXJEM", "platform": "", "createdAtMs": …,
+                    "vps_ip": …}],
+      "scanned": ["dev/oc1", ...],
+      "unreachable": ["vps-prod"],
+      "filters_applied": {"type": "both", "target": "both", "instance": "all"}
+    }
+
+    Darstellungs-Konventionen (Review R03/R04, verbindlich):
+    - R03 Sortierung: createdAtMs DESC (neueste zuerst); Sekundaerschluessel
+      (target, instance, type, id) – deterministisch und stabil.
+    - R04 platform: JSON "" ist die Wahrheit (Telegram hat kein platform-Feld,
+      O7); die Tabelle rendert "" → "—" (Darstellung, JSON bleibt "").
+    - Erstellt: UTC (YYYY-MM-DD HH:MM, O2); fehlendes createdAtMs → "—".
+    - Leere Liste: "Keine offenen Requests" + Platzhalterzeile – Exit 0 bleibt
+      gruen (Owner-Vereinbarung: leere Liste ≠ Fehler).
+    - Lange IDs (>24 Zeichen) werden in der Tabelle gekuerzt (Voll-ID im JSON).
+    """
+    entries = sorted(
+        result.get("entries") or [],
+        # R03: neueste zuerst; Sekundaerschluessel stabil
+        key=lambda e: (
+            -(e.get("createdAtMs") or 0),
+            e.get("target", ""),
+            e.get("instance", ""),
+            e.get("type", ""),
+            e.get("id", ""),
+        ),
+    )
+    scanned = result.get("scanned") or []
+    unreachable = result.get("unreachable") or []
+    filters = result.get("filters_applied") or {}
+
+    if entries:
+        lines = ["## 📋 Pending-Requests — Übersicht", ""]
+    else:
+        lines = ["## 📋 Pending-Requests — Keine offenen Requests", ""]
+
+    lines.append("| # | Instanz | Typ | ID | Platform | Erstellt |")
+    lines.append("|---|---------|-----|----|----------|----------|")
+    if not entries:
+        lines.append("| — | — | — | — | — | — |")
+    for i, e in enumerate(entries, start=1):
+        inst_str = f"{e.get('target', '')}/{e.get('instance', '')}"
+        typ_label = _LIST_TYPE_LABELS.get(e.get("type", ""), e.get("type", ""))
+        platform = e.get("platform", "") or "—"  # R04: "" → "—" (Darstellung)
+        lines.append(
+            f"| {i} | {inst_str} | {typ_label} | {_fmt_list_id(e.get('id', ''))} "
+            f"| {platform} | {_fmt_created(e.get('createdAtMs', 0))} |"
+        )
+    lines.append("")
+
+    if scanned:
+        count = len(scanned)
+        scan_list = ", ".join(f"`{s}`" for s in sorted(set(scanned)))
+        lines.append(f"**Discovery-Scan:** {count} Instanz(en) geprüft — {scan_list}")
+    if unreachable:
+        lines.append(f"**Nicht erreichbar:** {', '.join(unreachable)}")
+    else:
+        lines.append("**Nicht erreichbar:** keine")
     if filters:
         filter_parts = [f"{k}={v}" for k, v in filters.items()]
         lines.append(f"**Filter:** {' | '.join(filter_parts)}")
