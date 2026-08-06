@@ -35,6 +35,8 @@ class FakeResponse:
         ("/approve   req_abc123", "req_abc123"),  # \s+ erlaubt mehrere Spaces
         ("  /approve req_abc123  ", "req_abc123"),  # strip vor Match
         ("/approve ABCDEFGH-ijkl_mnop", "ABCDEFGH-ijkl_mnop"),  # 16 Zeichen, alle Klassen
+        # Realfall 2026-08-06: UUID-Format (36 Zeichen, hex + Dash) aus der Control-UI
+        ("/approve b0999c46-ebe3-4c46-a72b-8b0a7c1df2d5", "b0999c46-ebe3-4c46-a72b-8b0a7c1df2d5"),
         ("/approve " + "a" * 64, "a" * 64),  # 64 = OK (Grenze)
     ],
 )
