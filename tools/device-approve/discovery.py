@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
-"""Discovery-Kern v2.2 – Unified ID-basierte Freigabe (Design 05 v2.2).
+"""Discovery-Kern v3.0 – Ein-Job-Fast-Path (Workflow-05-Performance-Optimierung).
 
-Korrigiert nach CLI-Fakten (v2.1-Annahme widerlegt, 2026-08-06):
-  Δ1: Telegram-Pairing erscheint NICHT in `devices list --json`, sondern in
-      `openclaw pairing list <channel> --json` – separater Befehlspfad.
-  Δ2: ZWEI Approve-Kommandos: `openclaw pairing approve telegram <CODE>` (Telegram)
-      vs. `openclaw devices approve <ID>` (Device).
-  Δ3/Δ5: ZWEI ID-Formate: Telegram-Kurzcode ^[A-Z0-9]{6,12}$ (z.B. QVDCXJEM)
-      und Device-ID ^[0-9a-fA-F-]{36,128}$ (64-Hex wie 9df47d69… oder UUID-Stil).
-  Δ4: Typ-Ableitung aus ID-Format (kein clientId/clientMode); expliziter
-      type-Input (telegram|device|both) überschreibt.
-  Δ6: Discovery ist strikt getrennt vom Approve (approve_step.py).
-      GITHUB_OUTPUT: request_id, found_target, found_instance, found_vps_ip,
-      found_type, derived_type.
+Korrigiert/erweitert nach CLI-Fakten + Review-Befunden R01-R08 (2026-08-06):
+  Δ1: Telegram-Pairing via `openclaw pairing list <channel> --json` (ID-Feld:
+      code), Device via `openclaw devices list --json` (ID-Feld: deviceId).
+  Δ2: ZWEI Approve-Kommandos: `openclaw pairing approve telegram <CODE>` vs.
+      `openclaw devices approve <ID>` – Templates liegen HIER (approve_step.py
+      re-exportiert sie, DRY ohne Zirkularimport).
+  v3.0 (Ein-Job-Design, R02/R08-Umsetzung):
+    - group_by_vps(): Instanz-Map nach target gruppieren → 1 SSH pro VPS
+      statt pro Instanz (Design §4).
+    - build_ein_job_remote_cmd(): Remote-Schleife mit JSON-/APPROVE-/FOUND-
+      Markern; type=both fragt pairing UND devices in DERSELBEN Session ab;
+      Approve-Befehl typabhängig; `|| true` fail-safe; break beim ersten Fund.
+    - parse_ein_job_output(): parst die Marker-Ausgabe und verifiziert den
+      ID-Match in Python (R08: KEIN jq auf den VPS – Remote-Entscheidung via
+      grep auf das JSON-Textfeld, autoritative Verifikation hier).
+    - run_discovery(): VPS-Gruppen-Loop; Approve direkt in der SSH-Session
+      beim Fund – auch auf prod (Owner-Entscheidung: kein Environment-Gate).
+  Bausteine aus v2.2 (behalten): Zwei-Format-ID-Validierung + Typ-Ableitung
+  (--validate-id), UNREACHABLE-Liste, Break-Semantik, injizierbare
+  Netzwerk-/SSH-Calls (unit-testbar ohne echte Tailscale-/SSH-Zugriffe).
 
 Empirisch (Sandbox, OpenClaw 2026.7.1, 2026-08-06):
   - `openclaw pairing list telegram --json` → {"channel": "telegram", "requests": []}
-    (F10 beantwortet: kein Fehler, Schema-Feld ist "requests"; der Parser liest
-    defensiv "requests" mit Fallback auf "pending" – F1a bleibt für Eintragsfelder offen)
   - `openclaw devices list --json` → {"pending": [...], "paired": [...]}
-
-Bausteine aus v1 (behalten): Tailscale-API fields=hostname,addresses,lastSeen mit
-'-1'-Suffix-Fallback (Major #6), UNREACHABLE-Liste (Minor #15), Break-Semantik,
-injizierbare Netzwerk-/SSH-Calls (unit-testbar ohne echte Tailscale-/SSH-Zugriffe).
 """
 
 from __future__ import annotations
@@ -35,8 +37,9 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
+from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 # ── ID-Formate v2.2 (disjunkte Regex-Mengen, Δ3/Δ5) ──
 # Telegram-Pairing-Kurzcode: 6-12 Zeichen A-Z0-9 (kalibriert an QVDCXJEM, 8 Zeichen)
@@ -49,22 +52,49 @@ DEVICE_ID_RE = re.compile(r"^[0-9a-fA-F-]{36,128}$")
 INSTANCE_RE = re.compile(r"^oc[1-9][0-9]*$")
 
 VALID_TYPES = ("auto", "telegram", "device", "both")
+# Typen, die als Remote-Schleifen-Quelle zulässig sind (auto ist aufgelöst)
+REMOTE_TYPES = ("telegram", "device", "both")
 
 SSH_OPTS = [
     "-o", "StrictHostKeyChecking=accept-new",
     "-o", "ConnectTimeout=10",
     "-o", "LogLevel=ERROR",
 ]
-# Δ1: getrennte Discovery-Quellen je Typ
+# Δ1: getrennte Discovery-Quellen je Typ (werden in der Remote-Schleife
+# pro Instanz ausgeführt; 2>/dev/null + `|| true` = fail-safe bei Instanz-Down)
 PAIRING_LIST_CMD = (
     "sudo docker exec openclaw-{instance} openclaw pairing list telegram --json 2>/dev/null"
 )
 DEVICES_LIST_CMD = (
     "sudo docker exec openclaw-{instance} openclaw devices list --json 2>/dev/null"
 )
+# Δ2: Approve-Kommandos je Typ (Templates HIER; approve_step.py re-exportiert)
+APPROVE_CMD_TEMPLATES = {
+    "telegram": "sudo docker exec openclaw-{instance} openclaw pairing approve telegram {request_id}",
+    "device": "sudo docker exec openclaw-{instance} openclaw devices approve {request_id}",
+}
+
+# Remote-Marker (v3.0): Label = Instanz [:Typ] – der Typ-Suffix macht type=both
+# in einer SSH-Session eindeutig parsebar (R02).
+_LABEL_RE = r"oc[1-9][0-9]*(?::(?:telegram|device))?"
+JSON_BLOCK_RE = re.compile(
+    rf"---JSON-BEGIN:(?P<label>{_LABEL_RE})---\n(?P<body>.*?)---JSON-END:(?P=label)---",
+    re.DOTALL,
+)
+APPROVE_BLOCK_RE = re.compile(
+    rf"---APPROVE-BEGIN:(?P<label>{_LABEL_RE})---\n(?P<body>.*?)---APPROVE-END:(?P=label)---",
+    re.DOTALL,
+)
+FOUND_RE = re.compile(r"---FOUND:(?P<found>[01])---")
 
 API_TIMEOUT = 30
-SSH_TIMEOUT = 25
+# Remote-Loop über alle Instanzen eines VPS (bei type=both 2 Quellen pro
+# Instanz) – grosszuegiger Timeout als der alte Pro-Instanz-Call.
+SSH_TIMEOUT = 60
+
+# Array-Key + ID-Feld je Quelle (für den Remote-Match ohne jq, R08)
+_SOURCE_ARRAY_KEY = {"telegram": "requests", "device": "pending"}
+_SOURCE_ID_FIELD = {"telegram": "code", "device": "deviceId"}
 
 
 def node_for_target(target: str) -> str:
@@ -154,7 +184,7 @@ def filter_instance_map(
     return result
 
 
-# ── Discovery-Result (einheitliches Teilschema, Minor #7) ──
+# ── Discovery-Result (einheitliches Teilschema, Minor #7; v3.0: +approved) ──
 
 
 @dataclass
@@ -166,6 +196,10 @@ class DiscoveryResult:
     found_type: str = "unknown"  # telegram|device (über welchen Pfad gefunden)
     scanned: List[str] = field(default_factory=list)
     unreachable: List[str] = field(default_factory=list)
+    # v3.0 (Ein-Job): approved=True wenn der Approve direkt in der SSH-Session
+    # bestätigt wurde (APPROVE-Marker + FOUND=1); approve_output = Session-Text
+    approved: bool = False
+    approve_output: str = ""
 
 
 class RequestNotFoundError(Exception):
@@ -219,31 +253,28 @@ def resolve_vps_ip(
     return None
 
 
-def list_entries_ssh(
-    instance: str, vps_ip: str, vps_user: str, ssh_key: str, typ: str
+def run_remote_ssh(
+    vps_ip: str,
+    vps_user: str,
+    ssh_key: str,
+    remote_cmd: str,
+    *,
+    runner=None,
+    timeout: int = SSH_TIMEOUT,
 ) -> str:
-    """SSH: typ-spezifische Discovery-Quelle (Δ1).
+    """SSH: führt das Ein-Job-Remote-Skript auf dem VPS aus (1 Call pro VPS).
 
-    telegram → `openclaw pairing list telegram --json` (ID-Feld: code)
-    device   → `openclaw devices list --json`            (ID-Feld: deviceId)
-
-    Fehler (z.B. pairing list ohne konfigurierten Kanal, F10) werden durch
-    stderr-Redirect + leerer stdout-Ausgabe gefangen → Discovery überspringt
-    die Instanz (fail-safe, Design §8).
+    Das Remote-Skript (build_ein_job_remote_cmd) wird als EIN Argument an ssh
+    übergeben und von der Remote-Shell ausgeführt – Argument-Liste, keine
+    lokale Shell, kein Injection-Vektor.
     """
-    if typ == "telegram":
-        remote_cmd = PAIRING_LIST_CMD.format(instance=instance)
-    elif typ == "device":
-        remote_cmd = DEVICES_LIST_CMD.format(instance=instance)
-    else:
-        raise ValueError(f"Unbekannter Discovery-Typ: {typ}")
     cmd = (
         ["ssh", "-i", ssh_key]
         + SSH_OPTS
         + [f"{vps_user}@{vps_ip}", remote_cmd]
     )
-    proc = subprocess.run(  # noqa: S603 – Befehle fix/parametrisiert, keine Shell
-        cmd, capture_output=True, text=True, timeout=SSH_TIMEOUT
+    proc = (runner or subprocess.run)(  # noqa: S603 – Befehle fix/parametrisiert, keine Shell
+        cmd, capture_output=True, text=True, timeout=timeout
     )
     return proc.stdout or ""
 
@@ -275,43 +306,238 @@ def entry_matches_id(entry: dict, request_id: str, typ: str) -> bool:
     return False
 
 
-# ── Discovery-Kern (v2.2: typ-spezifischer Pfad, types-outer) ──
+# ── Ein-Job-Remote-Loop (v3.0: 1 SSH pro VPS, Discovery + Approve) ──
 
 
-def _types_to_try(derived_type: str) -> List[str]:
-    """Discovery-Pfade aus dem (bereits validierten) Typ ableiten."""
-    if derived_type == "both":
-        return ["telegram", "device"]
-    if derived_type in ("telegram", "device"):
-        return [derived_type]
-    raise ValueError(
-        f"Ungueltiger Discovery-Typ: '{derived_type}'. Erlaubt: telegram, device, both."
+def group_by_vps(instance_map: List[Tuple[str, str]]) -> "OrderedDict[str, List[str]]":
+    """Gruppiert die Instanz-Map nach VPS (target) in Map-Reihenfolge.
+
+    Eine Gruppe = eine SSH-Session (1 SSH pro VPS, Design §4 / R02).
+    """
+    groups: "OrderedDict[str, List[str]]" = OrderedDict()
+    for name, target in instance_map:
+        groups.setdefault(target, []).append(name)
+    return groups
+
+
+def _source_specs(typ: str) -> List[Tuple[str, str, str]]:
+    """(source_typ, list_cmd_template, approve_cmd_template) je Remote-Quelle."""
+    if typ == "telegram":
+        return [("telegram", PAIRING_LIST_CMD, APPROVE_CMD_TEMPLATES["telegram"])]
+    if typ == "device":
+        return [("device", DEVICES_LIST_CMD, APPROVE_CMD_TEMPLATES["device"])]
+    # both: beide Quellen in DERSELBEN Session (R02)
+    return [
+        ("telegram", PAIRING_LIST_CMD, APPROVE_CMD_TEMPLATES["telegram"]),
+        ("device", DEVICES_LIST_CMD, APPROVE_CMD_TEMPLATES["device"]),
+    ]
+
+
+def build_ein_job_remote_cmd(
+    typ: str,
+    instances: List[str],
+    request_id: str,
+    *,
+    approve: bool = True,
+) -> str:
+    """Baut das Ein-Job-Remote-Shell-Template (1 SSH pro VPS).
+
+    Pro Instanz:
+      - JSON-Block je Quelle (telegram → pairing list, device → devices list;
+        type=both → beide Quellen in derselben Session, R02)
+      - bei approve: ID-Match im Textpfad (grep auf das JSON-Feld des
+        relevanten Arrays, KEIN jq – R08) → Approve direkt in der Session
+        (---APPROVE-BEGIN/END-Marker), break-Semantik (erster Fund stoppt)
+    `|| true` = fail-safe bei Instanz-Down (leere Ausgabe → kein Match).
+    Am Ende: `---FOUND:${FOUND}---`.
+
+    Raises:
+        ValueError: unbekannter Typ, leere Instanzliste, ungueltige Instanz
+                    oder ID (Format-Sperre, defense in depth).
+    """
+    if typ not in REMOTE_TYPES:
+        raise ValueError(
+            f"Ungueltiger Typ fuer Remote-Schleife: '{typ}'. Erlaubt: {', '.join(REMOTE_TYPES)}."
+        )
+    if not instances:
+        raise ValueError("Keine Instanzen fuer die Remote-Schleife uebergeben.")
+    for inst in instances:
+        validate_instance(inst)
+    validate_request_id(request_id, typ)
+
+    single_source = len(_source_specs(typ)) == 1
+    lines = ["FOUND=0", "for inst in " + " ".join(instances) + "; do"]
+    for src_typ, list_tmpl, approve_tmpl in _source_specs(typ):
+        var = "RESULT" if single_source else ("RESULT_TG" if src_typ == "telegram" else "RESULT_DEV")
+        array_key = _SOURCE_ARRAY_KEY[src_typ]
+        id_field = _SOURCE_ID_FIELD[src_typ]
+        list_cmd = list_tmpl.format(instance="${inst}")
+
+        lines.append(f'  echo "---JSON-BEGIN:${{inst}}:{src_typ}---"')
+        lines.append(f"  {var}=$({list_cmd} || true)")
+        lines.append(f"  printf '%s\\n' \"${var}\"")
+        lines.append(f'  echo "---JSON-END:${{inst}}:{src_typ}---"')
+
+        if approve:
+            approve_cmd = approve_tmpl.format(instance="${inst}", request_id=request_id)
+            # Array-Inhalt extrahieren (nur pending/requests, nicht paired) und
+            # ID-Feld matchen – kein jq, nur POSIX-Tools (R08).
+            lines.append(
+                f"  ENTRIES=$(printf '%s' \"${var}\" | tr -d '\\n' | "
+                f"sed -n 's/.*\"{array_key}\"[[:space:]]*:[[:space:]]*\\[\\([^]]*\\)\\].*/\\1/p')"
+            )
+            lines.append(
+                f"  if printf '%s' \"$ENTRIES\" | grep -qE '\"{id_field}\"[[:space:]]*:[[:space:]]*\"{request_id}\"'; then"
+            )
+            lines.append(f'    echo "---APPROVE-BEGIN:${{inst}}:{src_typ}---"')
+            lines.append(f"    {approve_cmd} 2>&1 || true")
+            lines.append(f'    echo "---APPROVE-END:${{inst}}:{src_typ}---"')
+            lines.append("    FOUND=1")
+            lines.append("    break")
+            lines.append("  fi")
+    lines.append("done")
+    lines.append('echo "---FOUND:${FOUND}---"')
+    return "\n".join(lines) + "\n"
+
+
+def _split_label(label: str) -> Tuple[str, str]:
+    """Marker-Label → (instance, typ); typ leer wenn ohne Suffix."""
+    parts = label.split(":")
+    return parts[0], (parts[1] if len(parts) > 1 else "")
+
+
+def _dedupe(items: List[str]) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
+def parse_ein_job_output(
+    stdout: str,
+    typ: str,
+    request_id: str = "",
+    target: str = "",
+) -> Optional[DiscoveryResult]:
+    """Parst die Ein-Job-Remote-Ausgabe (JSON-Blöcke + Approve-Blöcke + FOUND).
+
+    Marker (v3.0, R02-Umsetzung): `---JSON-BEGIN:<inst>:<typ>---` …
+    `---JSON-END:<inst>:<typ>---` (typ = telegram|device – auch bei type=both
+    eindeutig), `---APPROVE-BEGIN:<inst>:<typ>---` … `---APPROVE-END:...---`,
+    `---FOUND:1|0---`.
+
+    Der ID-Match wird hier in Python verifiziert (parse_entries +
+    entry_matches_id, R08); approved=True nur wenn zusätzlich APPROVE-Marker +
+    FOUND=1 vorliegen (Approve wirklich in der Session gelaufen).
+
+    Returns:
+        DiscoveryResult wenn die ID gefunden wurde (approved je nach Markern),
+        sonst None (kein Fund / fail-safe bei Instanz-Down / defekter JSON).
+    """
+    stdout = stdout or ""
+    found_m = FOUND_RE.search(stdout)
+    found_flag = bool(found_m and found_m.group("found") == "1")
+
+    scanned: List[str] = []
+    matched: Optional[Tuple[str, str, str]] = None  # (instance, typ, id)
+    for blk in JSON_BLOCK_RE.finditer(stdout):
+        label = blk.group("label")
+        instance, block_typ = _split_label(label)
+        scanned.append(f"{target}/{instance}" if target else instance)
+        body = blk.group("body").strip()
+        if not body:
+            continue  # fail-safe: Instanz down / leere Liste
+        try:
+            data = json.loads(body)
+        except (json.JSONDecodeError, TypeError):
+            continue  # fail-safe: defekte Ausgabe ueberspringen
+        for entry in parse_entries(data, block_typ):
+            if request_id and entry_matches_id(entry, request_id, block_typ):
+                matched = (
+                    instance,
+                    block_typ,
+                    entry.get("code") or entry.get("deviceId") or request_id,
+                )
+                break
+        if matched:
+            break
+
+    approve_blocks = list(APPROVE_BLOCK_RE.finditer(stdout))
+    approved = bool(approve_blocks) and found_flag
+
+    if matched:
+        instance, block_typ, matched_id = matched
+        rid = request_id or matched_id
+    elif approved:
+        # Approve-Marker sind autoritativ (Shell hat den Fund bestätigt) –
+        # konsistent mit dem Python-Match, da beide dieselben Felder nutzen.
+        instance, block_typ = _split_label(approve_blocks[0].group("label"))
+        rid = request_id
+    else:
+        return None
+
+    return DiscoveryResult(
+        request_id=rid,
+        instance=instance,
+        target=target,
+        vps_ip=None,  # wird von run_discovery gesetzt
+        found_type=block_typ,
+        scanned=_dedupe(scanned),
+        unreachable=[],
+        approved=approved,
+        approve_output="\n".join(
+            b.group("body").strip() for b in approve_blocks
+        ),
     )
+
+
+# ── Ein-Job-Kern (v3.0: VPS-Gruppierung + Remote-Loop mit Approve) ──
+
+
+def _write_github_output(path: str, result: DiscoveryResult, derived_type: str) -> None:
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(
+            f"request_id={result.request_id}\n"
+            f"found_target={result.target}\n"
+            f"found_instance={result.instance}\n"
+            f"found_vps_ip={result.vps_ip}\n"
+            f"found_type={result.found_type}\n"
+            f"derived_type={derived_type}\n"
+        )
 
 
 def run_discovery(
     instance_map: List[Tuple[str, str]],
     request_id: str,
     derived_type: str = "auto",
+    *,
     resolve_ip: Optional[Callable[[str], Optional[str]]] = None,
-    list_entries: Optional[Callable[[str, str, str, str], str]] = None,
+    run_remote: Optional[Callable[[str, str], str]] = None,
+    approve: bool = True,
     github_output: Optional[str] = None,
     log: Optional[Callable[[str], None]] = None,
 ) -> DiscoveryResult:
-    """Kernlogik: findet (instance, target, vps_ip, found_type) oder wirft
-    RequestNotFoundError.
+    """Ein-Job-Kern (v3.0): Discovery + Approve in EINER SSH-Session pro VPS.
 
-    Scan-Reihenfolge (Design §3c): types outer (telegram vor device bei 'both'),
-    Instanzen inner in Map-Reihenfolge; erster Fund stoppt den Scan (Break).
-    VPS-IPs werden pro Node gecacht (kein doppelter Tailscale-Call bei 'both').
+    Gruppiert die Instanz-Map nach VPS (group_by_vps), baut pro VPS das
+    Remote-Template (build_ein_job_remote_cmd) und parst die Marker-Ausgabe
+    (parse_ein_job_output). Der Approve läuft direkt in der SSH-Session beim
+    Fund – auch auf prod (Owner-Entscheidung: kein Environment-Gate).
 
     Args:
         instance_map: gefilterte [(instance_name, target), ...]
         request_id: zu suchende ID
         derived_type: telegram|device|both (auto wird aus dem ID-Format abgeleitet)
         resolve_ip(node) -> ip|None  (None = VPS down; wird als UNREACHABLE gesammelt)
-        list_entries(instance, target, vps_ip, typ) -> JSON-Ausgabe der Quelle
+        run_remote(vps_ip, remote_cmd) -> stdout der SSH-Session
+        approve: True = Ein-Job (Approve in der Session), False = nur Discovery
         github_output: Pfad für $GITHUB_OUTPUT (request_id, found_*, derived_type)
+
+    Raises:
+        RequestNotFoundError: ID auf keiner Instanz gefunden (unreachable-Liste)
     """
     log = log or (lambda _msg: None)
 
@@ -322,58 +548,40 @@ def run_discovery(
                 f"ID '{request_id}' passt zu keinem bekannten Format "
                 f"(Telegram: ^[A-Z0-9]{{6,12}}, Device: ^[0-9a-fA-F-]{{36,128}})"
             )
-    types_to_try = _types_to_try(derived_type)
 
     scanned: List[str] = []
     unreachable: List[str] = []
-    ip_cache: dict = {}
 
-    for typ in types_to_try:
-        for instance, target in instance_map:
-            node = node_for_target(target)
-            if node not in ip_cache:
-                ip_cache[node] = resolve_ip(node) if resolve_ip else None
-            ip = ip_cache[node]
-            if not ip:
-                unreachable.append(node)
-                log(f"⚠️  VPS {node} nicht erreichbar, ueberspringe")
-                continue
+    for target, instances in group_by_vps(instance_map).items():
+        node = node_for_target(target)
+        ip = resolve_ip(node) if resolve_ip else None
+        if not ip:
+            unreachable.append(node)
+            log(f"⚠️  VPS {node} nicht erreichbar, ueberspringe")
+            continue
 
-            log(f"🔍 Suche in {target}/{instance} (VPS {node}, Quelle: {typ})...")
-            output = list_entries(instance, target, ip, typ) if list_entries else ""
-            entry_label = f"{target}/{instance}"
-            if entry_label not in scanned:
-                scanned.append(entry_label)
+        remote_cmd = build_ein_job_remote_cmd(
+            derived_type, instances, request_id, approve=approve
+        )
+        log(f"🔍 SSH {node} ({target}): {', '.join(instances)} – Quelle(n): {derived_type}")
+        stdout = run_remote(ip, remote_cmd) if run_remote else ""
 
-            try:
-                data = json.loads(output) if output.strip() else {}
-            except (json.JSONDecodeError, TypeError) as exc:
-                log(f"⚠️  {typ}-Liste auf {target}/{instance} nicht als JSON parsebar – uebersprungen ({exc})")
-                continue
+        result = parse_ein_job_output(stdout, derived_type, request_id, target)
+        if result is None:
+            continue  # kein Fund auf diesem VPS → nächster VPS
 
-            for entry in parse_entries(data, typ):
-                if entry_matches_id(entry, request_id, typ):
-                    result = DiscoveryResult(
-                        request_id=request_id,
-                        instance=instance,
-                        target=target,
-                        vps_ip=ip,
-                        found_type=typ,
-                        scanned=scanned,
-                        unreachable=unreachable,
-                    )
-                    if github_output:
-                        with open(github_output, "a", encoding="utf-8") as fh:
-                            fh.write(
-                                f"request_id={result.request_id}\n"
-                                f"found_target={result.target}\n"
-                                f"found_instance={result.instance}\n"
-                                f"found_vps_ip={result.vps_ip}\n"
-                                f"found_type={result.found_type}\n"
-                                f"derived_type={derived_type}\n"
-                            )
-                    log(f"✅ Request-ID in {target}/{instance} gefunden (Typ: {typ})!")
-                    return result
+        result.vps_ip = ip
+        result.scanned = _dedupe(scanned + result.scanned)
+        result.unreachable = list(unreachable)
+        if github_output:
+            _write_github_output(github_output, result, derived_type)
+        if result.approved:
+            log(f"✅ Request-ID in {target}/{result.instance} gefunden und freigegeben "
+                f"(Typ: {result.found_type})!")
+        else:
+            log(f"🔎 Request-ID in {target}/{result.instance} gefunden "
+                f"(Typ: {result.found_type}, ohne Approve)")
+        return result
 
     raise RequestNotFoundError(request_id, unreachable)
 
@@ -421,7 +629,7 @@ def _load_instance_map(path: str) -> List[Tuple[str, str]]:
 def main(argv: Optional[List[str]] = None) -> int:
     args = list(sys.argv[1:]) if argv is None else argv
     parser = argparse.ArgumentParser(
-        description="D1-Discovery-Scan v2.2 (typ-spezifische Quellen, GITHUB_OUTPUT)"
+        description="D1-Discovery-Scan v3.0 (Ein-Job: 1 SSH pro VPS, optional Approve in der Session)"
     )
     parser.add_argument("--instance-map", help="Datei mit 'name|target'-Zeilen")
     parser.add_argument("--request-id", help="Request-ID (Kurzcode ODER Device-ID)")
@@ -434,6 +642,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--ts-client-id")
     parser.add_argument("--ts-client-secret")
     parser.add_argument("--result-json", help="Ergebnis-JSON in Datei schreiben (optional)")
+    parser.add_argument("--approve", action="store_true",
+                        help="Ein-Job: Approve direkt in der SSH-Session beim Fund (v3.0)")
     # Validierungs-Modus (Workflow-Step "Eingaben validieren", DRY mit approve.py)
     parser.add_argument("--validate-id", help="Nur ID validieren + Typ ableiten (stdout), exit 0/2")
     opts = parser.parse_args(args)
@@ -497,8 +707,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     def resolve_ip(node: str) -> Optional[str]:
         return resolve_vps_ip(opts.ts_tailnet, token, node)
 
-    def list_entries(instance: str, _target: str, ip: str, typ: str) -> str:
-        return list_entries_ssh(instance, ip, opts.vps_user, opts.ssh_key, typ)
+    def run_remote(ip: str, remote_cmd: str) -> str:
+        return run_remote_ssh(ip, opts.vps_user, opts.ssh_key, remote_cmd)
 
     try:
         result = run_discovery(
@@ -506,7 +716,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             opts.request_id,
             derived_type=derived_type,
             resolve_ip=resolve_ip,
-            list_entries=list_entries,
+            run_remote=run_remote,
+            approve=opts.approve,
             github_output=os.environ.get("GITHUB_OUTPUT"),
             log=log,
         )
@@ -521,6 +732,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
             with open(opts.result_json, "w", encoding="utf-8") as fh:
                 json.dump(result_obj, fh, ensure_ascii=False)
+        return 1
+
+    if opts.approve and not result.approved:
+        print(
+            f"❌ ID '{opts.request_id}' gefunden, aber Approve wurde nicht in der "
+            "SSH-Session bestätigt (APPROVE-Marker fehlen).",
+            file=sys.stderr,
+        )
         return 1
 
     if opts.result_json:

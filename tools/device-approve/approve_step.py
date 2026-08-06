@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Approve-only-Step v2.2 – typ-spezifischer SSH-Approve (Rollen-Trennung, Major #2).
+"""Approve-only-Modul v3.0 – typ-spezifischer SSH-Approve (Library).
 
 Korrigiert nach CLI-Fakten (Δ2, 2026-08-06):
   telegram → `sudo docker exec openclaw-<inst> openclaw pairing approve telegram <CODE>`
   device   → `sudo docker exec openclaw-<inst> openclaw devices approve <ID>`
 
-Discovery laeuft im eigenen Job (discovery.py); dieses Script fuehrt NUR den
-Approve aus. Das Environment-Gate im approve-Job bleibt damit wirksam.
+v3.0 (Ein-Job-Design): Der Workflow 05 ruft dieses Modul NICHT mehr auf – der
+Approve läuft direkt in der Ein-Job-SSH-Session (build_ein_job_remote_cmd in
+discovery.py, R03-E12). Dieses Modul bleibt als Library erhalten (lokale/
+manuelle SSH-Approve-Aufrufe, Tests):
+  - build_approve_cmd / validate_and_build_cmd / run_approve_ssh
+  - APPROVE_CMD_TEMPLATES werden aus discovery.py re-exportiert (Single Source
+    of Truth – die Ein-Job-Remote-Schleife nutzt dieselben Templates).
 
 Validation (defense in depth):
   - Request-ID typ-spezifisch: telegram ^[A-Z0-9]{6,12}$ / device ^[0-9a-fA-F-]{36,128}$
@@ -52,11 +57,9 @@ SSH_OPTS = [
 ]
 SSH_TIMEOUT = 30
 
-# Δ2: zwei Approve-Befehlstemplates statt einem
-APPROVE_CMD_TEMPLATES = {
-    "telegram": "sudo docker exec openclaw-{instance} openclaw pairing approve telegram {request_id}",
-    "device": "sudo docker exec openclaw-{instance} openclaw devices approve {request_id}",
-}
+# Δ2: zwei Approve-Befehlstemplates statt einem – Single Source of Truth in
+# discovery.py (die Ein-Job-Remote-Schleife nutzt dieselben Templates).
+APPROVE_CMD_TEMPLATES = discovery.APPROVE_CMD_TEMPLATES
 
 VALID_TYPES = ("telegram", "device")
 

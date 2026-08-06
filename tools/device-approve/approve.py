@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
-"""CLI-Fassade v2.2 – Unified Freigabe (Design 05 v2.2, E3).
+"""CLI-Fassade v3.0 – Unified Freigabe (Ein-Job-Fast-Path, Workflow-05-Optimierung).
 
-Drei Modi:
-  1. SSH-Modus (Default): Discovery (SSH, typ-spezifische Quelle) + Approve (SSH)
-  2. Lokaler Modus (--local / APPROVE_LOCAL=1): openclaw CLI direkt auf dem Gateway
-     (Owner-Testläufe ohne SSH/Tailscale; Δ1: pairing list vs. devices list)
-  3. --discover-only: Discovery ohne Approve (lokale Tests / Orchestrator)
+Modi:
+  1. SSH-Modus (Default / --full-run): Discovery + Approve in EINEM Aufruf –
+     pro VPS EINE SSH-Session (Remote-Loop mit JSON-/APPROVE-/FOUND-Markern,
+     discovery.py v3.0). Der Approve läuft direkt in der Session beim Fund –
+     auch auf prod (Owner-Entscheidung: kein Environment-Gate).
+  2. Lokaler Modus (--local / APPROVE_LOCAL=1): openclaw CLI direkt auf dem
+     Gateway (Owner-Testläufe ohne SSH/Tailscale).
+  3. --discover-only: Discovery ohne Approve (Debug/Test).
 
 --summary: JSON auf stdout + Markdown direkt in $GITHUB_STEP_SUMMARY via
 File-Open (Review Major #3, Δ7).
 
-v2.2-Korrekturen (CLI-Fakten, 2026-08-06):
-  Δ2: Approve-Kommando typ-spezifisch (pairing approve telegram <CODE> vs.
-      devices approve <ID>) – delegiert an approve_step.py.
-  Δ3/Δ5: Zwei ID-Formate (Kurzcode ^[A-Z0-9]{6,12}$ / Device-ID ^[0-9a-fA-F-]{36,128}$).
-  Δ4: Typ-Ableitung aus ID-Format; type-Input überschreibt (auto|telegram|device|both).
-  Δ6: approve.py = discovery-only-Rolle; Vollausführung ruft approve_step.py.
+v3.0-Änderungen (Review R01-R08):
+  - --full-run-Flag: Workflow-Standard (Ein-Job); Discovery + Approve in einem
+    Call, 1 SSH pro VPS (group_by_vps), approve_step.py wird nicht mehr
+    separat aufgerufen (R03-E12).
+  - Input-Name bleibt `id` (Telegram-Bot-Payload client_payload.id, R01);
+    instance-Filter bleibt erhalten (R04).
+  - Auth: auth_check.sh im Workflow (R07), ID-Validierung via
+    discovery.py --validate-id (unverändert).
 
 Env-Vars (statt GH-Context, fuer lokale Owner-Testlaeufe):
   APPROVE_ID, APPROVE_TYPE, APPROVE_TARGET, APPROVE_INSTANCE,
@@ -24,7 +29,7 @@ Env-Vars (statt GH-Context, fuer lokale Owner-Testlaeufe):
   SSOT_ROOT (default: .), APPROVE_LOCAL (1 = lokaler Modus)
 
 Rueckgabe-Schema (Minor #7):
-  {"status": "approved|not_found|error", "id": "...", "found": [...],
+  {"status": "approved|found|not_found|error", "id": "...", "found": [...],
    "scanned": [...], "filters_applied": {type, target, instance}}
 """
 
@@ -59,7 +64,6 @@ def _load_sibling_module(filename: str, unique_name: str):
 
 
 discovery = _load_sibling_module("discovery.py", "device_approve.discovery")
-from approve_step import run_approve_ssh  # type: ignore[import-untyped]
 from summary import result_to_markdown  # type: ignore[import-untyped]
 
 DiscoveryResult = discovery.DiscoveryResult
@@ -68,9 +72,9 @@ build_result_json = discovery.build_result_json
 derive_type = discovery.derive_type
 fetch_tailscale_token = discovery.fetch_tailscale_token
 filter_instance_map = discovery.filter_instance_map
-list_entries_ssh = discovery.list_entries_ssh
 resolve_vps_ip = discovery.resolve_vps_ip
 run_discovery = discovery.run_discovery
+run_remote_ssh = discovery.run_remote_ssh
 validate_and_classify_id = discovery.validate_and_classify_id
 validate_instance = discovery.validate_instance
 validate_type = discovery.validate_type
@@ -219,7 +223,7 @@ def run_local_approve(
 def main(argv: Optional[List[str]] = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     ap = argparse.ArgumentParser(
-        description="Unified Freigabe v2.2 – CLI-Fassade (--discover-only, --summary, --local)"
+        description="Unified Freigabe v3.0 – CLI-Fassade (--full-run Ein-Job, --discover-only, --summary, --local)"
     )
     ap.add_argument("--request-id", help="Request-ID (oder env APPROVE_ID)")
     ap.add_argument("--type-filter", default=None, help="auto|telegram|device|both")
@@ -233,10 +237,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--ts-client-id", help="Tailscale-OAuth-Client-ID (env TS_CLIENT_ID)")
     ap.add_argument("--ts-client-secret", help="Tailscale-OAuth-Client-Secret (env TS_CLIENT_SECRET)")
     ap.add_argument("--discover-only", action="store_true", help="Nur Discovery, kein Approve")
+    ap.add_argument("--full-run", action="store_true",
+                    help="Ein-Job: Discovery + Approve in einem Aufruf (Workflow-Standard v3.0)")
     ap.add_argument("--summary", action="store_true", help="Markdown-Summary in $GITHUB_STEP_SUMMARY")
     ap.add_argument("--local", action="store_true", help="Lokaler Modus ohne SSH (env APPROVE_LOCAL=1)")
 
     opts = ap.parse_args(argv)
+
+    if opts.full_run and opts.discover_only:
+        ap.error("--full-run und --discover-only schliessen sich aus")
 
     # Env-Overrides
     rid = opts.request_id or os.environ.get("APPROVE_ID", "")
@@ -365,8 +374,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     def resolve_ip(node: str) -> Optional[str]:
         return resolve_vps_ip(ts_tailnet, token, node)
 
-    def list_entries(instance: str, _target: str, ip: str, typ: str) -> str:
-        return list_entries_ssh(instance, ip, vps_user, ssh_key, typ)
+    def run_remote(ip: str, remote_cmd: str) -> str:
+        # v3.0: Ein SSH-Call pro VPS mit dem Ein-Job-Remote-Skript
+        # (Discovery + Approve in der Session, 1-SSH-pro-VPS-Optimierung)
+        return run_remote_ssh(ip, vps_user, ssh_key, remote_cmd)
 
     try:
         result = run_discovery(
@@ -374,10 +385,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             rid,
             derived_type=derived_type,
             resolve_ip=resolve_ip,
-            list_entries=list_entries,
+            run_remote=run_remote,
+            approve=not opts.discover_only,
             # Run-#36-Fix: $GITHUB_OUTPUT nur im Workflow gesetzt; lokal (None)
-            # bleibt der bisherige Bibliotheks-/CLI-Pfad unveraendert (analog
-            # discovery.py-CLI, der github_output=os.environ.get(...) nutzt).
+            # bleibt der bisherige Bibliotheks-/CLI-Pfad unveraendert.
             github_output=os.environ.get("GITHUB_OUTPUT"),
             log=log,
         )
@@ -409,17 +420,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return emit(result_obj, 0)
 
-    # Approve per SSH (typ-spezifisch, Δ2, via approve_step.py)
-    try:
-        proc = run_approve_ssh(
-            found_type=result.found_type,
-            instance=result.instance,
-            vps_ip=result.vps_ip or "",
-            vps_user=vps_user,
-            ssh_key=ssh_key,
-            request_id=rid,
-        )
-    except subprocess.TimeoutExpired:
+    if not result.approved:
+        # Ein-Job-Inkonsistenz: ID in der SSH-Session gefunden, aber kein
+        # APPROVE-Marker (Remote-Match/Approve fehlgeschlagen) → laut scheitern.
         final = build_result_json(
             status="error",
             request_id=rid,
@@ -434,9 +437,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return emit(final, 1)
 
-    status = "approved" if proc.returncode == 0 else "error"
     final = build_result_json(
-        status=status,
+        status="approved",
         request_id=rid,
         found=[{
             "target": result.target,
@@ -447,7 +449,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         scanned=result.scanned,
         filters_applied=filters,
     )
-    return emit(final, 0 if proc.returncode == 0 else 1)
+    return emit(final, 0)
 
 
 if __name__ == "__main__":
