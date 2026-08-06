@@ -13,6 +13,7 @@ bekommt nur das Dispatch-Bestaetigungs-204. Callback/Run-Polling als Folgeausbau
 | `bot.py` | Bot-Logik: `parse_request_id()`, `is_authorized()`, `dispatch_request()`, `handle_message()` |
 | `auth_check.sh` | Ausgelagerter Auth-Check (identische Logik wie Workflow 06, unit-testbar) |
 | `sot_parser.py` | SSoT-Parser `ansible/group_vars/vps-*.yml` → `name\|target` (geteilt mit Workflow 06 + Tests) |
+| `discovery.py` | D1-Discovery-Scan: Request-ID instanzuebergreifend suchen (geteilt mit Workflow 06 + Tests; Nachtrag 2026-08-06) |
 | `requirements.txt` | Python-Abhaengigkeiten (`requests`) |
 
 ## Sicherheits-Design (reviewed Konzept §2.3)
@@ -69,6 +70,15 @@ Empirisch auf vps-dev/oc1 pruefen, ob `openclaw devices approve <id>` bei bereit
 bestaetigter ID **harmlos** ist (dann bleibt der Call ohne `|| true`) oder
 **fehlschlaegt** (dann Pre-Check "bereits confirmed" bzw. `|| true` im Workflow 06
 einbauen). Ergebnis im Workflow-Kommentar fixieren.
+
+## Realfall / Motivation fuer den Discovery-Scan (Nachtrag 2026-08-06)
+
+Am 2026-08-06 wurde versucht, die Request-ID `b0999c46-ebe3-4c46-a72b-8b0a7c1df2d5`
+per Telegram freizugeben. Auf dem lokalen/aufrufenden Gateway war sie NICHT pending
+(`pending: []`), ein Remote-Gateway-Zugriff war lokal nicht moeglich. Genau diesen
+Fall loest der D1-Discovery-Scan (Workflow 06, `discovery.py`): die ID wird
+instanzuebergreifend auf der richtigen Instanz gesucht, unabhaengig davon, woher
+angefragt wird.
 
 ## Tests
 
