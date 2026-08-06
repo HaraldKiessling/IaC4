@@ -1,9 +1,14 @@
-"""Tests fuer tools/device-approve/approve_step.py v2.2 (Major #2, Δ2).
+"""Tests fuer tools/device-approve/approve_step.py v3.0 (Library-Modul).
 
 Abgedeckt: typ-spezifisches Approve-Kommando (telegram → pairing approve
 telegram <CODE>, device → devices approve <ID>), ID/Instanz-Validierung
 (defense in depth), subprocess-Erfolg/Fehler/Timeout, CLI-Wiring,
 build_approve_result.
+
+v3.0 (R03-E12): approve_step.py wird vom Workflow NICHT mehr aufgerufen
+(Ein-Job-Design – Approve läuft in der SSH-Session, discovery.py
+build_ein_job_remote_cmd). Dieses Modul bleibt als Library erhalten; die
+Templates werden aus discovery.py re-exportiert (Single Source of Truth).
 """
 
 import json

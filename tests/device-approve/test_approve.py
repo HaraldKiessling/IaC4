@@ -1,9 +1,14 @@
-"""Tests fuer tools/device-approve/approve.py – CLI-Fassade v2.2 (Design 05 v2.2, E3).
+"""Tests fuer tools/device-approve/approve.py – CLI-Fassade v3.0 (Ein-Job).
 
-Abgedeckt: --discover-only (SSH + lokal), --summary (GITHUB_STEP_SUMMARY),
+Abgedeckt: --full-run (Ein-Job: Discovery + Approve in einem Call, 1 SSH pro
+VPS), --discover-only (SSH + lokal), --summary (GITHUB_STEP_SUMMARY),
 lokaler Modus (APPROVE_LOCAL=1, openclaw CLI), not_found-Pfad mit Test-IDs
 (QVDCXJEM → pairing-Pfad; b0999c46-.../2e68bca9-... → device-Pfad; erwartet
 not_found lokal), Typ-Ableitung (auto), Env-Var-Modus, Filter, Validierung.
+
+v3.0 (R03-Migration): SSH-Pfad mockt run_remote_ssh (Ein-Job-Remote-Skript mit
+JSON-/APPROVE-/FOUND-Markern) statt list_entries_ssh/run_approve_ssh –
+Discovery + Approve laufen in EINEM Aufruf.
 """
 
 import json
@@ -56,6 +61,15 @@ def fake_pairing_json(code):
     return json.dumps({"channel": "telegram", "requests": [
         {"code": code, "userId": "7145674995", "channel": "telegram"},
     ]})
+
+
+def ein_job_stdout(instance, typ, body, *, approve=True, found=1):
+    """Ein-Job-Remote-Ausgabe (Marker-Format v3.0: Label = inst:typ)."""
+    out = f"---JSON-BEGIN:{instance}:{typ}---\n{body}\n---JSON-END:{instance}:{typ}---\n"
+    if approve:
+        out += f"---APPROVE-BEGIN:{instance}:{typ}---\nDevice approved.\n---APPROVE-END:{instance}:{typ}---\n"
+    out += f"---FOUND:{found}---\n"
+    return out
 
 
 # ── Lokale Discovery (Δ1: getrennte Quellen) ──
@@ -354,7 +368,7 @@ class TestApproveCli:
         rc = approve.main(["--local", "--discover-only"])
         assert rc == 2
 
-    # ── Env-Var Mode (SSH) ──
+    # ── Env-Var Mode (SSH, Ein-Job v3.0) ──
 
     def test_ssh_mode_with_env_vars_discover_only(self, tmp_path, monkeypatch, capsys, ssh_env):
         """SSH-Config ueber Env-Vars, --discover-only, device-Pfad."""
@@ -363,8 +377,8 @@ class TestApproveCli:
         monkeypatch.setattr(approve, "fetch_tailscale_token", lambda cid, cs: "tok")
         monkeypatch.setattr(approve, "resolve_vps_ip",
                             lambda tailnet, tok, node, timeout=30: "100.64.0.1")
-        monkeypatch.setattr(approve, "list_entries_ssh",
-                            lambda inst, ip, user, key, typ: json.dumps({"pending": [], "paired": []}))
+        monkeypatch.setattr(approve, "run_remote_ssh",
+                            lambda ip, user, key, cmd: ein_job_stdout("oc1", "device", json.dumps({"pending": [], "paired": []}), found=0))
         rc = approve.main(["--discover-only"])
         assert rc == 1  # not_found
         data = json.loads(capsys.readouterr().out)
@@ -377,8 +391,8 @@ class TestApproveCli:
         monkeypatch.setattr(approve, "fetch_tailscale_token", lambda cid, cs: "tok")
         monkeypatch.setattr(approve, "resolve_vps_ip",
                             lambda tailnet, tok, node, timeout=30: "100.64.0.1")
-        monkeypatch.setattr(approve, "list_entries_ssh",
-                            lambda inst, ip, user, key, typ: fake_devices_json(REAL_ID))
+        monkeypatch.setattr(approve, "run_remote_ssh",
+                            lambda ip, user, key, cmd: ein_job_stdout("oc1", "device", fake_devices_json(REAL_ID)))
         rc = approve.main(["--discover-only"])
         assert rc == 0
         data = json.loads(capsys.readouterr().out)
@@ -387,10 +401,9 @@ class TestApproveCli:
         assert data["found"][0]["instance"] == "oc1"
 
     def test_ssh_mode_found_writes_github_output(self, tmp_path, monkeypatch, capsys, ssh_env):
-        """Run-#36-Regression: GITHUB_OUTPUT gesetzt → approve.py-Pfad von
-        run_discovery schreibt request_id/found_*/derived_type in die Datei
-        (analog discovery.py-CLI; vorher fehlte github_output= → leere
-        Job-Outputs, Approve-Job scheiterte mit 'Unbekannter Typ: ""')."""
+        """Run-#36-Regression: GITHUB_OUTPUT gesetzt → run_discovery (Ein-Job)
+        schreibt request_id/found_*/derived_type in die Datei (Job-Outputs für
+        Debug/Audit; im Ein-Job-Design kein Job-Handoff mehr nötig)."""
         gh_out = tmp_path / "github-output.txt"
         monkeypatch.setenv("GITHUB_OUTPUT", str(gh_out))
         map_path = self._write_map(tmp_path, ["oc2|prod"])
@@ -401,8 +414,8 @@ class TestApproveCli:
         monkeypatch.setattr(approve, "fetch_tailscale_token", lambda cid, cs: "tok")
         monkeypatch.setattr(approve, "resolve_vps_ip",
                             lambda tailnet, tok, node, timeout=30: "100.77.47.98")
-        monkeypatch.setattr(approve, "list_entries_ssh",
-                            lambda inst, ip, user, key, typ: fake_pairing_json(TG_CODE))
+        monkeypatch.setattr(approve, "run_remote_ssh",
+                            lambda ip, user, key, cmd: ein_job_stdout("oc2", "telegram", fake_pairing_json(TG_CODE)))
         rc = approve.main(["--discover-only"])
         assert rc == 0
         content = gh_out.read_text(encoding="utf-8")
@@ -413,29 +426,71 @@ class TestApproveCli:
         assert "found_type=telegram" in content
         assert "derived_type=telegram" in content
 
-    def test_ssh_mode_full_approve(self, tmp_path, monkeypatch, capsys, ssh_env):
-        """Vollausfuehrung SSH: run_discovery-Fund → run_approve_ssh (typ-spezifisch)."""
+    def test_ssh_mode_full_run_approves_in_session(self, tmp_path, monkeypatch, capsys, ssh_env):
+        """Ein-Job: run_discovery findet die ID, Approve läuft in der SSH-Session
+        (APPROVE-Marker) → status approved (kein separater approve_step-Aufruf)."""
         monkeypatch.setenv("APPROVE_ID", TG_CODE)  # Telegram-Kurzcode → pairing-Pfad
         map_path = self._write_map(tmp_path, ["oc1|dev"])
         monkeypatch.setenv("INSTANCE_MAP", map_path)
         monkeypatch.setattr(approve, "fetch_tailscale_token", lambda cid, cs: "tok")
         monkeypatch.setattr(approve, "resolve_vps_ip",
                             lambda tailnet, tok, node, timeout=30: "100.64.0.1")
-        monkeypatch.setattr(approve, "list_entries_ssh",
-                            lambda inst, ip, user, key, typ: fake_pairing_json(TG_CODE))
-        seen = []
-        monkeypatch.setattr(
-            approve, "run_approve_ssh",
-            lambda found_type, instance, vps_ip, vps_user, ssh_key, request_id, **kw: (
-                seen.append((found_type, instance, request_id)) or FakeCompletedProcess(0)
-            ),
-        )
-        rc = approve.main([])
+        seen_cmds = []
+
+        def fake_remote(ip, user, key, cmd):
+            seen_cmds.append(cmd)
+            return ein_job_stdout("oc1", "telegram", fake_pairing_json(TG_CODE))
+
+        monkeypatch.setattr(approve, "run_remote_ssh", fake_remote)
+        rc = approve.main(["--full-run"])
         assert rc == 0
         data = json.loads(capsys.readouterr().out)
         assert data["status"] == "approved"
         assert data["found"][0]["type"] == "telegram"
-        assert seen == [("telegram", "oc1", TG_CODE)]
+        assert data["found"][0]["instance"] == "oc1"
+        # Approve-Kommando steckt im Ein-Job-Remote-Skript (in-session)
+        assert "openclaw pairing approve telegram " + TG_CODE in seen_cmds[0]
+
+    def test_ssh_mode_full_run_prod_no_gate(self, tmp_path, monkeypatch, capsys, ssh_env):
+        """Ein-Job prod: Fund auf prod/oc2 → approved OHNE Environment-Gate
+        (Owner-Entscheidung: kein Required Reviewer, kein Klick)."""
+        monkeypatch.setenv("APPROVE_ID", TG_CODE)
+        map_path = self._write_map(tmp_path, ["oc2|prod"])
+        monkeypatch.setenv("INSTANCE_MAP", map_path)
+        monkeypatch.setenv("APPROVE_TARGET", "prod")
+        monkeypatch.setattr(approve, "fetch_tailscale_token", lambda cid, cs: "tok")
+        monkeypatch.setattr(approve, "resolve_vps_ip",
+                            lambda tailnet, tok, node, timeout=30: "100.64.0.2")
+        monkeypatch.setattr(approve, "run_remote_ssh",
+                            lambda ip, user, key, cmd: ein_job_stdout("oc2", "telegram", fake_pairing_json(TG_CODE)))
+        rc = approve.main(["--full-run"])
+        assert rc == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["status"] == "approved"
+        assert data["found"][0]["target"] == "prod"
+        assert data["found"][0]["instance"] == "oc2"
+
+    def test_ssh_mode_full_run_found_but_approve_marker_missing(self, tmp_path, monkeypatch, capsys, ssh_env):
+        """Ein-Job-Inkonsistenz: ID gefunden, aber kein APPROVE-Marker in der
+        Session → status error, exit 1 (laut scheitern statt stiller Nicht-Approve)."""
+        monkeypatch.setenv("APPROVE_ID", TG_CODE)
+        map_path = self._write_map(tmp_path, ["oc1|dev"])
+        monkeypatch.setenv("INSTANCE_MAP", map_path)
+        monkeypatch.setattr(approve, "fetch_tailscale_token", lambda cid, cs: "tok")
+        monkeypatch.setattr(approve, "resolve_vps_ip",
+                            lambda tailnet, tok, node, timeout=30: "100.64.0.1")
+        monkeypatch.setattr(approve, "run_remote_ssh",
+                            lambda ip, user, key, cmd: ein_job_stdout("oc1", "telegram", fake_pairing_json(TG_CODE), approve=False))
+        rc = approve.main(["--full-run"])
+        assert rc == 1
+        data = json.loads(capsys.readouterr().out)
+        assert data["status"] == "error"
+
+    def test_full_run_conflicts_with_discover_only(self, monkeypatch, capsys, ssh_env):
+        monkeypatch.setenv("APPROVE_ID", TG_CODE)
+        with pytest.raises(SystemExit) as excinfo:
+            approve.main(["--full-run", "--discover-only"])
+        assert excinfo.value.code == 2
 
     def test_ssh_mode_missing_config_exits_2(self, tmp_path, monkeypatch, capsys):
         """Ohne SSH-Config im SSH-Modus → exit 2."""

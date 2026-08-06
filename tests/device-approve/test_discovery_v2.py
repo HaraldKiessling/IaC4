@@ -1,4 +1,4 @@
-"""Tests fuer tools/device-approve/discovery.py v2.2 (Design 05 v2.2).
+"""Tests fuer tools/device-approve/discovery.py v3.0 (Ein-Job-Fast-Path).
 
 Abgedeckt: Zwei-Format-ID-Validierung + Typ-Ableitung (Δ3/Δ5), getrennte
 Discovery-Quellen (Δ1: pairing list fuer telegram, devices list fuer device),
@@ -6,6 +6,11 @@ Typ-Filter both, GITHUB_OUTPUT (request_id + found_* + derived_type),
 RequestNotFoundError mit scanned/unreachable, Filter-Validierung,
 Break-Semantik, CLI-Wiring inkl. --validate-id, result-json, v1-Regression
 (Tailscale -1-Fallback).
+
+v3.0 (R03-Migration): run_discovery nutzt die Ein-Job-Funktionen
+(group_by_vps, build_ein_job_remote_cmd, parse_ein_job_output, run_remote_ssh)
+– 1 SSH pro VPS, Approve in der Session. Die Remote-Loop-Details liegen in
+tests/device-approve/test_ein_job.py.
 
 Import-Strategie: importlib.util (SourceFileLoader) vermeidet sys.path-Konflikt
 mit tools/telegram-approve-bot/discovery.py (gleicher Modulname).
@@ -280,86 +285,119 @@ class TestParseEntries:
         assert entries[0]["deviceId"] == DEVICE_UUID
 
 
-# ── Discovery-Kern (Δ1: getrennte Quellen) ──
+def ein_job_stdout(instance, typ, body, *, approve=True, found=1):
+    """Marker-Format v3.0: Label = inst:typ (R02)."""
+    out = f"---JSON-BEGIN:{instance}:{typ}---\n{body}\n---JSON-END:{instance}:{typ}---\n"
+    if approve:
+        out += f"---APPROVE-BEGIN:{instance}:{typ}---\nDevice approved.\n---APPROVE-END:{instance}:{typ}---\n"
+    out += f"---FOUND:{found}---\n"
+    return out
+
+
+def json_block_helper(instance, typ, body):
+    """Nur der JSON-Block (ohne Approve/FOUND) – für type=both-Fixtures."""
+    return f"---JSON-BEGIN:{instance}:{typ}---\n{body}\n---JSON-END:{instance}:{typ}---\n"
+
+
+class FakeCompletedProcess:
+    def __init__(self, returncode, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+# ── Discovery-Kern v3.0 (Ein-Job: 1 SSH pro VPS, VPS-Gruppierung) ──
 
 class TestRunDiscovery:
-    def test_telegram_uses_pairing_list(self):
-        """Typ telegram → openclaw pairing list telegram --json (nur dieser Pfad)."""
+    def test_telegram_uses_pairing_source(self):
+        """Typ telegram → pairing list in der Remote-Session; Fund auf dev/oc1."""
         calls = []
 
-        def _list_entries(instance, target, ip, typ):
-            calls.append((instance, target, typ))
-            assert typ == "telegram"
-            return make_pairing_list([pairing_entry(TG_CODE)])
+        def run_remote(ip, remote_cmd):
+            calls.append((ip, remote_cmd))
+            return ein_job_stdout("oc1", "telegram", make_pairing_list([pairing_entry(TG_CODE)]))
 
         result = discovery.run_discovery(
             MAP_DEV_PROD,
             TG_CODE,
             derived_type="telegram",
             resolve_ip=lambda node: "100.64.0.1",
-            list_entries=_list_entries,
+            run_remote=run_remote,
         )
         assert result.found_type == "telegram"
         assert result.instance == "oc1"
         assert result.target == "dev"
-        assert all(typ == "telegram" for _, _, typ in calls)
+        assert result.approved is True
+        # 1 SSH pro VPS: Fund auf dev → prod nicht mehr gescannt (Break)
+        assert len(calls) == 1
+        assert "pairing list telegram --json" in calls[0][1]
+        assert "devices list --json" not in calls[0][1]
 
-    def test_device_uses_devices_list(self):
-        """Typ device → openclaw devices list --json (nur dieser Pfad)."""
-        calls = []
-
-        def _list_entries(instance, target, ip, typ):
-            calls.append(typ)
-            assert typ == "device"
-            return make_devices_list([pending_entry(DEVICE_UUID)])
+    def test_device_uses_devices_source(self):
+        """Typ device → devices list in der Remote-Session (nur dieser Pfad)."""
+        def run_remote(ip, remote_cmd):
+            assert "pairing" not in remote_cmd
+            return ein_job_stdout("oc2", "device", make_devices_list([pending_entry(DEVICE_UUID)]))
 
         result = discovery.run_discovery(
             MAP_DEV_PROD,
             DEVICE_UUID,
             derived_type="device",
             resolve_ip=lambda node: "100.64.0.1",
-            list_entries=_list_entries,
+            run_remote=run_remote,
         )
         assert result.found_type == "device"
-        assert result.instance == "oc1"
+        assert result.instance == "oc2"
         assert result.target == "dev"
-        assert calls == ["device"]
 
-    def test_both_scans_pairing_first_then_devices(self):
-        """Typ both → erst pairing list, dann devices list (Design §3c)."""
-        seq = []
+    def test_both_queries_both_sources_in_one_session(self):
+        """R02: type=both → pairing UND devices in DERSELBEN Session (1 SSH/VPS)."""
+        seen_cmds = []
 
-        def _list_entries(instance, target, ip, typ):
-            seq.append(typ)
-            if typ == "telegram":
-                return make_pairing_list([])  # kein Fund
-            return make_devices_list([pending_entry(DEVICE_UUID)])
+        def run_remote(ip, remote_cmd):
+            seen_cmds.append(remote_cmd)
+            if ip == "100.64.0.2":  # prod-Session: Fund im device-Pfad
+                return (
+                    json_block_helper("oc1", "telegram", make_pairing_list([]))
+                    + json_block_helper("oc1", "device", make_devices_list([pending_entry(DEVICE_UUID)]))
+                    + "---APPROVE-BEGIN:oc1:device---\nDevice approved.\n---APPROVE-END:oc1:device---\n"
+                    + "---FOUND:1---\n"
+                )
+            return (
+                json_block_helper("oc1", "telegram", make_pairing_list([]))
+                + json_block_helper("oc1", "device", make_devices_list([]))
+                + "---FOUND:0---\n"
+            )
 
         result = discovery.run_discovery(
             MAP_DEV_PROD,
             DEVICE_UUID,
             derived_type="both",
-            resolve_ip=lambda node: "100.64.0.1",
-            list_entries=_list_entries,
+            resolve_ip=lambda node: "100.64.0.1" if node == "vps-dev" else "100.64.0.2",
+            run_remote=run_remote,
         )
         assert result.found_type == "device"
-        # Types-outer: pairing list ueber ALLE Instanzen, dann devices list
-        assert seq.count("telegram") == len(MAP_DEV_PROD)
-        assert seq[-1] == "device"  # Fund im device-Pfad
-        assert seq[0] == "telegram"
+        assert result.target == "prod"
+        assert len(seen_cmds) == 2  # 1 SSH pro VPS (dev + prod)
+        for cmd in seen_cmds:
+            assert "pairing list telegram --json" in cmd
+            assert "devices list --json" in cmd
+        # Approve-Kommando typabhängig im Template enthalten
+        assert "openclaw pairing approve telegram" in seen_cmds[0]
+        assert "openclaw devices approve" in seen_cmds[0]
 
     def test_auto_derives_type_from_id(self):
         """derived_type=auto → aus ID-Format ableiten (Δ4)."""
-        def _list_entries(instance, target, ip, typ):
-            assert typ == "telegram"
-            return make_pairing_list([pairing_entry(TG_CODE)])
+        def run_remote(ip, remote_cmd):
+            assert "pairing list telegram" in remote_cmd
+            return ein_job_stdout("oc1", "telegram", make_pairing_list([pairing_entry(TG_CODE)]))
 
         result = discovery.run_discovery(
             MAP_DEV_PROD,
             TG_CODE,
             derived_type="auto",
             resolve_ip=lambda node: "100.64.0.1",
-            list_entries=_list_entries,
+            run_remote=run_remote,
         )
         assert result.found_type == "telegram"
 
@@ -368,72 +406,56 @@ class TestRunDiscovery:
             discovery.run_discovery(
                 MAP_DEV_PROD, "bad$id", derived_type="auto",
                 resolve_ip=lambda node: "100.64.0.1",
-                list_entries=lambda i, t, ip, typ: "{}",
+                run_remote=lambda ip, cmd: "",
             )
 
     def test_break_semantics_first_match(self):
+        """Fund auf dev/oc1 → nur EIN SSH-Call (Break über VPS-Grenzen)."""
         calls = []
 
-        def _list_entries(instance, target, ip, typ):
-            calls.append((instance, target))
-            return make_pairing_list([pairing_entry(TG_CODE)])
+        def run_remote(ip, remote_cmd):
+            calls.append(ip)
+            return ein_job_stdout("oc1", "telegram", make_pairing_list([pairing_entry(TG_CODE)]))
 
         result = discovery.run_discovery(
             MAP_DEV_PROD,
             TG_CODE,
             derived_type="telegram",
             resolve_ip=lambda node: "100.64.0.1",
-            list_entries=_list_entries,
+            run_remote=run_remote,
         )
         assert (result.instance, result.target) == ("oc1", "dev")
         assert len(calls) == 1  # break
 
-    def test_pairing_list_error_skipped_fail_safe(self):
-        """F10: pairing list ohne Kanal → leere Ausgabe → Instanz uebersprungen."""
-        calls = []
-
-        def _list_entries(instance, target, ip, typ):
-            calls.append((instance, target))
-            return ""  # Fehler/leer (stderr-Redirect)
-
+    def test_empty_stdout_fail_safe(self):
+        """Instanz down / leere Session-Ausgabe → kein Fund (fail-safe)."""
         with pytest.raises(discovery.RequestNotFoundError):
             discovery.run_discovery(
                 MAP_DEV_PROD,
                 TG_CODE,
                 derived_type="telegram",
                 resolve_ip=lambda node: "100.64.0.1",
-                list_entries=_list_entries,
+                run_remote=lambda ip, cmd: "",
             )
-        assert len(calls) == len(MAP_DEV_PROD)
 
-    def test_json_parse_error_skipped(self):
-        calls = []
-
-        def _list_entries(instance, target, ip, typ):
-            calls.append((instance, target))
-            return "not valid json{{{"
-
+    def test_malformed_json_skipped(self):
         with pytest.raises(discovery.RequestNotFoundError):
             discovery.run_discovery(
                 MAP_DEV_PROD,
                 TG_CODE,
                 derived_type="telegram",
                 resolve_ip=lambda node: "100.64.0.1",
-                list_entries=_list_entries,
+                run_remote=lambda ip, cmd: ein_job_stdout("oc1", "telegram", "not valid json{{{", found=0),
             )
-        assert len(calls) == len(MAP_DEV_PROD)
 
-    def test_not_found_with_empty_json(self):
-        def _list_entries(instance, target, ip, typ):
-            return ""
-
+    def test_not_found_with_empty_arrays(self):
         with pytest.raises(discovery.RequestNotFoundError):
             discovery.run_discovery(
                 MAP_DEV_PROD,
                 TG_CODE,
                 derived_type="telegram",
                 resolve_ip=lambda node: "100.64.0.1",
-                list_entries=_list_entries,
+                run_remote=lambda ip, cmd: ein_job_stdout("oc1", "telegram", make_pairing_list([]), found=0),
             )
 
     def test_all_vps_unreachable(self):
@@ -443,7 +465,7 @@ class TestRunDiscovery:
                 TG_CODE,
                 derived_type="telegram",
                 resolve_ip=lambda node: None,
-                list_entries=lambda i, t, ip, typ: "{}",
+                run_remote=lambda ip, cmd: "",
             )
         assert all(
             discovery.node_for_target(t) in str(excinfo.value)
@@ -461,24 +483,39 @@ class TestRunDiscovery:
                 TG_CODE,
                 derived_type="telegram",
                 resolve_ip=_resolve_ip,
-                list_entries=lambda i, t, ip, typ: "{}",
+                run_remote=lambda ip, cmd: ein_job_stdout("oc1", "telegram", make_pairing_list([]), found=0),
             )
         assert "vps-prod" in str(excinfo.value)
         assert "vps-dev" not in str(excinfo.value)
+
+    def test_discover_only_returns_found_without_approve(self):
+        def run_remote(ip, remote_cmd):
+            return ein_job_stdout("oc1", "telegram", make_pairing_list([pairing_entry(TG_CODE)]), approve=False)
+
+        result = discovery.run_discovery(
+            MAP_DEV_PROD,
+            TG_CODE,
+            derived_type="telegram",
+            resolve_ip=lambda node: "100.64.0.1",
+            run_remote=run_remote,
+            approve=False,
+        )
+        assert result.found_type == "telegram"
+        assert result.approved is False
 
     def test_github_output_full(self, tmp_path):
         """GITHUB_OUTPUT: request_id, found_*, derived_type."""
         out_file = tmp_path / "gh_out"
 
-        def _list_entries(instance, target, ip, typ):
-            return make_pairing_list([pairing_entry(TG_CODE)])
+        def run_remote(ip, remote_cmd):
+            return ein_job_stdout("oc1", "telegram", make_pairing_list([pairing_entry(TG_CODE)]))
 
         discovery.run_discovery(
             MAP_DEV_PROD,
             TG_CODE,
             derived_type="telegram",
             resolve_ip=lambda node: "100.64.0.1",
-            list_entries=_list_entries,
+            run_remote=run_remote,
             github_output=str(out_file),
         )
         content = out_file.read_text(encoding="utf-8").splitlines()
@@ -492,31 +529,28 @@ class TestRunDiscovery:
     def test_github_output_device(self, tmp_path):
         out_file = tmp_path / "gh_out"
 
-        def _list_entries(instance, target, ip, typ):
-            return make_devices_list([pending_entry(DEVICE_HEX_64)])
+        def run_remote(ip, remote_cmd):
+            return ein_job_stdout("oc1", "device", make_devices_list([pending_entry(DEVICE_HEX_64)]))
 
         discovery.run_discovery(
             MAP_DEV_PROD,
             DEVICE_HEX_64,
             derived_type="device",
             resolve_ip=lambda node: "100.64.0.2",
-            list_entries=_list_entries,
+            run_remote=run_remote,
             github_output=str(out_file),
         )
         content = out_file.read_text(encoding="utf-8").splitlines()
         assert "found_type=device" in content
         assert f"request_id={DEVICE_HEX_64}" in content
 
-    def test_ip_cached_per_node(self):
-        """types both: resolve_ip nur 1x pro Node (Cache)."""
+    def test_resolve_ip_once_per_node(self):
+        """1 SSH pro VPS → resolve_ip genau 1x pro Node (dev+prod)."""
         resolutions = []
 
         def _resolve_ip(node):
             resolutions.append(node)
             return "100.64.0.1"
-
-        def _list_entries(instance, target, ip, typ):
-            return "{}"
 
         with pytest.raises(discovery.RequestNotFoundError):
             discovery.run_discovery(
@@ -524,11 +558,9 @@ class TestRunDiscovery:
                 TG_CODE,
                 derived_type="both",
                 resolve_ip=_resolve_ip,
-                list_entries=_list_entries,
+                run_remote=lambda ip, cmd: ein_job_stdout("oc1", "telegram", make_pairing_list([]), found=0),
             )
-        # 2 Nodes (dev+prod), je 1x aufgeloest trotz 2 Typen
-        assert sorted(set(resolutions)) == sorted(resolutions)
-        assert len(set(resolutions)) == 2
+        assert resolutions == ["vps-dev", "vps-prod"]
 
 
 # ── build_result_json ──
@@ -683,8 +715,8 @@ class TestCliDiscovery:
         monkeypatch.setattr(discovery, "fetch_tailscale_token", lambda cid, cs, timeout=30: "tok")
         monkeypatch.setattr(discovery, "resolve_vps_ip",
                             lambda tailnet, tok, node, timeout=30: "100.64.0.1")
-        monkeypatch.setattr(discovery, "list_entries_ssh",
-                            lambda inst, ip, user, key, typ: make_pairing_list([]))
+        monkeypatch.setattr(discovery, "run_remote_ssh",
+                            lambda ip, user, key, cmd: ein_job_stdout("oc1", "telegram", make_pairing_list([]), found=0))
         rc = discovery.main(self._cli_args(tmp_path, TG_CODE))
         assert rc == 1
         err = capsys.readouterr().err
@@ -697,8 +729,8 @@ class TestCliDiscovery:
         monkeypatch.setattr(discovery, "fetch_tailscale_token", lambda cid, cs, timeout=30: "tok")
         monkeypatch.setattr(discovery, "resolve_vps_ip",
                             lambda tailnet, tok, node, timeout=30: "100.64.0.1")
-        monkeypatch.setattr(discovery, "list_entries_ssh",
-                            lambda inst, ip, user, key, typ: make_pairing_list([pairing_entry(TG_CODE)]))
+        monkeypatch.setattr(discovery, "run_remote_ssh",
+                            lambda ip, user, key, cmd: ein_job_stdout("oc1", "telegram", make_pairing_list([pairing_entry(TG_CODE)])))
         rc = discovery.main(self._cli_args(tmp_path, TG_CODE, **{"result-json": str(result_file)}))
         assert rc == 0
         data = json.loads(result_file.read_text(encoding="utf-8"))
@@ -713,8 +745,8 @@ class TestCliDiscovery:
         monkeypatch.setattr(discovery, "fetch_tailscale_token", lambda cid, cs, timeout=30: "tok")
         monkeypatch.setattr(discovery, "resolve_vps_ip",
                             lambda tailnet, tok, node, timeout=30: "100.64.0.1")
-        monkeypatch.setattr(discovery, "list_entries_ssh",
-                            lambda inst, ip, user, key, typ: make_devices_list([pending_entry(DEVICE_UUID)]))
+        monkeypatch.setattr(discovery, "run_remote_ssh",
+                            lambda ip, user, key, cmd: ein_job_stdout("oc1", "device", make_devices_list([pending_entry(DEVICE_UUID)])))
         rc = discovery.main(self._cli_args(tmp_path, DEVICE_UUID, **{"result-json": str(result_file)}))
         assert rc == 0
         data = json.loads(result_file.read_text(encoding="utf-8"))
@@ -734,13 +766,24 @@ class TestCliDiscovery:
         monkeypatch.setattr(discovery, "fetch_tailscale_token", lambda cid, cs, timeout=30: "tok")
         monkeypatch.setattr(discovery, "resolve_vps_ip",
                             lambda tailnet, tok, node, timeout=30: "100.64.0.1")
-        monkeypatch.setattr(discovery, "list_entries_ssh",
-                            lambda inst, ip, user, key, typ: make_pairing_list([]))
+        monkeypatch.setattr(discovery, "run_remote_ssh",
+                            lambda ip, user, key, cmd: ein_job_stdout("oc1", "telegram", make_pairing_list([]), found=0))
         rc = discovery.main(self._cli_args(tmp_path, TG_CODE, **{"result-json": str(result_file)}))
         assert rc == 1
         data = json.loads(result_file.read_text(encoding="utf-8"))
         assert data["status"] == "not_found"
         assert data["filters_applied"]["type"] == "telegram"
+
+    def test_cli_approve_flag_requires_approve_marker(self, tmp_path, monkeypatch, capsys):
+        """--approve + ID gefunden, aber kein APPROVE-Marker → exit 1 (laut scheitern)."""
+        monkeypatch.setattr(discovery, "fetch_tailscale_token", lambda cid, cs, timeout=30: "tok")
+        monkeypatch.setattr(discovery, "resolve_vps_ip",
+                            lambda tailnet, tok, node, timeout=30: "100.64.0.1")
+        monkeypatch.setattr(discovery, "run_remote_ssh",
+                            lambda ip, user, key, cmd: ein_job_stdout("oc1", "telegram", make_pairing_list([pairing_entry(TG_CODE)]), approve=False))
+        rc = discovery.main(self._cli_args(tmp_path, TG_CODE) + ["--approve"])
+        assert rc == 1
+        assert "APPROVE-Marker fehlen" in capsys.readouterr().err
 
 
 # ── v1-Regression (resolve_vps_ip, node_for_target, list_entries_ssh ohne Shell) ──
@@ -775,23 +818,42 @@ class TestNodeAndResolve:
         assert discovery.resolve_vps_ip("tailnet", "tok", "vps-dev") is None
 
 
-class TestListEntriesSsh:
-    def test_telegram_command_no_shell(self):
-        """Kommando-Liste, keine Shell; pairing list telegram."""
+class TestRunRemoteSsh:
+    def test_command_is_list_no_local_shell(self):
+        """Argument-Liste, keine lokale Shell; Remote-Skript als EIN Argument."""
+        remote_cmd = discovery.build_ein_job_remote_cmd("telegram", ["oc1"], TG_CODE)
         cmd = (
             ["ssh", "-i", "/tmp/key"]
             + discovery.SSH_OPTS
-            + ["deploy@100.64.0.1",
-               "sudo docker exec openclaw-oc1 openclaw pairing list telegram --json 2>/dev/null"]
+            + ["deploy@100.64.0.1", remote_cmd]
         )
+        assert isinstance(cmd, list)
         assert cmd[0] == "ssh"
-        assert "&&" not in " ".join(cmd)
-        assert "pairing list telegram --json" in " ".join(cmd)
+        assert cmd[1] == "-i"
+        assert cmd[-1] == remote_cmd  # Remote-Skript als EIN Argument
+        assert "pairing list telegram --json" in cmd[-1]
+        assert "&&" not in " ".join(cmd[:-1])  # kein Shell-Zugriff auf dem Runner
+        assert "bash -c" not in " ".join(cmd)
 
     def test_device_command_uses_devices_list(self):
         assert "openclaw devices list --json" in discovery.DEVICES_LIST_CMD
         assert "openclaw pairing list telegram --json" in discovery.PAIRING_LIST_CMD
 
-    def test_invalid_type_raises(self):
-        with pytest.raises(ValueError):
-            discovery.list_entries_ssh("oc1", "100.64.0.1", "deploy", "/tmp/key", "foobar")
+    def test_runner_injection_returns_stdout(self):
+        proc = FakeCompletedProcess(0, stdout="---FOUND:0---")
+        out = discovery.run_remote_ssh(
+            "100.64.0.1", "deploy", "/tmp/key", "echo hi",
+            runner=lambda cmd, capture_output, text, timeout: proc,
+        )
+        assert out == "---FOUND:0---"
+
+    def test_timeout_propagated(self):
+        import subprocess
+
+        def _timeout_runner(cmd, capture_output, text, timeout):
+            raise subprocess.TimeoutExpired(cmd="ssh", timeout=timeout)
+
+        with pytest.raises(subprocess.TimeoutExpired):
+            discovery.run_remote_ssh(
+                "100.64.0.1", "deploy", "/tmp/key", "echo hi", runner=_timeout_runner, timeout=5
+            )
