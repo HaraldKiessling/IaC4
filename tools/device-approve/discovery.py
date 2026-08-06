@@ -18,6 +18,9 @@ Korrigiert/erweitert nach CLI-Fakten + Review-Befunden R01-R08 (2026-08-06):
       grep auf das JSON-Textfeld, autoritative Verifikation hier).
     - run_discovery(): VPS-Gruppen-Loop; Approve direkt in der SSH-Session
       beim Fund – auch auf prod (Owner-Entscheidung: kein Environment-Gate).
+    - B2 (2. Review, Blocker): Approve-Erfolg wird geprüft – KEIN `|| true`
+      um den Approve; FOUND=1 erst nach Exit-Code 0; APPROVE-FAILED-Marker
+      bei Fehler → Workflow meldet status=error statt falschem Erfolg.
   Bausteine aus v2.2 (behalten): Zwei-Format-ID-Validierung + Typ-Ableitung
   (--validate-id), UNREACHABLE-Liste, Break-Semantik, injizierbare
   Netzwerk-/SSH-Calls (unit-testbar ohne echte Tailscale-/SSH-Zugriffe).
@@ -85,6 +88,9 @@ APPROVE_BLOCK_RE = re.compile(
     rf"---APPROVE-BEGIN:(?P<label>{_LABEL_RE})---\n(?P<body>.*?)---APPROVE-END:(?P=label)---",
     re.DOTALL,
 )
+# B2 (2. Review, Blocker): Approve-Fehler werden explizit markiert – FOUND=1
+# wird erst NACH Exit-Code 0 des Approve-Befehls gesetzt (kein falscher Erfolg).
+APPROVE_FAILED_RE = re.compile(rf"---APPROVE-FAILED:(?P<label>{_LABEL_RE})---")
 FOUND_RE = re.compile(r"---FOUND:(?P<found>[01])---")
 
 API_TIMEOUT = 30
@@ -390,10 +396,19 @@ def build_ein_job_remote_cmd(
                 f"  if printf '%s' \"$ENTRIES\" | grep -qE '\"{id_field}\"[[:space:]]*:[[:space:]]*\"{request_id}\"'; then"
             )
             lines.append(f'    echo "---APPROVE-BEGIN:${{inst}}:{src_typ}---"')
-            lines.append(f"    {approve_cmd} 2>&1 || true")
-            lines.append(f'    echo "---APPROVE-END:${{inst}}:{src_typ}---"')
-            lines.append("    FOUND=1")
-            lines.append("    break")
+            # B2 (2. Review, Blocker): Approve-Erfolg MUSS geprüft werden –
+            # KEIN `|| true` um den Approve; FOUND=1 erst NACH Exit-Code 0.
+            # Bei Fehler: APPROVE-FAILED-Marker + break (laut scheitern, kein
+            # falscher Erfolg im Workflow).
+            lines.append(f"    if {approve_cmd} 2>&1; then")
+            lines.append(f'      echo "---APPROVE-END:${{inst}}:{src_typ}---"')
+            lines.append("      FOUND=1")
+            lines.append("      break")
+            lines.append("    else")
+            lines.append(f'      echo "---APPROVE-END:${{inst}}:{src_typ}---"')
+            lines.append(f'      echo "---APPROVE-FAILED:${{inst}}:{src_typ}---"')
+            lines.append("      break")
+            lines.append("    fi")
             lines.append("  fi")
     lines.append("done")
     lines.append('echo "---FOUND:${FOUND}---"')
@@ -466,7 +481,10 @@ def parse_ein_job_output(
             break
 
     approve_blocks = list(APPROVE_BLOCK_RE.finditer(stdout))
-    approved = bool(approve_blocks) and found_flag
+    approve_failed = [m.group("label") for m in APPROVE_FAILED_RE.finditer(stdout)]
+    # B2: approved nur wenn Approve-Block vorhanden, FOUND=1 UND kein
+    # APPROVE-FAILED-Marker (Approve-Exit-Code war 0).
+    approved = bool(approve_blocks) and found_flag and not approve_failed
 
     if matched:
         instance, block_typ, matched_id = matched

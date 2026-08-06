@@ -421,8 +421,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         return emit(result_obj, 0)
 
     if not result.approved:
-        # Ein-Job-Inkonsistenz: ID in der SSH-Session gefunden, aber kein
-        # APPROVE-Marker (Remote-Match/Approve fehlgeschlagen) → laut scheitern.
+        # Ein-Job-Inkonsistenz/-Fehler: ID in der SSH-Session gefunden, aber der
+        # Approve wurde nicht bestätigt (APPROVE-Marker fehlen ODER Approve-
+        # Befehl fehlgeschlagen, B2-2.Review) → laut scheitern, Output zeigen.
+        msg = ("ID gefunden, aber Approve wurde nicht in der SSH-Session "
+               "bestätigt (APPROVE-Marker fehlen oder Approve fehlgeschlagen).")
+        if result.approve_output:
+            msg += f"\nApprove-Output:\n{result.approve_output}"
+        print(f"❌ {msg}", file=sys.stderr)
         final = build_result_json(
             status="error",
             request_id=rid,
