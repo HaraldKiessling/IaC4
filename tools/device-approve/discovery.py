@@ -456,6 +456,179 @@ def _split_label(label: str) -> Tuple[str, str]:
     return parts[0], (parts[1] if len(parts) > 1 else "")
 
 
+def build_list_remote_cmd(
+    typ: str,
+    instances: List[str],
+) -> str:
+    """Baut das Listen-Remote-Shell-Template (1 SSH pro VPS, KEIN Approve).
+
+    Sammelt pro Instanz+Quelle die JSON-Bloecke ALLER pending-Eintraege
+    (`openclaw pairing list telegram --json` + `openclaw devices list --json`).
+    Die JSON-Block-Generierung (Marker + List-Cmd + printf) ist identisch zum
+    Approve-Modus – gemeinsame Funktion _build_json_collection_block (R01).
+    Kein ID-Match, kein Approve-Befehl, kein break, kein FOUND-Marker:
+    der Listen-Modus approvt NIE (Hard-Gate).
+
+    Marker: `---LIST-BEGIN---` … `---LIST-END---`; pro Block
+    `---JSON-BEGIN:<inst>:<typ>---` … `---JSON-END:<inst>:<typ>---`
+    (Typ-Suffix wie im Approve-Modus – parsebar auch bei type=both).
+
+    Raises:
+        ValueError: unbekannter Typ, leere Instanzliste, ungueltige Instanz
+                    (R05: Defense-in-Depth, identisch zu
+                    build_ein_job_remote_cmd).
+    """
+    if typ not in REMOTE_TYPES:
+        raise ValueError(
+            f"Ungueltiger Typ fuer Remote-Schleife: '{typ}'. Erlaubt: {', '.join(REMOTE_TYPES)}."
+        )
+    if not instances:
+        raise ValueError("Keine Instanzen fuer die Remote-Schleife uebergeben.")
+    for inst in instances:  # R05: Defense-in-Depth (Injection-Sperre)
+        validate_instance(inst)
+
+    lines = ["echo '---LIST-BEGIN---'", "for inst in " + " ".join(instances) + "; do"]
+    for src_typ, list_tmpl, _approve_tmpl in _source_specs(typ):
+        var = _source_var(typ, src_typ)
+        lines.extend(_build_json_collection_block(src_typ, list_tmpl, var))
+    lines.append("done")
+    lines.append('echo "---LIST-END---"')
+    return "\n".join(lines) + "\n"
+
+
+# ── Listen-Modus (v3.1): pending-Eintraege ueber alle Instanzen ──
+
+
+@dataclass
+class PendingEntry:
+    """Ein einzelner pending-Eintrag aus der Listen-Discovery."""
+
+    instance: str  # oc1, oc2, ...
+    target: str  # dev, prod
+    vps_ip: Optional[str]
+    entry_type: str  # "telegram" | "device"
+    entry_id: str  # code (Telegram) oder deviceId
+    # R04-Konvention: platform "" = Wahrheit (Telegram hat kein platform-Feld,
+    # O7); die Markdown-Tabelle rendert "" → "—" (Darstellung).
+    platform: str = ""
+    created_at_ms: int = 0  # 0 = nicht vorhanden
+
+
+@dataclass
+class ListDiscoveryResult:
+    """Ergebnis der Listen-Discovery: alle pending-Eintraege pro Instanz."""
+
+    entries: List[PendingEntry] = field(default_factory=list)
+    scanned: List[str] = field(default_factory=list)  # "target/instance"
+    unreachable: List[str] = field(default_factory=list)  # VPS-Hostnames
+
+
+def parse_list_output(
+    stdout: str,
+    target: str,
+) -> List[PendingEntry]:
+    """Parst ---LIST-BEGIN/END--- + JSON-Blöcke → Liste aller pending-Eintraege.
+
+    Nutzt dieselben JSON_BLOCK_RE-Marker wie der Approve-Modus (R01): pro
+    Eintrag werden type (aus dem Label-Suffix), id (code|deviceId), platform
+    (device; "" bei telegram, R04) und createdAtMs (0 wenn fehlt) extrahiert.
+    Defensiv (R07): leere/defekte Bloecke und kaputtes JSON werden uebersprungen
+    – der Rest der Liste bleibt erhalten.
+    """
+    entries: List[PendingEntry] = []
+    for blk in JSON_BLOCK_RE.finditer(stdout or ""):
+        label = blk.group("label")
+        instance, block_typ = _split_label(label)
+        body = blk.group("body").strip()
+        if not body:
+            continue  # fail-safe: Instanz down / leere Quelle
+        try:
+            data = json.loads(body)
+        except (json.JSONDecodeError, TypeError):
+            continue  # fail-safe: defekte Ausgabe ueberspringen
+        for entry in parse_entries(data, block_typ):
+            entries.append(PendingEntry(
+                instance=instance,
+                target=target,
+                vps_ip=None,  # wird vom Aufrufer (run_list_discovery) gesetzt
+                entry_type=block_typ,
+                entry_id=entry.get("code") or entry.get("deviceId") or "?",
+                platform=entry.get("platform", "") or "",
+                created_at_ms=entry.get("createdAtMs", 0) or 0,
+            ))
+    return entries
+
+
+def pending_entry_to_dict(entry: PendingEntry) -> dict:
+    """PendingEntry → JSON-Dict (Listen-Schema, Design §11)."""
+    return {
+        "instance": entry.instance,
+        "target": entry.target,
+        "type": entry.entry_type,
+        "id": entry.entry_id,
+        "platform": entry.platform,  # "" = Wahrheit (R04)
+        "createdAtMs": entry.created_at_ms,
+        "vps_ip": entry.vps_ip,
+    }
+
+
+def run_list_discovery(
+    instance_map: List[Tuple[str, str]],
+    derived_type: str = "both",
+    *,
+    resolve_ip: Optional[Callable[[str], Optional[str]]] = None,
+    run_remote: Optional[Callable[[str, str], str]] = None,
+    log: Optional[Callable[[str], None]] = None,
+) -> ListDiscoveryResult:
+    """Listen-Discovery ueber alle VPS: sammelt ALLE pending-Eintraege.
+
+    Gleiche VPS-Gruppierung (group_by_vps) und 1-SSH-pro-VPS-Optimierung wie
+    run_discovery, aber:
+    - build_list_remote_cmd statt build_ein_job_remote_cmd (kein ID-Match,
+      kein Approve)
+    - parse_list_output statt parse_ein_job_output (extrahiert ALLE Eintraege)
+    - Keine RequestNotFoundError – eine leere Liste ist ein gueltiges Ergebnis
+      (Exit 0, gruen; Owner-Vereinbarung not_found-Semantik)
+
+    Args:
+        instance_map: gefilterte [(instance_name, target), ...]
+        derived_type: telegram|device|both (auto ist vom Aufrufer aufgeloest;
+                      Listen-Modus hat keine ID zum Ableiten, O3)
+        resolve_ip(node) -> ip|None  (None = VPS down → unreachable)
+        run_remote(vps_ip, remote_cmd) -> stdout der SSH-Session
+        log: optionaler Logger (stderr im CLI)
+    """
+    log = log or (lambda _msg: None)
+    all_entries: List[PendingEntry] = []
+    scanned: List[str] = []
+    unreachable: List[str] = []
+
+    for target, instances in group_by_vps(instance_map).items():
+        node = node_for_target(target)
+        ip = resolve_ip(node) if resolve_ip else None
+        if not ip:
+            unreachable.append(node)
+            log(f"⚠️  VPS {node} nicht erreichbar, ueberspringe")
+            continue
+
+        remote_cmd = build_list_remote_cmd(derived_type, instances)
+        log(f"🔍 SSH {node} ({target}): {', '.join(instances)} – Sammle pending-Eintraege")
+        stdout = run_remote(ip, remote_cmd) if run_remote else ""
+
+        entries = parse_list_output(stdout, target)
+        for e in entries:
+            e.vps_ip = ip
+        all_entries.extend(entries)
+        scanned.extend(f"{target}/{inst}" for inst in instances)
+
+    return ListDiscoveryResult(
+        entries=all_entries,
+        scanned=scanned,
+        unreachable=unreachable,
+    )
+
+
+
 def _dedupe(items: List[str]) -> List[str]:
     seen = set()
     result: List[str] = []
@@ -661,6 +834,28 @@ def build_result_json(
         "scanned": scanned or [],
         "filters_applied": filters_applied or {},
     }
+
+
+def build_list_result_json(
+    status: str,
+    entries: List[PendingEntry],
+    scanned: List[str],
+    unreachable: List[str],
+    filters_applied: dict,
+) -> dict:
+    """Rueckgabe-Schema des Listen-Modus (Design §11).
+
+    status = "list_ok"; entries = Liste aller pending-Eintraege (auch leer –
+    Exit 0, gruener Run). platform "" = Wahrheit (R04).
+    """
+    return {
+        "status": status,
+        "entries": [pending_entry_to_dict(e) for e in entries],
+        "scanned": scanned,
+        "unreachable": unreachable,
+        "filters_applied": filters_applied,
+    }
+
 
 
 # ── CLI ──
