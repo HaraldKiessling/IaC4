@@ -375,6 +375,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             derived_type=derived_type,
             resolve_ip=resolve_ip,
             list_entries=list_entries,
+            # Run-#36-Fix: $GITHUB_OUTPUT nur im Workflow gesetzt; lokal (None)
+            # bleibt der bisherige Bibliotheks-/CLI-Pfad unveraendert (analog
+            # discovery.py-CLI, der github_output=os.environ.get(...) nutzt).
+            github_output=os.environ.get("GITHUB_OUTPUT"),
             log=log,
         )
     except RequestNotFoundError as err:

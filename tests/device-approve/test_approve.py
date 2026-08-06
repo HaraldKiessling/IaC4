@@ -386,6 +386,33 @@ class TestApproveCli:
         assert data["found"][0]["type"] == "device"
         assert data["found"][0]["instance"] == "oc1"
 
+    def test_ssh_mode_found_writes_github_output(self, tmp_path, monkeypatch, capsys, ssh_env):
+        """Run-#36-Regression: GITHUB_OUTPUT gesetzt → approve.py-Pfad von
+        run_discovery schreibt request_id/found_*/derived_type in die Datei
+        (analog discovery.py-CLI; vorher fehlte github_output= → leere
+        Job-Outputs, Approve-Job scheiterte mit 'Unbekannter Typ: ""')."""
+        gh_out = tmp_path / "github-output.txt"
+        monkeypatch.setenv("GITHUB_OUTPUT", str(gh_out))
+        map_path = self._write_map(tmp_path, ["oc2|prod"])
+        monkeypatch.setenv("INSTANCE_MAP", map_path)
+        monkeypatch.setenv("APPROVE_ID", TG_CODE)  # Telegram-Kurzcode wie Run #36
+        monkeypatch.setenv("APPROVE_TARGET", "prod")
+        monkeypatch.setenv("APPROVE_INSTANCE", "oc2")
+        monkeypatch.setattr(approve, "fetch_tailscale_token", lambda cid, cs: "tok")
+        monkeypatch.setattr(approve, "resolve_vps_ip",
+                            lambda tailnet, tok, node, timeout=30: "100.77.47.98")
+        monkeypatch.setattr(approve, "list_entries_ssh",
+                            lambda inst, ip, user, key, typ: fake_pairing_json(TG_CODE))
+        rc = approve.main(["--discover-only"])
+        assert rc == 0
+        content = gh_out.read_text(encoding="utf-8")
+        assert f"request_id={TG_CODE}" in content
+        assert "found_target=prod" in content
+        assert "found_instance=oc2" in content
+        assert "found_vps_ip=100.77.47.98" in content
+        assert "found_type=telegram" in content
+        assert "derived_type=telegram" in content
+
     def test_ssh_mode_full_approve(self, tmp_path, monkeypatch, capsys, ssh_env):
         """Vollausfuehrung SSH: run_discovery-Fund → run_approve_ssh (typ-spezifisch)."""
         monkeypatch.setenv("APPROVE_ID", TG_CODE)  # Telegram-Kurzcode → pairing-Pfad
