@@ -87,10 +87,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Auth nur für repository_dispatch (Telegram-Pfad): Nicht-Leer-Prüfung +
-          # numerisch VOR Whitelist-Grep (Blocker #1 gelöst, auth_check.sh getestet)
+          # Auth nur für repository_dispatch (Telegram-Pfad): auth_check.sh prüft
+          # NUR die User-ID (Nicht-Leer + numerisch VOR Whitelist-Grep, Blocker #1
+          # gelöst). Die Request-ID-Validierung ist an die Python-Validierung unten
+          # delegiert (B1-Fix v2.2: Single Source of Truth – auch 6-7-stellige
+          # Pairing-Kurzcodes wie A1B2C3 werden korrekt als telegram akzeptiert).
           if [ -n "$TG_USER_ID" ]; then
-            export TG_USER_ID REQUEST_ID="$INPUT_ID" AUTHORIZED_USERS
+            export TG_USER_ID AUTHORIZED_USERS
             bash tools/telegram-approve-bot/auth_check.sh
           fi
 

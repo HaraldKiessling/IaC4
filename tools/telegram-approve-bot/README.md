@@ -11,7 +11,7 @@ bekommt nur das Dispatch-Bestaetigungs-204. Callback/Run-Polling als Folgeausbau
 | Datei | Zweck |
 |---|---|
 | `bot.py` | Bot-Logik: `parse_request_id()`, `is_authorized()`, `dispatch_request()`, `handle_message()` |
-| `auth_check.sh` | Ausgelagerter Auth-Check (identische Logik wie Workflow 06, unit-testbar) |
+| `auth_check.sh` | Ausgelagerter Auth-Check – NUR User-ID-Whitelist (Nicht-Leer + numerisch + Whitelist-Grep); Request-ID-Validierung delegiert an `discovery.py --validate-id` (B1-Fix v2.2, Single Source of Truth) |
 | `sot_parser.py` | SSoT-Parser `ansible/group_vars/vps-*.yml` → `name\|target` (geteilt mit Workflow 06 + Tests) |
 | `discovery.py` | D1-Discovery-Scan: Request-ID instanzuebergreifend suchen (geteilt mit Workflow 06 + Tests; Nachtrag 2026-08-06) |
 | `requirements.txt` | Python-Abhaengigkeiten (`requests`) |

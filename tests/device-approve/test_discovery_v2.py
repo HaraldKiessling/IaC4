@@ -601,6 +601,62 @@ class TestValidateIdCli:
         assert "Ungueltiger Typ-Filter" in capsys.readouterr().err
 
 
+# ── B1-Regression (Review 2026-08-06): Kurzcodes + UUIDs in der Validierung ──
+
+class TestBlockerB1Regression:
+    """B1: auth_check.sh blockierte 6-7-stellige Pairing-Codes (A1B2C3 → rc=1).
+
+    Fix: Request-ID-Validierung vollstaendig in discovery.py --validate-id
+    (Python = Single Source of Truth). Diese Tests sichern ab, dass die
+    Validierung Kurzcodes (6/7/8 Zeichen) UND UUIDs akzeptiert und nach Typ
+    korrekt behandelt: Kurzcode → telegram (pairing-Pfad), UUID → device.
+    """
+
+    def test_short_code_6_chars_telegram(self, capsys):
+        rc = discovery.main(["--validate-id", "A1B2C3", "--type", "auto"])
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == "telegram"
+
+    def test_short_code_7_chars_telegram(self, capsys):
+        rc = discovery.main(["--validate-id", "ABC12DE", "--type", "auto"])
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == "telegram"
+
+    def test_short_code_8_chars_telegram(self, capsys):
+        rc = discovery.main(["--validate-id", TG_CODE, "--type", "auto"])
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == "telegram"
+
+    def test_uuid_b0999c46_device(self, capsys):
+        rc = discovery.main(["--validate-id", DEVICE_UUID, "--type", "auto"])
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == "device"
+
+    def test_uuid_2e68bca9_device(self, capsys):
+        rc = discovery.main(["--validate-id", ALT_UUID, "--type", "auto"])
+        assert rc == 0
+        assert capsys.readouterr().out.strip() == "device"
+
+    def test_short_code_rejected_as_device(self, capsys):
+        """Format-Sperre: Kurzcode darf NICHT als device durchgehen."""
+        rc = discovery.main(["--validate-id", "A1B2C3", "--type", "device"])
+        assert rc == 2
+        assert "entspricht nicht dem Device-ID-Format" in capsys.readouterr().err
+
+    def test_empty_id_rejected(self, capsys):
+        rc = discovery.main(["--validate-id", "", "--type", "auto"])
+        assert rc == 2
+        capsys.readouterr()
+
+    def test_injection_id_rejected(self, capsys):
+        """Injection-Abwehr bleibt – jetzt durch die Python-Zwei-Format-Regex
+        statt durch den alten Shell-Check (auth_check.sh, B1-Fix)."""
+        for evil in ("A1B2C3; rm -rf /", "$(rm -rf /)", "`id`", "req_abc123; rm -rf"):
+            rc = discovery.main(["--validate-id", evil, "--type", "auto"])
+            assert rc == 2, evil
+            capsys.readouterr()
+
+
 class TestCliDiscovery:
     def _write_map(self, tmp_path, entries):
         path = tmp_path / "instance-map.txt"
