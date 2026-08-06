@@ -1,25 +1,29 @@
 ---
 # 05 – Unified Freigabe: Telegram-Pairing + Device-Approve (ID-basiert)
-#   v2.2 (korrigiert nach CLI-Fakten, 2026-08-06 – v2.1-Annahme widerlegt):
-#   - Telegram-Pairing: SEPARATER CLI-Pfad `openclaw pairing`
-#       Discovery:  openclaw pairing list telegram --json   (ID-Feld: code)
-#       Approve:    openclaw pairing approve telegram <KURZCODE>
-#   - Device-Pairing: `openclaw devices`
-#       Discovery:  openclaw devices list --json            (ID-Feld: deviceId)
-#       Approve:    openclaw devices approve <HEX-ID>
-#   - Typ-Ableitung aus ID-Format (Kurzcode ^[A-Z0-9]{6,12}$ -> telegram,
-#     Device-ID ^[0-9a-fA-F-]{36,128}$ -> device), expliziter type-Input
-#     (auto|telegram|device|both) überschreibt (Δ9: default auto).
-#   - Zwei Jobs (discover -> approve) für das prod-Environment-Gate;
-#     approve-Job nutzt approve_step.py (Rollen-Trennung, Major #2),
-#     request_id kommt aus needs.discover.outputs (Minor #6).
-#   - Ersetzt: 05-device-approve.yml (v1) + 06-device-approve-telegram.yml (v1)
+#   v3.0 (Ein-Job-Design, 2026-08-06 – Workflow-05-Performance-Optimierung,
+#   Review-Befunde R01-R08 aufgelöst):
+#   - EIN Job: Discovery + Approve in DERSELBEN SSH-Session (APPROVE-BEGIN/END-
+#     Marker, discovery.py v3.0). KEIN environment:-Gate, KEIN Required Reviewer
+#     (Owner-Entscheidung 2026-08-06 14:48: „Nein, kein Klick notwendig …“).
+#   - 1 SSH pro VPS statt pro Instanz: VPS-Gruppierung (group_by_vps) + Remote-
+#     Schleife über alle Instanzen (build_ein_job_remote_cmd); type=both fragt
+#     pairing + devices in DERSELBEN Session ab (R02).
+#   - Concurrency-Group `device-approve` (cancel-in-progress: false) verhindert
+#     parallele Approve-Runs (Doppel-Approve).
+#   - Inputs UNVERÄNDERT (R01/R04): `id` (Telegram-Bot-Payload
+#     client_payload.id!), `type`, `target`, `instance` (all|oc1…ocN).
+#   - Tailscale-Action v4.1.3 (R05); Auth via tools/telegram-approve-bot/
+#     auth_check.sh + discovery.py --validate-id (R07); kein jq auf den VPS
+#     (R08 – Remote-Match per grep, Verifikation in Python).
+#   - Ersetzt: v2.2 (Zwei-Job) – approve_step.py bleibt als Library erhalten,
+#     wird aber nicht mehr vom Workflow aufgerufen (R03-E12).
 #
-#   Sicherheits-Gates: Whitelist (repository_dispatch), Regex-Sperre je Typ,
-#   Environment-Gate job-level (prod-approve Required Reviewer / dev-approve
-#   ohne Protection – beide Environments M2 anlegen), Tailscale-only SSH,
+#   Sicherheits-Gates: Whitelist (repository_dispatch, auth_check.sh),
+#   Regex-Sperre je Typ (discovery.py --validate-id), Tailscale-only SSH,
 #   keine Secrets in Logs, Audit = GH Actions Run.
-name: "05 – Freigabe (Telegram-Pairing + Device-Approve)"
+name: "05 – Freigabe (Telegram-Pairing + Device-Approve, Ein-Job)"
+
+run-name: "approve ${{ inputs.id || github.event.client_payload.id }}"
 
 on:
   workflow_dispatch:
@@ -51,30 +55,31 @@ on:
 permissions:
   contents: read
 
+# ★ Concurrency-Group: verhindert parallele Approve-Runs (Design §5).
+#   cancel-in-progress: false → neue Runs warten in der Queue, statt einen
+#   laufenden Approve abzubrechen (konservativ, kein Doppel-Approve).
+concurrency:
+  group: device-approve
+  cancel-in-progress: false
+
 jobs:
-  discover:
-    name: "Discovery – ID suchen (pairing list + devices list)"
+  discover-and-approve:
+    name: "Discovery + Approve (${{ inputs.target || 'both' }})"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # ★ KEIN environment:-Attribut – Owner-Entscheidung: kein Gate nötig.
     env:
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
       TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
       TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
       TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
-    outputs:
-      request_id: ${{ steps.approve_py.outputs.request_id }}
-      found_target: ${{ steps.approve_py.outputs.found_target }}
-      found_instance: ${{ steps.approve_py.outputs.found_instance }}
-      found_vps_ip: ${{ steps.approve_py.outputs.found_vps_ip }}
-      found_type: ${{ steps.approve_py.outputs.found_type }}
-      derived_type: ${{ steps.approve_py.outputs.derived_type }}
     steps:
       - uses: actions/checkout@v4
 
-      # v2.2: Zwei-Format-Validierung + Typ-Ableitung über das getestete Modul
-      # (discovery.py --validate-id, DRY mit approve.py); Auth-Check nur für den
-      # Telegram-Pfad (repository_dispatch mit telegram_user_id).
+      # Eingaben validieren + normalisieren + Typ ableiten (R01: Input-Name
+      # bleibt `id` – client_payload.id; R07: Auth-Check via auth_check.sh,
+      # ID-Validierung + Typ-Ableitung via discovery.py --validate-id).
       - name: Eingaben validieren + normalisieren + Typ ableiten
         id: inputs
         env:
@@ -88,10 +93,9 @@ jobs:
           set -euo pipefail
 
           # Auth nur für repository_dispatch (Telegram-Pfad): auth_check.sh prüft
-          # NUR die User-ID (Nicht-Leer + numerisch VOR Whitelist-Grep, Blocker #1
-          # gelöst). Die Request-ID-Validierung ist an die Python-Validierung unten
-          # delegiert (B1-Fix v2.2: Single Source of Truth – auch 6-7-stellige
-          # Pairing-Kurzcodes wie A1B2C3 werden korrekt als telegram akzeptiert).
+          # NUR die User-ID (Nicht-Leer + numerisch VOR Whitelist-Grep). Die
+          # Request-ID-Validierung ist an discovery.py --validate-id delegiert
+          # (Single Source of Truth – auch 6-7-stellige Pairing-Kurzcodes).
           if [ -n "$TG_USER_ID" ]; then
             export TG_USER_ID AUTHORIZED_USERS
             bash tools/telegram-approve-bot/auth_check.sh
@@ -101,7 +105,7 @@ jobs:
           DERIVED_TYPE=$(python3 tools/device-approve/discovery.py \
             --validate-id "$INPUT_ID" --type "$INPUT_TYPE")
 
-          # Instanz-Validierung: 'all' oder oc[1-9][0-9]* (kein oc0, Minor #4)
+          # Instanz-Validierung: 'all' oder oc[1-9][0-9]* (kein oc0)
           if [ "$INPUT_INSTANCE" != "all" ]; then
             if ! printf '%s' "$INPUT_INSTANCE" | grep -qE '^oc[1-9][0-9]*$'; then
               echo "❌ Ungültige Instanz: '$INPUT_INSTANCE'" >&2
@@ -118,7 +122,7 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "✅ Eingaben validiert (id=$INPUT_ID, derived_type=$DERIVED_TYPE, target=$INPUT_TARGET, instance=$INPUT_INSTANCE)"
 
-      # SSoT-Mapping (Major #7: dynamisches Globbing vps-*.yml) + Filter target/instance
+      # SSoT-Mapping (dynamisches Globbing vps-*.yml) + Filter target/instance
       - name: Instanz-Mapping laden (SSoT) + filtern
         run: |
           set -euo pipefail
@@ -156,16 +160,29 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-      # Discovery (approve.py = discovery-only, Δ6): typ-spezifische Quelle
-      # (pairing list telegram | devices list), schreibt $GITHUB_OUTPUT
-      # (request_id, found_target, found_instance, found_vps_ip, found_type,
-      # derived_type) + Markdown nach $GITHUB_STEP_SUMMARY (--summary, File-Open).
-      # Exit-Code: 0 = gefunden, 1 = nicht gefunden.
-      - name: Discovery – ID mit typ-spezifischem CLI-Befehl suchen
-        id: approve_py
+      # ★ EINZIGER Discovery+Approve-Schritt (Ein-Job, v3.0): --full-run ruft
+      # discovery.py-run_discovery mit VPS-Gruppierung auf (1 SSH pro VPS);
+      # der Approve läuft direkt in der SSH-Session beim Fund – auch bei prod
+      # (kein Gate). Exit-Code: 0 = approved, 1 = nicht gefunden/Fehler.
+      - name: Discovery + Approve (Ein-Job)
+        id: full_run
         run: |
           set -euo pipefail
+          {
+            echo "## 🚀 Discovery + Approve (Ein-Job, v3.0)"
+            echo ""
+            echo "| Feld | Wert |"
+            echo "|------|------|"
+            echo "| **ID** | \`$APPROVE_ID\` |"
+            echo "| **Target** | $APPROVE_TARGET |"
+            echo "| **Typ** | $DERIVED_TYPE |"
+            echo "| **Instanz** | $APPROVE_INSTANCE |"
+            echo "| **Trigger** | ${{ github.event_name }} |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
           python3 tools/device-approve/approve.py \
+            --full-run \
             --instance-map /tmp/instance-map.txt \
             --request-id "$APPROVE_ID" \
             --type-filter "$DERIVED_TYPE" \
@@ -176,69 +193,9 @@ jobs:
             --ts-tailnet "$TS_TAILNET" \
             --ts-client-id "$TS_CLIENT_ID" \
             --ts-client-secret "$TS_CLIENT_SECRET" \
-            --discover-only \
             --summary
 
-  approve:
-    name: "Approve (prod = Environment-Gate)"
-    needs: discover
-    if: needs.discover.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # Blocker #2 + Major #8 gelöst: echtes Environment-Gate job-level.
-    #   prod -> 'prod-approve' (Required Reviewer), dev -> 'dev-approve' (ohne
-    #   Protection). Fehlt dev-approve, schlagen alle dev-Runs fehl.
-    environment: ${{ needs.discover.outputs.found_target == 'prod' && 'prod-approve' || 'dev-approve' }}
-    env:
-      VPS_USER: ${{ secrets.VPS_USER }}
-      SSH_KEY: ${{ secrets.SSH_KEY }}
-    steps:
-      - uses: actions/checkout@v4
-
-      # Blocker #2 (Runs 31111249899/31111433571): approve-Job hatte keinen
-      # Tailnet-Connect -> SSH zur Tailscale-IP 100.77.47.98 scheiterte mit
-      # rc=255 (Connection timed out). Schritt identisch zum discover-Job:
-      # Runner zuerst ins Tailnet, DANN SSH-Approve.
-      - name: Connect Runner to Tailnet
-        uses: tailscale/github-action@v4.1.3
-        with:
-          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
-          tags: tag:ci,tag:ia4
-
-      - name: SSH-Key vorbereiten
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-
-      # Δ2: typ-spezifisches Approve-Kommando (pairing approve telegram <CODE>
-      # vs. devices approve <ID>) via approve_step.py; request_id aus dem
-      # validierten discover-Output (Minor #6). Validierung defense-in-depth.
-      - name: Approve – Typ-spezifisches Kommando ausführen
-        id: approve
-        run: |
-          set -euo pipefail
-          echo "🔐 Approve ${{ needs.discover.outputs.request_id }}"
-          echo "   Typ:     ${{ needs.discover.outputs.found_type }}"
-          echo "   Instanz: ${{ needs.discover.outputs.found_target }}/${{ needs.discover.outputs.found_instance }}"
-          echo "   VPS:     ${{ needs.discover.outputs.found_vps_ip }}"
-          python3 tools/device-approve/approve_step.py \
-            --request-id "${{ needs.discover.outputs.request_id }}" \
-            --found-type "${{ needs.discover.outputs.found_type }}" \
-            --found-instance "${{ needs.discover.outputs.found_instance }}" \
-            --target "${{ needs.discover.outputs.found_target }}" \
-            --vps-ip "${{ needs.discover.outputs.found_vps_ip }}" \
-            --vps-user "$VPS_USER" \
-            --ssh-key ~/.ssh/id_ed25519
-
-      - name: Job-Summary – Freigabe-Ergebnis
-        run: |
-          set -euo pipefail
           {
             echo ""
-            echo "| **Freigegeben um** | $(date -u +%Y-%m-%dT%H:%M:%SZ) |"
-            echo ""
-            echo "✅ **Freigabe erfolgreich.**"
+            echo "✅ **Ein-Job-Design: Direktfreigabe in der SSH-Session – kein separater Approve-Job, kein Environment-Gate.**"
           } >> "$GITHUB_STEP_SUMMARY"

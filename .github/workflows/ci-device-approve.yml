@@ -1,8 +1,8 @@
 ---
 # CI – Freigabe (Statik + Unit, KEIN Tailscale/SSH/Deploy)
-#   Automatisiert die lokale Validierung aus Design 05 v2.2:
-#   actionlint + shellcheck + pytest + bash -n für Workflow 05 (v2),
-#   tools/device-approve (v2.2), tools/telegram-approve-bot und Tests.
+#   Automatisiert die lokale Validierung aus Design 05 v3.0:
+#   actionlint + shellcheck + pytest + bash -n für Workflow 05 (v3, Ein-Job),
+#   tools/device-approve (v3.0), tools/telegram-approve-bot und Tests.
 #   Läuft auf dem session-Branch (push) und bei PRs.
 name: "CI – Freigabe (Statik + Unit)"
 
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: actionlint – Workflow 05 (v2) + CI selbst
+      - name: actionlint – Workflow 05 (v3) + CI selbst
         uses: docker://rhysd/actionlint:1.7.12
         with:
           args: .github/workflows/05-device-approve.yml .github/workflows/ci-device-approve.yml
@@ -49,7 +49,7 @@ jobs:
           shellcheck tools/telegram-approve-bot/auth_check.sh tests/device-approve/test_auth_check.sh
 
   pytest:
-    name: "pytest (device-approve v2.2 + Bot/SSoT-Parser)"
+    name: "pytest (device-approve v3.0 + Bot/SSoT-Parser)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
