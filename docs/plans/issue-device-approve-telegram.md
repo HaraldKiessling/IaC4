@@ -7,6 +7,16 @@
 
 ---
 
+## Motivation (Realfall 2026-08-06)
+
+Am 2026-08-06 wurde eine Request-ID (`b0999c46-ebe3-4c46-a72b-8b0a7c1df2d5`) per
+Telegram freigegeben. Auf dem **lokalen/aufrufenden Gateway** war sie NICHT pending
+(`pending: []`); ein Remote-Gateway-Zugriff war lokal nicht möglich. Die ID hing an
+ einer anderen Instanz – genau der Anwendungsfall, den der **D1-Discovery-Scan**
+(Workflow 06) löst: instanzübergreifende Suche über alle enabled Instanzen,
+unabhängig vom aufrufenden Gateway. Ohne Discovery wäre der Approve gescheitert,
+obwohl die ID im Gesamtsystem existierte.
+
 ## Anforderung
 
 Device-Pairing-Freigabe per **Telegram-Nachricht** auslösen (statt nur GH-UI
@@ -93,6 +103,10 @@ aufgelöst oder als Entscheidung/offener Punkt geführt** (`konzepte/05-workflow
 
 ## Akzeptanzkriterien
 
+- [ ] **Approve via Telegram funktioniert auch dann, wenn die Request-ID nicht auf
+      dem lokalen/aufrufenden Gateway pendet** – der Discovery-Scan findet sie auf
+      der richtigen Instanz (instanzübergreifend, D1; Realfall 2026-08-06:
+      `b0999c46-ebe3-4c46-a72b-8b0a7c1df2d5` lokal `pending: []`)
 - [ ] `/approve <request-id>` aus Telegram startet einen GH-Actions-Run (Audit-Trail: wer/wann/was)
 - [ ] Nur autorisierte Telegram-User-IDs (Whitelist-Secret) kommen durch; leere User-ID wird abgelehnt
 - [ ] Request-IDs mit Shell-Metazeichen werden abgelehnt (Regex, Bot + Workflow)
