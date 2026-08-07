@@ -370,19 +370,44 @@ jobs:
           REQ=$(printf '%s' "$OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)
           if [ -z "$REQ" ]; then
             echo "❌ KEINE UUID-requestId gefunden (rc=$RC) – vermuteter Bug ODER Infra (Transport)." >&2
-            echo "=== Diagnose (SSH) ===" >&2
-            # v3.4 (Transport-1006-Diagnose, 2026-08-07): serve/TLS-Pfad isolieren –
-            # 1) serve-Konfiguration + Tailscale-Version, 2) Backend direkt, 3) serve
-            # selbst (TLS, Zertifikats-Issuer, HTTP-Antwort), 4) prod-Referenz (gleicher
-            # Pfad, read-only GET /health – KEIN State auf prod), 5) Tailscale-Versionen
-            # beider VPS via API (read-only). Gibt Aufschluss, ob das 1006 an
-            # Zertifikat/ACL (TLS-Ebene), Backend-Proxy (HTTP-Ebene) oder WS-Upgrade
-            # (serve-Version) liegt.
-            echo "--- api-versions ---" >&2
-            curl -s -H "Authorization: Bearer $TS_TOKEN" \
-              "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,clientVersion,os" \
-              | python3 -c "import json,sys; [print(d.get('hostname'), d.get('clientVersion'), d.get('os')) for d in json.load(sys.stdin).get('devices',[])]" >&2 || true
-            $SSH "tailscale serve status; echo ---ts-version---; tailscale version; echo ---serve-json---; tailscale serve status --json; echo ---certs-dir---; sudo ls -la /var/lib/tailscale/certs/ 2>&1 | head -6; echo ---backend-direct---; curl -s -o /dev/null -w 'http_code:%{http_code}\n' --max-time 5 http://127.0.0.1:${E2E_PORT}/health; echo ---serve-self-full---; curl -skv --max-time 10 https://vps-${APPROVE_TARGET}.${TS_TAILNET}:${E2E_PORT}/health 2>&1 | tail -12; echo ---ws-upgrade-self---; curl -skv --max-time 10 --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' https://vps-${APPROVE_TARGET}.${TS_TAILNET}:${E2E_PORT}/health 2>&1 | grep -E 'HTTP/|101|502|400|error|refused' | head -5; echo ---ws-upgrade-prod-ref---; curl -skv --max-time 10 --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' https://vps-prod.${TS_TAILNET}:${E2E_PORT}/health 2>&1 | grep -E 'HTTP/|101|502|400|error|refused' | head -5; echo ---docker-ps---; sudo docker ps --filter name=openclaw-${APPROVE_INSTANCE}; echo ---docker-port---; sudo docker port openclaw-${APPROVE_INSTANCE} || true; echo ---listen---; sudo ss -tlnp | grep -E '1878[0-9]|1879[0-9]' || true" >&2
+            echo "=== Diagnose v3.7 (Gateway-Logs, Image-IDs dev vs prod, Config redigiert) ===" >&2
+            # v3.6-Fakt: falsches UND echtes Token → identischer 1006-Close vor Auth.
+            # ⇒ dev-Gateway killt die WS-Session nach Upgrade. Jetzt: WAS sagt das
+            # Gateway (Logs), läuft ein anderes Image als prod, welche Pairing-Config.
+            echo "--- gateway-logs (letzte 60, um Connect-Zeitpunkt) ---" >&2
+            $SSH "sudo docker logs --tail 60 openclaw-${APPROVE_INSTANCE} 2>&1 | tail -30" >&2 || true
+            echo "--- container-image dev ---" >&2
+            $SSH "sudo docker ps --filter name=openclaw --format '{{.Names}} | {{.Image}} | {{.ImageID}} | {{.CreatedAt}} | {{.Status}}'; sudo docker inspect -f 'image-created={{.Created}}' openclaw-${APPROVE_INSTANCE} 2>&1" >&2 || true
+            echo "--- container-image prod (Referenz) ---" >&2
+            PROD_IP=$(curl -s -H "Authorization: Bearer $TS_TOKEN" \
+              "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses" \
+              | python3 -c "
+          import json, sys
+          devs = json.load(sys.stdin).get('devices', [])
+          for dev in devs:
+              if dev.get('hostname') in ('vps-prod', 'vps-prod-1'):
+                  addrs = dev.get('addresses') or []
+                  if addrs:
+                      print(addrs[0])
+                      break
+          ")
+            if [ -n "$PROD_IP" ]; then
+              ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
+                "${VPS_USER}@${PROD_IP}" "sudo docker ps --filter name=openclaw --format '{{.Names}} | {{.Image}} | {{.ImageID}} | {{.CreatedAt}} | {{.Status}}'" >&2 || true
+            fi
+            echo "--- gateway-config (redigiert) ---" >&2
+            $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} sh -c 'cat \$OPENCLAW_CONFIG_DIR/openclaw.json 2>/dev/null || cat /home/node/.openclaw/openclaw.json 2>/dev/null || find / -maxdepth 6 -name openclaw.json 2>/dev/null | head -1 | xargs -r cat'" > /tmp/e2e-gw-config.json 2>/dev/null || true
+            python3 - <<'PYEOF' >&2
+            import json, re
+            try:
+                d = json.load(open('/tmp/e2e-gw-config.json'))
+            except Exception as e:
+                print('config read failed:', e)
+                raise SystemExit
+            s = json.dumps(d, indent=2, default=str)
+            s = re.sub(r'("[^"]*(?:token|secret|apiKey|password|key)[^"]*"\s*:\s*")[^"]*(")', r'\1[REDACTED]\2', s, flags=re.I)
+            print(s)
+            PYEOF
             exit 1
           fi
           echo "✅ [1] requestId (UUID-36): $REQ"
