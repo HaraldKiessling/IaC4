@@ -33,6 +33,15 @@ v3.1 (Listen-Modus, Design 05-workflow-listen-modus.md, Review R01-R09):
     Eintraege ueber alle VPS (PendingEntry/ListDiscoveryResult); leere Liste
     ist ein gueltiges Ergebnis (Exit 0, gruen).
 
+v3.2 (Reject-Modus, 2026-08-07):
+  - build_ein_job_remote_cmd(action=...)/parse_ein_job_output(action=...):
+    dieselbe Ein-Job-Remote-Schleife fuehrt je `action` Approve ODER Reject
+    aus (REJECT-BEGIN/END/FAILED-Marker analog APPROVE-*, B2-Semantik).
+  - REJECT_CMD_TEMPLATES: NUR device (`openclaw devices reject <ID>`) – die
+    openclaw CLI hat KEIN 'pairing reject' (empirisch 2026-08-07);
+    Telegram-Codes sind CLI-seitig nicht reject-bar (Hard-Gate).
+  - run_discovery(action=...), discovery-CLI --reject.
+
 Empirisch (Sandbox, OpenClaw 2026.7.1, 2026-08-06):
   - `openclaw pairing list telegram --json` → {"channel": "telegram", "requests": []}
   - `openclaw devices list --json` → {"pending": [...], "paired": [...]}
@@ -84,6 +93,14 @@ APPROVE_CMD_TEMPLATES = {
     "telegram": "sudo docker exec openclaw-{instance} openclaw pairing approve telegram {request_id}",
     "device": "sudo docker exec openclaw-{instance} openclaw devices approve {request_id}",
 }
+# Δ3 (v3.2, Reject-Modus): Reject-Kommando je Typ. NUR device – die openclaw
+# CLI hat KEIN 'pairing reject' (empirisch 2026-08-07: `openclaw pairing` kennt
+# nur approve|list|help). Telegram-Pairing-Codes sind CLI-seitig nicht
+# reject-bar → der Reject-Modus erlaubt ausschliesslich device-Requests
+# (Hard-Gate in build_ein_job_remote_cmd + approve.py).
+REJECT_CMD_TEMPLATES = {
+    "device": "sudo docker exec openclaw-{instance} openclaw devices reject {request_id}",
+}
 
 # Remote-Marker (v3.0): Label = Instanz [:Typ] – der Typ-Suffix macht type=both
 # in einer SSH-Session eindeutig parsebar (R02).
@@ -99,6 +116,14 @@ APPROVE_BLOCK_RE = re.compile(
 # B2 (2. Review, Blocker): Approve-Fehler werden explizit markiert – FOUND=1
 # wird erst NACH Exit-Code 0 des Approve-Befehls gesetzt (kein falscher Erfolg).
 APPROVE_FAILED_RE = re.compile(rf"---APPROVE-FAILED:(?P<label>{_LABEL_RE})---")
+# v3.2 (Reject-Modus): Marker analog zu APPROVE-* – der Reject laeuft in
+# derselben Remote-Schleife (REJECT-BEGIN/END + REJECT-FAILED bei Exit-Code
+# != 0; FOUND=1 erst NACH Exit-Code 0 – kein falscher Erfolg, B2-Semantik).
+REJECT_BLOCK_RE = re.compile(
+    rf"---REJECT-BEGIN:(?P<label>{_LABEL_RE})---\n(?P<body>.*?)---REJECT-END:(?P=label)---",
+    re.DOTALL,
+)
+REJECT_FAILED_RE = re.compile(rf"---REJECT-FAILED:(?P<label>{_LABEL_RE})---")
 FOUND_RE = re.compile(r"---FOUND:(?P<found>[01])---")
 
 API_TIMEOUT = 30
@@ -212,8 +237,12 @@ class DiscoveryResult:
     unreachable: List[str] = field(default_factory=list)
     # v3.0 (Ein-Job): approved=True wenn der Approve direkt in der SSH-Session
     # bestätigt wurde (APPROVE-Marker + FOUND=1); approve_output = Session-Text
+    # v3.2: Feldname historisch 'approved' – gilt auch fuer den Reject-Modus
+    # (action='reject': REJECT-Marker + FOUND=1 → Aktion in der Session ok);
+    # approve_output = Session-Text der jeweiligen Aktion.
     approved: bool = False
     approve_output: str = ""
+    action: str = "approve"  # v3.2: "approve" | "reject" (durchgefuehrte Aktion)
 
 
 class RequestNotFoundError(Exception):
@@ -384,6 +413,7 @@ def build_ein_job_remote_cmd(
     request_id: str,
     *,
     approve: bool = True,
+    action: str = "approve",
 ) -> str:
     """Baut das Ein-Job-Remote-Shell-Template (1 SSH pro VPS).
 
@@ -392,15 +422,32 @@ def build_ein_job_remote_cmd(
         type=both → beide Quellen in derselben Session, R02) – gemeinsame
         Block-Generierung via _build_json_collection_block (R01)
       - bei approve: ID-Match im Textpfad (grep auf das JSON-Feld des
-        relevanten Arrays, KEIN jq – R08) → Approve direkt in der Session
-        (---APPROVE-BEGIN/END-Marker), break-Semantik (erster Fund stoppt)
+        relevanten Arrays, KEIN jq – R08) → Aktion direkt in der Session
+        (---APPROVE-/---REJECT-BEGIN/END-Marker), break-Semantik (erster Fund
+        stoppt)
     `|| true` = fail-safe bei Instanz-Down (leere Ausgabe → kein Match).
     Am Ende: `---FOUND:${FOUND}---`.
 
+    v3.2 (Reject-Modus): `action` waehlt die Aktion – "approve" (Default,
+    APPROVE_CMD_TEMPLATES + APPROVE-Marker) oder "reject"
+    (REJECT_CMD_TEMPLATES + REJECT-Marker). Reject ist NUR fuer device-
+    Requests zulaessig (die openclaw CLI hat kein 'pairing reject') →
+    typ != "device" ⇒ ValueError (Hard-Gate, defense in depth).
+
     Raises:
         ValueError: unbekannter Typ, leere Instanzliste, ungueltige Instanz
-                    oder ID (Format-Sperre, defense in depth).
+                    oder ID (Format-Sperre, defense in depth), Reject mit
+                    Nicht-Device-Typ.
     """
+    if action not in ("approve", "reject"):
+        raise ValueError(
+            f"Unbekannte Aktion: '{action}'. Erlaubt: approve, reject."
+        )
+    if action == "reject" and typ != "device":
+        raise ValueError(
+            "Reject-Modus unterstuetzt nur device-Requests – die openclaw CLI "
+            "hat kein 'pairing reject' (nur `openclaw devices reject <ID>`)."
+        )
     if typ not in REMOTE_TYPES:
         raise ValueError(
             f"Ungueltiger Typ fuer Remote-Schleife: '{typ}'. Erlaubt: {', '.join(REMOTE_TYPES)}."
@@ -412,7 +459,12 @@ def build_ein_job_remote_cmd(
     validate_request_id(request_id, typ)
 
     lines = ["FOUND=0", "for inst in " + " ".join(instances) + "; do"]
-    for src_typ, list_tmpl, approve_tmpl in _source_specs(typ):
+    # v3.2: Aktion waehlt Kommando-Templates + Marker-Praefix (APPROVE|REJECT)
+    cmd_templates = (
+        APPROVE_CMD_TEMPLATES if action == "approve" else REJECT_CMD_TEMPLATES
+    )
+    marker = "APPROVE" if action == "approve" else "REJECT"
+    for src_typ, list_tmpl, _approve_tmpl in _source_specs(typ):
         var = _source_var(typ, src_typ)
         array_key = _SOURCE_ARRAY_KEY[src_typ]
         id_field = _SOURCE_ID_FIELD[src_typ]
@@ -420,7 +472,9 @@ def build_ein_job_remote_cmd(
         lines.extend(_build_json_collection_block(src_typ, list_tmpl, var))
 
         if approve:
-            approve_cmd = approve_tmpl.format(instance="${inst}", request_id=request_id)
+            action_cmd = cmd_templates[src_typ].format(
+                instance="${inst}", request_id=request_id
+            )
             # Array-Inhalt extrahieren (nur pending/requests, nicht paired) und
             # ID-Feld matchen – kein jq, nur POSIX-Tools (R08).
             lines.append(
@@ -430,18 +484,18 @@ def build_ein_job_remote_cmd(
             lines.append(
                 f"  if printf '%s' \"$ENTRIES\" | grep -qE '\"{id_field}\"[[:space:]]*:[[:space:]]*\"{request_id}\"'; then"
             )
-            lines.append(f'    echo "---APPROVE-BEGIN:${{inst}}:{src_typ}---"')
-            # B2 (2. Review, Blocker): Approve-Erfolg MUSS geprüft werden –
-            # KEIN `|| true` um den Approve; FOUND=1 erst NACH Exit-Code 0.
-            # Bei Fehler: APPROVE-FAILED-Marker + break (laut scheitern, kein
-            # falscher Erfolg im Workflow).
-            lines.append(f"    if {approve_cmd} 2>&1; then")
-            lines.append(f'      echo "---APPROVE-END:${{inst}}:{src_typ}---"')
+            lines.append(f'    echo "---{marker}-BEGIN:${{inst}}:{src_typ}---"')
+            # B2 (2. Review, Blocker): Aktion-Erfolg MUSS geprueft werden –
+            # KEIN `|| true` um den Aktion-Befehl; FOUND=1 erst NACH Exit-Code
+            # 0. Bei Fehler: {marker}-FAILED-Marker + break (laut scheitern,
+            # kein falscher Erfolg im Workflow).
+            lines.append(f"    if {action_cmd} 2>&1; then")
+            lines.append(f'      echo "---{marker}-END:${{inst}}:{src_typ}---"')
             lines.append("      FOUND=1")
             lines.append("      break")
             lines.append("    else")
-            lines.append(f'      echo "---APPROVE-END:${{inst}}:{src_typ}---"')
-            lines.append(f'      echo "---APPROVE-FAILED:${{inst}}:{src_typ}---"')
+            lines.append(f'      echo "---{marker}-END:${{inst}}:{src_typ}---"')
+            lines.append(f'      echo "---{marker}-FAILED:${{inst}}:{src_typ}---"')
             lines.append("      break")
             lines.append("    fi")
             lines.append("  fi")
@@ -644,17 +698,22 @@ def parse_ein_job_output(
     typ: str,
     request_id: str = "",
     target: str = "",
+    action: str = "approve",
 ) -> Optional[DiscoveryResult]:
-    """Parst die Ein-Job-Remote-Ausgabe (JSON-Blöcke + Approve-Blöcke + FOUND).
+    """Parst die Ein-Job-Remote-Ausgabe (JSON-Blöcke + Aktion-Blöcke + FOUND).
 
     Marker (v3.0, R02-Umsetzung): `---JSON-BEGIN:<inst>:<typ>---` …
     `---JSON-END:<inst>:<typ>---` (typ = telegram|device – auch bei type=both
     eindeutig), `---APPROVE-BEGIN:<inst>:<typ>---` … `---APPROVE-END:...---`,
     `---FOUND:1|0---`.
 
+    v3.2 (Reject-Modus): `action` waehlt die Marker-Menge – "approve"
+    (APPROVE-BEGIN/END/FAILED) oder "reject" (REJECT-BEGIN/END/FAILED).
+    approved=True gilt fuer die jeweilige Aktion (Reject → rejected).
+
     Der ID-Match wird hier in Python verifiziert (parse_entries +
-    entry_matches_id, R08); approved=True nur wenn zusätzlich APPROVE-Marker +
-    FOUND=1 vorliegen (Approve wirklich in der Session gelaufen).
+    entry_matches_id, R08); approved=True nur wenn zusätzlich Aktion-Marker +
+    FOUND=1 vorliegen (Aktion wirklich in der Session gelaufen).
 
     Returns:
         DiscoveryResult wenn die ID gefunden wurde (approved je nach Markern),
@@ -688,19 +747,27 @@ def parse_ein_job_output(
         if matched:
             break
 
-    approve_blocks = list(APPROVE_BLOCK_RE.finditer(stdout))
-    approve_failed = [m.group("label") for m in APPROVE_FAILED_RE.finditer(stdout)]
-    # B2: approved nur wenn Approve-Block vorhanden, FOUND=1 UND kein
-    # APPROVE-FAILED-Marker (Approve-Exit-Code war 0).
-    approved = bool(approve_blocks) and found_flag and not approve_failed
+    # v3.2: Marker-Menge je Aktion (approve|reject) – disjunkt geparst, damit
+    # ein Reject-Lauf nicht als Approve-Lauf gelesen wird und umgekehrt.
+    if action == "reject":
+        action_blocks_re = REJECT_BLOCK_RE
+        action_failed_re = REJECT_FAILED_RE
+    else:
+        action_blocks_re = APPROVE_BLOCK_RE
+        action_failed_re = APPROVE_FAILED_RE
+    action_blocks = list(action_blocks_re.finditer(stdout))
+    action_failed = [m.group("label") for m in action_failed_re.finditer(stdout)]
+    # B2: approved nur wenn Aktion-Block vorhanden, FOUND=1 UND kein
+    # <ACTION>-FAILED-Marker (Aktion-Exit-Code war 0).
+    approved = bool(action_blocks) and found_flag and not action_failed
 
     if matched:
         instance, block_typ, matched_id = matched
         rid = request_id or matched_id
     elif approved:
-        # Approve-Marker sind autoritativ (Shell hat den Fund bestätigt) –
+        # Aktion-Marker sind autoritativ (Shell hat den Fund bestätigt) –
         # konsistent mit dem Python-Match, da beide dieselben Felder nutzen.
-        instance, block_typ = _split_label(approve_blocks[0].group("label"))
+        instance, block_typ = _split_label(action_blocks[0].group("label"))
         rid = request_id
     else:
         return None
@@ -715,8 +782,9 @@ def parse_ein_job_output(
         unreachable=[],
         approved=approved,
         approve_output="\n".join(
-            b.group("body").strip() for b in approve_blocks
+            b.group("body").strip() for b in action_blocks
         ),
+        action=action,
     )
 
 
@@ -745,13 +813,15 @@ def run_discovery(
     approve: bool = True,
     github_output: Optional[str] = None,
     log: Optional[Callable[[str], None]] = None,
+    action: str = "approve",
 ) -> DiscoveryResult:
-    """Ein-Job-Kern (v3.0): Discovery + Approve in EINER SSH-Session pro VPS.
+    """Ein-Job-Kern (v3.0): Discovery + Aktion in EINER SSH-Session pro VPS.
 
     Gruppiert die Instanz-Map nach VPS (group_by_vps), baut pro VPS das
     Remote-Template (build_ein_job_remote_cmd) und parst die Marker-Ausgabe
-    (parse_ein_job_output). Der Approve läuft direkt in der SSH-Session beim
-    Fund – auch auf prod (Owner-Entscheidung: kein Environment-Gate).
+    (parse_ein_job_output). Die Aktion (Approve ODER Reject, v3.2) läuft
+    direkt in der SSH-Session beim Fund – auch auf prod (Owner-Entscheidung:
+    kein Environment-Gate).
 
     Args:
         instance_map: gefilterte [(instance_name, target), ...]
@@ -759,8 +829,10 @@ def run_discovery(
         derived_type: telegram|device|both (auto wird aus dem ID-Format abgeleitet)
         resolve_ip(node) -> ip|None  (None = VPS down; wird als UNREACHABLE gesammelt)
         run_remote(vps_ip, remote_cmd) -> stdout der SSH-Session
-        approve: True = Ein-Job (Approve in der Session), False = nur Discovery
+        approve: True = Ein-Job (Aktion in der Session), False = nur Discovery
         github_output: Pfad für $GITHUB_OUTPUT (request_id, found_*, derived_type)
+        action: "approve" (Default) | "reject" – waehlt Marker + Kommando
+                (v3.2; reject nur device-Requests)
 
     Raises:
         RequestNotFoundError: ID auf keiner Instanz gefunden (unreachable-Liste)
@@ -787,12 +859,14 @@ def run_discovery(
             continue
 
         remote_cmd = build_ein_job_remote_cmd(
-            derived_type, instances, request_id, approve=approve
+            derived_type, instances, request_id, approve=approve, action=action
         )
         log(f"🔍 SSH {node} ({target}): {', '.join(instances)} – Quelle(n): {derived_type}")
         stdout = run_remote(ip, remote_cmd) if run_remote else ""
 
-        result = parse_ein_job_output(stdout, derived_type, request_id, target)
+        result = parse_ein_job_output(
+            stdout, derived_type, request_id, target, action=action
+        )
         if result is None:
             continue  # kein Fund auf diesem VPS → nächster VPS
 
@@ -802,11 +876,12 @@ def run_discovery(
         if github_output:
             _write_github_output(github_output, result, derived_type)
         if result.approved:
-            log(f"✅ Request-ID in {target}/{result.instance} gefunden und freigegeben "
+            aktion = "rejected" if action == "reject" else "freigegeben"
+            log(f"✅ Request-ID in {target}/{result.instance} gefunden und {aktion} "
                 f"(Typ: {result.found_type})!")
         else:
             log(f"🔎 Request-ID in {target}/{result.instance} gefunden "
-                f"(Typ: {result.found_type}, ohne Approve)")
+                f"(Typ: {result.found_type}, ohne Aktion)")
         return result
 
     raise RequestNotFoundError(request_id, unreachable)
@@ -892,9 +967,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--result-json", help="Ergebnis-JSON in Datei schreiben (optional)")
     parser.add_argument("--approve", action="store_true",
                         help="Ein-Job: Approve direkt in der SSH-Session beim Fund (v3.0)")
+    parser.add_argument("--reject", action="store_true",
+                        help="Ein-Job-Reject (v3.2): Request per `openclaw devices reject <ID>` "
+                             "in der SSH-Session ablehnen (nur device-Requests)")
     # Validierungs-Modus (Workflow-Step "Eingaben validieren", DRY mit approve.py)
     parser.add_argument("--validate-id", help="Nur ID validieren + Typ ableiten (stdout), exit 0/2")
     opts = parser.parse_args(args)
+
+    if opts.approve and opts.reject:
+        parser.error("--approve und --reject schliessen sich aus")
 
     # ── Validierungs-Modus ──
     if opts.validate_id is not None:
@@ -934,6 +1015,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     if derived_type == "auto":
         derived_type = derive_type(opts.request_id)
 
+    # v3.2: Reject-Modus nur fuer device-Requests (openclaw CLI hat kein
+    # 'pairing reject') – Fail-Fast vor dem SSH-Aufbau.
+    action = "reject" if opts.reject else "approve"
+    if action == "reject" and derived_type != "device":
+        print("❌ Reject-Modus unterstuetzt nur device-Requests – die openclaw CLI "
+              "hat kein 'pairing reject' (nur `openclaw devices reject <ID>`).",
+              file=sys.stderr)
+        return 2
+
     instance_map = _load_instance_map(opts.instance_map)
     filtered_map = filter_instance_map(
         instance_map,
@@ -965,9 +1055,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             derived_type=derived_type,
             resolve_ip=resolve_ip,
             run_remote=run_remote,
-            approve=opts.approve,
+            approve=opts.approve or opts.reject,
             github_output=os.environ.get("GITHUB_OUTPUT"),
             log=log,
+            action=action,
         )
     except RequestNotFoundError as err:
         print(f"❌ {err}", file=sys.stderr)
@@ -982,10 +1073,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                 json.dump(result_obj, fh, ensure_ascii=False)
         return 1
 
-    if opts.approve and not result.approved:
+    if (opts.approve or opts.reject) and not result.approved:
+        aktion = "Reject" if opts.reject else "Approve"
+        marker_name = "REJECT" if opts.reject else "APPROVE"
         print(
-            f"❌ ID '{opts.request_id}' gefunden, aber Approve wurde nicht in der "
-            "SSH-Session bestätigt (APPROVE-Marker fehlen).",
+            f"❌ ID '{opts.request_id}' gefunden, aber {aktion} wurde nicht in der "
+            f"SSH-Session bestätigt ({marker_name}-Marker fehlen).",
             file=sys.stderr,
         )
         return 1
