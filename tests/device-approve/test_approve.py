@@ -126,6 +126,39 @@ class TestLocalDiscovery:
         assert result is not None
         assert result.found_type == "device"
 
+    def test_device_request_id_uuid36_matches_locally(self):
+        """v3.3.1: lokaler Pfad matcht pending[].requestId (UUID-36) – die
+        approve/reject-ID; deviceId ist der 64er-PublicKey-Hash. Vorher
+        (id_field="deviceId") lieferte dieser Fall not_found."""
+        pending = [{
+            "deviceId": DEVICE_HEX_64, "requestId": REAL_ID,
+            "publicKey": "abc", "platform": "Linux armv81",
+        }]
+        result, _ = approve.run_local_discovery(
+            REAL_ID, "device",
+            runner=lambda cmd, capture_output, text, timeout: FakeCompletedProcess(
+                0, stdout=json.dumps({"pending": pending, "paired": []})
+            ),
+        )
+        assert result is not None
+        assert result.found_type == "device"
+        assert result.request_id == REAL_ID
+
+    def test_device_device_id_hex64_matches_locally(self):
+        """Regression: lokaler Pfad matcht weiterhin deviceId (64er-Hash)."""
+        pending = [{
+            "deviceId": DEVICE_HEX_64, "requestId": REAL_ID,
+            "publicKey": "abc", "platform": "Win32",
+        }]
+        result, _ = approve.run_local_discovery(
+            DEVICE_HEX_64, "device",
+            runner=lambda cmd, capture_output, text, timeout: FakeCompletedProcess(
+                0, stdout=json.dumps({"pending": pending, "paired": []})
+            ),
+        )
+        assert result is not None
+        assert result.found_type == "device"
+
     def test_both_scans_pairing_then_devices(self):
         seq = []
 

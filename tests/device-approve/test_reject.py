@@ -50,6 +50,15 @@ def devices_json(device_id, pending=None):
     return json.dumps({"pending": entries, "paired": []})
 
 
+def realistic_devices_json():
+    """v3.3.1: ECHTE pending[]-Struktur (e2e-Beleg aee3a00/Run 31156554728):
+    deviceId = 64er-PublicKey-Hash, requestId = UUID-36 (die reject-ID)."""
+    return json.dumps({"pending": [
+        {"deviceId": "9df47d697653fb4069407734e06849b342738ed3e9ec4b172402aca911925392",
+         "requestId": REAL_REQUEST_ID, "publicKey": "abc", "platform": "Win32"},
+    ], "paired": []})
+
+
 def json_block(instance, typ, body):
     return f"---JSON-BEGIN:{instance}:{typ}---\n{body}\n---JSON-END:{instance}:{typ}---\n"
 
@@ -147,6 +156,20 @@ class TestParseRejectOutput:
         assert result.action == "reject"
         assert result.approved is True  # historischer Feldname = Aktion ok
         assert "Request rejected." in result.approve_output
+
+    def test_reject_by_request_id_uuid36_realistic_structure(self):
+        """v3.3.1 (Owner-Kritik 09:31): Reject per UUID-36 (requestId) über den
+        Workflow-Match-Pfad mit ECHTER pending[]-Struktur (deviceId=64er-Hash
+        + requestId=UUID-36) → rejected (approved=True). Vorher: not_found."""
+        stdout = reject_stdout("oc2", "device", realistic_devices_json())
+        result = discovery.parse_ein_job_output(
+            stdout, "device", request_id=REAL_REQUEST_ID, target="prod", action="reject"
+        )
+        assert result is not None
+        assert result.found_type == "device"
+        assert result.request_id == REAL_REQUEST_ID
+        assert result.approved is True
+        assert result.action == "reject"
 
     def test_reject_failure_detected(self):
         """B2: Reject-Exit-Code != 0 → REJECT-FAILED-Marker + FOUND=0 →
@@ -254,6 +277,30 @@ class TestRunDiscoveryReject:
         assert result.action == "reject"
         assert "openclaw devices reject" in seen[0]
         assert "---REJECT-BEGIN" in seen[0]
+
+    def test_ein_job_reject_by_request_id_uuid36_realistic(self):
+        """v3.3.1 (Owner-Kritik 09:31): Reject per UUID-36 (requestId) ueber den
+        vollen run_discovery-Workflow-Pfad mit ECHTER pending[]-Struktur
+        (deviceId=64er-Hash + requestId=UUID-36) → rejected (approved=True)."""
+        seen = []
+
+        def run_remote(ip, remote_cmd):
+            seen.append(remote_cmd)
+            return reject_stdout("oc2", "device", realistic_devices_json())
+
+        result = discovery.run_discovery(
+            MAP_PROD, REAL_REQUEST_ID, derived_type="device",
+            resolve_ip=lambda node: "100.64.0.2",
+            run_remote=run_remote,
+            action="reject",
+        )
+        assert result.target == "prod"
+        assert result.instance == "oc2"
+        assert result.found_type == "device"
+        assert result.approved is True
+        assert result.action == "reject"
+        # Remote-Grep enthaelt die (requestId|deviceId)-Alternation
+        assert '(requestId|deviceId)' in seen[0]
 
     def test_approve_regression(self):
         """Default-Aktion approve bleibt unveraendert (action="approve")."""

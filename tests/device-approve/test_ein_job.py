@@ -75,6 +75,15 @@ def ein_job_stdout(instance, typ, body, *, approve=True, found=1, approve_output
     return out
 
 
+def realistic_devices_json():
+    """v3.3.1: ECHTE pending[]-Struktur (e2e-Beleg aee3a00/Run 31156554728):
+    deviceId = 64er-PublicKey-Hash, requestId = UUID-36 (die approve-ID)."""
+    return json.dumps({"pending": [
+        {"deviceId": DEVICE_HEX_64, "requestId": DEVICE_UUID,
+         "publicKey": "abc", "platform": "Linux armv81"},
+    ], "paired": []})
+
+
 # ── group_by_vps (§6.2.1) ──
 
 class TestGroupByVps:
@@ -389,6 +398,54 @@ class TestRunDiscoveryEinJob:
         assert result.instance == "oc2"
         assert result.approved is True
         assert calls == ["100.64.0.1", "100.64.0.2"]
+
+    def test_workflow_approve_by_request_id_uuid36(self):
+        """v3.3.1 (Owner-Kritik 09:31): DER Workflow-Pfad – Approve per UUID-36
+        (requestId) über run_discovery auf prod/oc1 → approved=True. Vorher
+        lieferte dieser Fall not_found (Match nur auf deviceId=64er-Hash)."""
+        calls = []
+
+        def run_remote(ip, remote_cmd):
+            calls.append(ip)
+            if ip == "100.64.0.2":  # prod
+                return ein_job_stdout("oc1", "device", realistic_devices_json())
+            return ein_job_stdout("oc1", "device",
+                                  json.dumps({"pending": [], "paired": []}), found=0)
+
+        result = discovery.run_discovery(
+            MAP_DEV_PROD, DEVICE_UUID, derived_type="device",
+            resolve_ip=lambda node: "100.64.0.1" if node == "vps-dev" else "100.64.0.2",
+            run_remote=run_remote,
+        )
+        assert result.target == "prod"
+        assert result.instance == "oc1"
+        assert result.found_type == "device"
+        assert result.approved is True
+        assert calls == ["100.64.0.1", "100.64.0.2"]
+
+    def test_workflow_approve_by_device_id_hex64_regression(self):
+        """Regression: Approve per deviceId (64er-Hash) findet die ID weiterhin
+        (Alternativ-Format, Workflow-Doku nennt beide ID-Formate)."""
+        def run_remote(ip, remote_cmd):
+            return ein_job_stdout("oc1", "device", realistic_devices_json())
+
+        result = discovery.run_discovery(
+            MAP_DEV_PROD, DEVICE_HEX_64, derived_type="device",
+            resolve_ip=lambda node: "100.64.0.1",
+            run_remote=run_remote,
+        )
+        assert result.approved is True
+        assert result.found_type == "device"
+
+    def test_workflow_not_found_when_request_id_missing(self):
+        """Fremde UUID → RequestNotFoundError (kein false-positiver Match)."""
+        with pytest.raises(discovery.RequestNotFoundError):
+            discovery.run_discovery(
+                MAP_DEV_PROD, ALT_UUID, derived_type="device",
+                resolve_ip=lambda node: "100.64.0.1",
+                run_remote=lambda ip, cmd: ein_job_stdout(
+                    "oc1", "device", realistic_devices_json(), found=0),
+            )
 
     def test_break_across_vps(self):
         """Fund auf dev → prod wird NICHT mehr gescannt (Break über VPS-Grenzen)."""
