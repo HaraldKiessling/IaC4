@@ -1,4 +1,4 @@
-# Device-Approve v3.0 – Ein-Job-Fast-Path (Lokale Testanleitung)
+# Device-Approve v3.2 – Ein-Job-Fast-Path (Lokale Testanleitung)
 
 Package `tools/device-approve/` (Design 05 v3.0, Workflow-05-Performance-Optimierung)
 – Unified ID-basierte Freigabe (Telegram-Pairing + Device-Approve) als
@@ -23,6 +23,14 @@ Requests über alle (gefilterten) Instanzen aggregiert (Telegram `requests[]`
 Markdown-Tabelle (Job-Summary) + JSON ausgegeben. KEIN Approve; Exit 0 auch
 bei leerer Liste (grün). Die JSON-Block-Generierung ist mit dem Approve-Modus
 geteilt (`_build_json_collection_block`, R01).
+**v3.2 – Reject-Modus (`--reject-only`, 2026-08-07, Diagnose-Folgeauftrag):**
+Statt zu approven wird die ID in derselben Ein-Job-Remote-Schleife gesucht
+und per `openclaw devices reject <ID>` abgelehnt (REJECT-BEGIN/END/FAILED-
+Marker, B2-Semantik). **NUR device-Requests:** die openclaw CLI hat kein
+`pairing reject` (empirisch 2026-08-07: `openclaw pairing` kennt nur
+approve|list|help) → Telegram-Codes sind CLI-seitig nicht reject-bar
+(Hard-Gate: `derived_type != device` ⇒ Exit 2 in approve.py, ValueError in
+build_ein_job_remote_cmd, Abbruch im Workflow-Validate-Step).
 
 ## Schnellstart (lokaler Modus)
 
@@ -76,14 +84,24 @@ python3 tools/device-approve/approve.py --help
   --list-only             Listen-Modus (v3.1): ALLE pending Requests auflisten
                           (kein Approve, keine ID; schliesst --full-run/--discover-only
                           aus; --request-id wird ignoriert, type=auto → both)
+  --reject-only           Reject-Modus (v3.2): ID suchen + per `openclaw devices
+                          reject <ID>` ablehnen (REJECT-Marker, B2-Semantik). NUR
+                          device-Requests (kein 'pairing reject' in der CLI);
+                          schliesst --list-only/--discover-only aus
+  --reject-only           Reject-Modus (v3.2): ID suchen + per `openclaw devices
+                          reject <ID>` ablehnen (REJECT-Marker, B2-Semantik). NUR
+                          device-Requests (kein 'pairing reject' in der CLI);
+                          schliesst --list-only/--discover-only aus
   --summary               Markdown-Summary in $GITHUB_STEP_SUMMARY
   --local                 Lokaler Modus ohne SSH (env APPROVE_LOCAL=1)
   --vps-user, --ssh-key, --ts-tailnet, --ts-client-id, --ts-client-secret
 ```
 
-`--full-run`, `--discover-only` und `--list-only` schließen sich gegenseitig
-aus. Ohne `--discover-only`/`--list-only` ist der SSH-Modus immer Discovery +
-Approve (Ein-Job).
+`--full-run`, `--discover-only`, `--list-only` und `--reject-only` schließen
+sich teils gegenseitig aus: `--full-run` schließt `--discover-only` aus;
+`--reject-only` schließt `--list-only`/`--discover-only` aus (mit `--full-run`
+ist es der Ein-Job-Reject). Ohne `--discover-only`/`--list-only` ist der
+SSH-Modus immer Discovery + Aktion (Approve/Reject, Ein-Job).
 
 ## Listen-Modus (v3.1, `--list-only`)
 
@@ -109,6 +127,7 @@ python3 tools/device-approve/approve.py --list-only --local
 |---|---|---|
 | `approve` (default) | `--full-run --request-id $APPROVE_ID` | required, validiert (`--validate-id`) |
 | `list` | `--list-only` | **NICHT übergeben** – wird ignoriert (Warning, keine Validierung) |
+| `reject` (v3.2) | `--full-run --reject-only --request-id $APPROVE_ID` | required, validiert (`--validate-id`); nur device |
 
 `--list-only` schließt `--full-run`/`--discover-only` aus (argparse-Fehler,
 Exit 2). `--list-only` + `--request-id` → Warning auf stderr, ID wird nie
@@ -155,6 +174,48 @@ ist ein gültiges Ergebnis.
  "scanned": ["dev/oc1"], "unreachable": [],
  "filters_applied": {"type": "both", "target": "both", "instance": "all"}}
 ```
+
+## Reject-Modus (v3.2, `--reject-only`)
+
+Aufräumen eines konkreten offenen device-Requests (z.B. Test-Requests aus
+Diagnosen): ID in der Ein-Job-Remote-Schleife suchen und per
+`openclaw devices reject <ID>` ablehnen (docker exec im Instanz-Container,
+REJECT-Marker, B2-Semantik). Workflow-Input `mode: reject` (Workflow 05) bzw.
+CLI:
+
+```bash
+# SSH: Ein-Job-Reject (nur device-Requests)
+python3 tools/device-approve/approve.py --full-run --reject-only \
+  --instance-map /tmp/instance-map.txt \
+  --request-id "$APPROVE_ID" \
+  --type-filter device --target-filter prod --instance-filter all \
+  --vps-user "$VPS_USER" --ssh-key ~/.ssh/id_ed25519 \
+  --ts-tailnet "$TS_TAILNET" --ts-client-id "$TS_CLIENT_ID" \
+  --ts-client-secret "$TS_CLIENT_SECRET" --summary
+
+# Lokal (Gateway, kein TS-SSH noetig)
+python3 tools/device-approve/approve.py --reject-only --local --request-id "$APPROVE_ID"
+```
+
+### Reject-Regeln (verbindlich)
+
+- **NUR device-Requests:** die openclaw CLI hat kein `pairing reject`
+  (empirisch 2026-08-07) – Telegram-Kurzcodes (6-12 A-Z0-9) werden mit
+  Exit 2 abgelehnt (approve.py), der Remote-Builder wirft ValueError und der
+  Workflow bricht im Validate-Step ab (defense in depth).
+- **ID-Formate unverändert** (gleiche Regex wie approve): Pairing-Kurzcode
+  `^[A-Z0-9]{6,12}$` / Device-ID `^[0-9a-fA-F-]{36,128}$` – UUID-36-Requests
+  (z.B. `21e6459c-7323-43aa-bdb0-a3105e9d8255`) passen auf das Device-Format.
+- **Exit-Code-Vertrag wie approve:** 0 = rejected ODER not_found (grüner
+  Run; not_found: „kein offener Request“ statt Fehler), 1 = error,
+  2 = Config/Validierungs-Fehler (inkl. Nicht-Device-Reject).
+
+### Reject-Kommandos (Δ3, Templates in discovery.py – Single Source of Truth)
+
+| Typ | Reject-Kommando |
+|---|---|
+| device | `openclaw devices reject <ID>` |
+| telegram | — (CLI-seitig nicht reject-bar, kein `pairing reject`) |
 
 ## Discovery-Quellen (Δ1, empirisch verifiziert 2026-08-06)
 
