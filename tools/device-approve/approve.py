@@ -165,7 +165,8 @@ def run_local_discovery(
 
     Telegram → `openclaw pairing list telegram --json` (Feld code, Schema
     {"channel": ..., "requests": [...]}, F10: Fehler/leer → fail-safe überspringen)
-    Device   → `openclaw devices list --json` (Feld deviceId, Schema pending/paired)
+    Device   → `openclaw devices list --json` (Schema pending/paired; Match auf
+    requestId (UUID-36, approve/reject-ID) ODER deviceId (64er-Hash) – v3.3.1)
 
     Returns:
         (DiscoveryResult | None, stats_dict)
@@ -200,13 +201,16 @@ def run_local_discovery(
         # Empirisch (Sandbox 2026-08-06): pairing list → Feld "requests"
         if typ == "telegram":
             entries = data.get("requests") or data.get("pending") or []
-            id_field = "code"
+            id_fields = ("code",)
         else:
             entries = data.get("pending") or []
-            id_field = "deviceId"
+            # v3.3.1: pending[].requestId (UUID-36) ist die approve/reject-ID
+            # (deviceId = 64er-PublicKey-Hash, e2e-Beleg aee3a00); deviceId
+            # bleibt als defensiver Fallback für Quellen ohne requestId-Feld.
+            id_fields = ("requestId", "deviceId")
 
         for entry in entries:
-            if entry.get(id_field) == request_id:
+            if any(entry.get(f) == request_id for f in id_fields):
                 result = DiscoveryResult(
                     request_id=request_id,
                     instance="local",
