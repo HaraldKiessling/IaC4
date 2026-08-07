@@ -316,7 +316,7 @@ jobs:
           [ -n "$VPS_IP" ] || { echo "❌ VPS-IP für vps-$APPROVE_TARGET nicht gefunden" >&2; exit 1; }
           SSH="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR ${VPS_USER}@${VPS_IP}"
           CLIENT() {
-            docker run --rm --entrypoint openclaw -u root -v "$STATE_DIR:/tmp/e2e" \
+            docker run --rm --network host --entrypoint openclaw -u root -v "$STATE_DIR:/tmp/e2e" \
               -e OPENCLAW_STATE_DIR=/tmp/e2e "$OPENCLAW_IMAGE" "$@"
           }
           {
@@ -426,14 +426,14 @@ jobs:
               echo "=== $HOST_TAG (${H_IP}) ===" >&2
               $H_SSH "echo ---ts-version---; tailscale version | head -1; echo ---serve-json---; tailscale serve status --json 2>/dev/null; echo ---image---; sudo docker inspect -f 'img={{.Config.Image}} created={{.Created}}' openclaw-${APPROVE_INSTANCE} 2>&1; echo ---ws-logs-10m---; sudo docker logs --since 10m openclaw-${APPROVE_INSTANCE} 2>&1 | grep -aE '\[ws\]|pairing|approve|reject|device' | tail -25" >&2 || true
             done
-            # v3.10 (Runner-Netz-These, 2026-08-07): ALLE erfolgreichen
-            # wss-Client-Tests kamen aus docker auf vps-dev (tun-basierte
-            # tailscaled). Der Runner-Client läuft in docker; GH-Runner-
-            # tailscale läuft oft userspace (kein /dev/net/tun) → docker-
-            # Container kommt NICHT ins Tailnet → 1006, bevor das Gateway
-            # etwas sieht. Proben (falscher Token = kein State):
+            # v3.10 BEFUND (Run 31156304549): Root-Cause GEFUNDEN – NICHT dev!
+            # Runner-docker default-net → prod = 1006 (ebenso dev); --network=host
+            # → dev UND prod = 1008 token mismatch (Client erreicht Gateway).
+            # dev serve/TLS/Gateway/ACL sind GESUND (prod-Referenz verhält sich
+            # identisch). Der Docker-Bridge-Pfad des Runners erreicht das Tailnet
+            # nicht; host-Netz tut es. FIX: CLIENT() nutzt --network host.
             echo "--- runner-tun-device ---" >&2
-            ls -la /dev/net/tun 2>&1 | head -2 >&2 || true
+            if test -c /dev/net/tun; then echo "tun device present" >&2; else echo "tun device MISSING" >&2; fi
             echo "--- runner-tailscale-prefs ---" >&2
             tailscale debug prefs 2>/dev/null | grep -iE 'tun|route|netfilter' | head -5 >&2 || true
             echo "--- client-default-net-prod (Runner docker → prod) ---" >&2
