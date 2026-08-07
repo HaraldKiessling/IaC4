@@ -426,6 +426,22 @@ jobs:
               echo "=== $HOST_TAG (${H_IP}) ===" >&2
               $H_SSH "echo ---ts-version---; tailscale version | head -1; echo ---serve-json---; tailscale serve status --json 2>/dev/null; echo ---image---; sudo docker inspect -f 'img={{.Config.Image}} created={{.Created}}' openclaw-${APPROVE_INSTANCE} 2>&1; echo ---ws-logs-10m---; sudo docker logs --since 10m openclaw-${APPROVE_INSTANCE} 2>&1 | grep -aE '\[ws\]|pairing|approve|reject|device' | tail -25" >&2 || true
             done
+            # v3.10 (Runner-Netz-These, 2026-08-07): ALLE erfolgreichen
+            # wss-Client-Tests kamen aus docker auf vps-dev (tun-basierte
+            # tailscaled). Der Runner-Client läuft in docker; GH-Runner-
+            # tailscale läuft oft userspace (kein /dev/net/tun) → docker-
+            # Container kommt NICHT ins Tailnet → 1006, bevor das Gateway
+            # etwas sieht. Proben (falscher Token = kein State):
+            echo "--- runner-tun-device ---" >&2
+            ls -la /dev/net/tun 2>&1 | head -2 >&2 || true
+            echo "--- runner-tailscale-prefs ---" >&2
+            tailscale debug prefs 2>/dev/null | grep -iE 'tun|route|netfilter' | head -5 >&2 || true
+            echo "--- client-default-net-prod (Runner docker → prod) ---" >&2
+            docker run --rm --entrypoint openclaw -u root -v "$STATE_DIR:/tmp/e2e" -e OPENCLAW_STATE_DIR=/tmp/e2e "$OPENCLAW_IMAGE" gateway call health --url "wss://vps-prod.${TS_TAILNET}:${E2E_PORT}" --token "wrong-token-0000-0000" --timeout 15000 2>&1 | grep -aE '1008|1006|token mismatch|closed|dropped' | head -4 >&2 || true
+            echo "--- client-host-net-dev (Runner docker --network=host → dev) ---" >&2
+            docker run --rm --network host --entrypoint openclaw -u root -v "$STATE_DIR:/tmp/e2e" -e OPENCLAW_STATE_DIR=/tmp/e2e "$OPENCLAW_IMAGE" gateway call health --url "wss://${E2E_HOST}:${E2E_PORT}" --token "wrong-token-0000-0000" --timeout 15000 2>&1 | grep -aE '1008|1006|token mismatch|closed|dropped' | head -4 >&2 || true
+            echo "--- client-host-net-prod (Runner docker --network=host → prod) ---" >&2
+            docker run --rm --network host --entrypoint openclaw -u root -v "$STATE_DIR:/tmp/e2e" -e OPENCLAW_STATE_DIR=/tmp/e2e "$OPENCLAW_IMAGE" gateway call health --url "wss://vps-prod.${TS_TAILNET}:${E2E_PORT}" --token "wrong-token-0000-0000" --timeout 15000 2>&1 | grep -aE '1008|1006|token mismatch|closed|dropped' | head -4 >&2 || true
             echo "--- gateway-config dev (redigiert) ---" >&2
             $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} sh -c 'cat \$OPENCLAW_CONFIG_DIR/openclaw.json 2>/dev/null || cat /home/node/.openclaw/openclaw.json 2>/dev/null || find / -maxdepth 6 -name openclaw.json 2>/dev/null | head -1 | xargs -r cat'" > /tmp/e2e-gw-config.json 2>/dev/null || true
             python3 - <<'PYEOF' >&2
