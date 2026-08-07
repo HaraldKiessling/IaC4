@@ -424,33 +424,33 @@ jobs:
             echo "--- gateway-config dev (redigiert) ---" >&2
             $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} sh -c 'cat \$OPENCLAW_CONFIG_DIR/openclaw.json 2>/dev/null || cat /home/node/.openclaw/openclaw.json 2>/dev/null || find / -maxdepth 6 -name openclaw.json 2>/dev/null | head -1 | xargs -r cat'" > /tmp/e2e-gw-config.json 2>/dev/null || true
             python3 - <<'PYEOF' >&2
-import json, re
+          import json, re
 
-try:
-    d = json.load(open('/tmp/e2e-gw-config.json'))
-except Exception as e:
-    print('dev config read failed:', e)
-    raise SystemExit
-s = json.dumps(d, indent=2, default=str)
-s = re.sub(r'("[^"]*(?:token|secret|apiKey|password|key)[^"]*"\s*:\s*")[^"]*(")', r'\1[REDACTED]\2', s, flags=re.I)
-print(s)
-PYEOF
+          try:
+              d = json.load(open('/tmp/e2e-gw-config.json'))
+          except Exception as e:
+              print('dev config read failed:', e)
+              raise SystemExit
+          s = json.dumps(d, indent=2, default=str)
+          s = re.sub(r'("[^"]*(?:token|secret|apiKey|password|key)[^"]*"\s*:\s*")[^"]*(")', r'\1[REDACTED]\2', s, flags=re.I)
+          print(s)
+          PYEOF
             if [ -n "$PROD_IP" ]; then
               echo "--- gateway-config prod (redigiert) ---" >&2
               ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
                 "${VPS_USER}@${PROD_IP}" "sudo docker exec openclaw-${APPROVE_INSTANCE} sh -c 'cat \$OPENCLAW_CONFIG_DIR/openclaw.json 2>/dev/null || cat /home/node/.openclaw/openclaw.json 2>/dev/null || find / -maxdepth 6 -name openclaw.json 2>/dev/null | head -1 | xargs -r cat'" > /tmp/e2e-gw-config-prod.json 2>/dev/null || true
               python3 - <<'PYEOF' >&2
-import json, re
+          import json, re
 
-try:
-    d = json.load(open('/tmp/e2e-gw-config-prod.json'))
-except Exception as e:
-    print('prod config read failed:', e)
-    raise SystemExit
-s = json.dumps(d, indent=2, default=str)
-s = re.sub(r'("[^"]*(?:token|secret|apiKey|password|key)[^"]*"\s*:\s*")[^"]*(")', r'\1[REDACTED]\2', s, flags=re.I)
-print(s)
-PYEOF
+          try:
+              d = json.load(open('/tmp/e2e-gw-config-prod.json'))
+          except Exception as e:
+              print('prod config read failed:', e)
+              raise SystemExit
+          s = json.dumps(d, indent=2, default=str)
+          s = re.sub(r'("[^"]*(?:token|secret|apiKey|password|key)[^"]*"\s*:\s*")[^"]*(")', r'\1[REDACTED]\2', s, flags=re.I)
+          print(s)
+          PYEOF
             fi
             exit 1
           fi
