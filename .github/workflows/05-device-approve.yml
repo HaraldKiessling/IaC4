@@ -67,7 +67,8 @@
 #     /tmp/e2e-<target>-<inst>, wss:// via Tailscale-Serve):
 #       1) Request erzeugen (1008 pairing required → UUID-requestId)
 #       2) List-Nachweis: UUID im pending[] von `devices list --json`
-#          (Feld deviceId = requestId – beantwortet die UUID-Format-Frage)
+#          (Feld requestId = UUID-36; deviceId = 64er-Public-Key-Hash –
+#          beantwortet die UUID-Format-Frage)
 #       3) Approve: `openclaw devices approve <UUID>` (SSH docker exec)
 #       4) Nutzbar: Client-Reconnect → health ok: true
 #       5) Löschen: `openclaw devices remove <deviceId>` (64-hex, paired)
@@ -77,6 +78,21 @@
 #   - id wird im E2E-Modus ignoriert (keine Validierung, wie Listen-Modus).
 #   - WICHTIG: approve/reject wirken nur auf pending (requestId=UUID-36),
 #     remove nur auf paired (deviceId=64-hex) – CLI-Fakten OpenClaw 2026.7.1.
+#
+#   v3.4 (Review-Auflagen PR #110, 2026-08-07 – finaler Review, CHANGE REQUEST):
+#   - e2e-Step auf den 7-Schritte-Lifecycle reduziert (H1): Runner-seitige
+#     Pfad-Probe [0] (DNS/TLS/WS-Upgrade), Tailscale-apt-Update dev [0b],
+#     Falsches-Token-Test [1a] und Diagnose-v3.9-Block (docker default-vs-host-
+#     net, tun device, Gateway-Config-Dump) entfernt – reines Sandbox-Debugging
+#     der Transport-Untersuchung (Commits e74ee3f→5d75967). Abbruch mit Befund
+#     (exit 1) bleibt. Der Fix c215f5c (--network host im CLIENT-Alias) BLEIBT.
+#   - /tmp/instance-map-{full,}.txt entfaellt (H2): approve.py generiert die
+#     Map selbst via sot_parser (load_instance_map_from_ssot, root=.). Der
+#     SSoT-Step installiert nur noch pyyaml (Runner-Dependency).
+#   - Doku-Korrektur (H3): UUID-36 liegt im pending-Eintrag in Feld `requestId`
+#     (Feld `deviceId` = 64er-Public-Key-Hash) – konsistent zu d51107b.
+#   - Tailscale-apt-Update dev entfernt (H4): Infrastruktur-Patch gehoert in
+#     Bootstrap/SSoT, nicht in den Freigabe-Workflow.
 #
 #   Secrets (Ist-Zustand, M2): TAILSCALE_OAUTH_CLIENT_ID /
 #   TAILSCALE_OAUTH_CLIENT_SECRET (Tailscale-Action v4.1.3, NICHT TS_OAUTH_*),
@@ -234,29 +250,17 @@ jobs:
             echo "✅ Eingaben validiert (mode=$INPUT_MODE, id=$INPUT_ID, derived_type=$DERIVED_TYPE, target=$INPUT_TARGET, instance=$INPUT_INSTANCE)"
           fi
 
-      # SSoT-Mapping (dynamisches Globbing vps-*.yml) + Filter target/instance
-      - name: Instanz-Mapping laden (SSoT) + filtern
+      # SSoT-Mapping (v3.4/H2): approve.py generiert die Instanz-Map selbst
+      # via sot_parser (load_instance_map_from_ssot, tools/telegram-approve-bot/,
+      # iter_enabled_instances) – die frueheren /tmp/instance-map-{full,}.txt-
+      # Zwischendateien entfallen. Dieser Step installiert nur die
+      # Python-Dependency pyyaml (Runner hat sie nicht vorinstalliert).
+      # Filterung target/instance uebernimmt approve.py via
+      # --target-filter/--instance-filter.
+      - name: Python-Dependency pyyaml installieren (SSoT-Parser)
         run: |
           set -euo pipefail
           python3 -m pip install --quiet pyyaml
-          python3 tools/telegram-approve-bot/sot_parser.py . > /tmp/instance-map-full.txt
-
-          python3 -c "
-          target_filter = '$APPROVE_TARGET'
-          inst_filter = '$APPROVE_INSTANCE'
-          with open('/tmp/instance-map-full.txt') as f:
-              for line in f:
-                  name, _, target = line.strip().partition('|')
-                  if not name:
-                      continue
-                  if target_filter not in ('both', target):
-                      continue
-                  if inst_filter not in ('all', name):
-                      continue
-                  print(f'{name}|{target}')
-          " > /tmp/instance-map.txt
-
-          cat /tmp/instance-map.txt
 
       - name: Connect Runner to Tailnet
         uses: tailscale/github-action@v4.1.3
@@ -277,7 +281,7 @@ jobs:
       # (neue Device-Identität in /tmp/e2e-<target>-<inst>, bleibt über alle
       # Schritte identisch) gegen wss:// via Tailscale-Serve:
       #   1) Request erzeugen (1008 pairing required + UUID-requestId)
-      #   2) List-Nachweis (devices list --json: UUID im pending[], Feld deviceId)
+      #   2) List-Nachweis (devices list --json: UUID im pending[], Feld requestId)
       #   3) Approve (devices approve <UUID>) 4) Nutzbar (Reconnect, health ok)
       #   5) Löschen (devices remove <deviceId>) 6) Nicht mehr nutzbar (1008)
       #   7) Cleanup (reject neuer Request). Abbruch mit Befund, falls die UUID
@@ -328,66 +332,8 @@ jobs:
             echo "| **VPS-IP** | $VPS_IP |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
-          # ── 0) Runner-seitige Pfad-Probe (dev vs prod, read-only; v3.5) ──
-          # Lückenschluss v3.4: Selbst-Tests liefen VPS-seitig (curl -k) – was der
-          # Runner sieht (DNS, TLS-Zertifikat OHNE -k, WS-Upgrade) bleibt offen.
-          # Das 1006 des Clients deutet auf TLS/Cert-Ebene oder Runner→dev-Pfad.
-          echo "=== [0] DNS-Resolution (Runner) ==="
-          getent hosts "$E2E_HOST" || true
-          getent hosts "vps-prod.${TS_TAILNET}" || true
-          for H in "$E2E_HOST" "vps-prod.${TS_TAILNET}"; do
-            echo "=== [0] Runner→${H}:${E2E_PORT} TLS-verbose (MIT Zertifikatsprüfung) ==="
-            curl -sv --max-time 12 "https://${H}:${E2E_PORT}/health" 2>&1 \
-              | grep -aE "Trying|Connected|SSL connection|subject:|issuer:|verify|SSL certificate|HTTP/|\"ok\"|error|refused|timed out|Operation" | head -14 || true
-            echo "=== [0] Runner→${H}:${E2E_PORT} WS-Upgrade ==="
-            curl -skv --max-time 12 --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
-              -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
-              "https://${H}:${E2E_PORT}/health" 2>&1 \
-              | grep -aE "HTTP/|101|502|400|error|refused|timed out" | head -5 || true
-          done
-          echo "=== [0] VPS-seitig: serve-json komplett + Zertifikat (Laufzeit/Issuer) ==="
-          # shellcheck disable=SC2016  # $c wird REMOTE expandiert (absichtlich)
-          $SSH 'tailscale serve status --json; echo ---cert-files---; sudo ls -la /var/lib/tailscale/certs/ 2>&1; for c in /var/lib/tailscale/certs/*.crt; do echo ---cert---; sudo openssl x509 -in "$c" -noout -subject -issuer -dates 2>&1; done' >&2 || true
-          # ── 0b) Tailscale-Update auf dev (v3.8, Owner-Folgeauftrag 06:48): ──
-          # Befund 06:44-06:51: 1006 mit falschem UND echtem Token ⇒ dev-Gateway
-          # schließt WS VOR Auth; einziger struktureller Differenzfaktor dev vs prod
-          # ist die Tailscale-Version (dev 1.102.1 vs prod 1.102.2, WS-Proxy-Pfad von
-          # tailscale serve). FIX: dev per apt auf die aktuelle Tailscale-Version heben
-          # (Debian-Weg; Repo-SSoT ansible/roles/tailscale installiert via
-          # tailscale.com/install.sh → Tailscale-apt-Repo, dasselbe Repo). NUR dev,
-          # prod wird NICHT angefasst. Serve-Zustand danach prüfen und bei Verlust
-          # gemäß SSoT (ansible/roles/openclaw-gateway/tasks/instance.yml Z.214-223)
-          # reaktivieren: tailscale serve --bg --https=<port> http://localhost:<port>.
-          if [ "$APPROVE_TARGET" = "dev" ]; then
-            echo "=== [0b] Tailscale-Update dev (apt, Debian-Weg) ==="
-            $SSH "sudo apt-get update -qq && sudo apt-get install -y -qq tailscale"
-            echo "--- tailscale version nach Update ---"
-            $SSH "tailscale version"
-            echo "--- serve-Status nach Update ---"
-            $SSH "tailscale serve status --json" > /tmp/e2e-serve.json || true
-            if ! grep -q "http://localhost:${E2E_PORT}" /tmp/e2e-serve.json; then
-              echo "⚠️ serve für Port ${E2E_PORT} nach Update nicht aktiv – reaktiviere (SSoT instance.yml Z.220)"
-              $SSH "tailscale serve --bg --https=${E2E_PORT} http://localhost:${E2E_PORT}"
-            else
-              echo "✅ serve für Port ${E2E_PORT} nach Update weiterhin aktiv"
-            fi
-            $SSH "tailscale serve status" || true
-          else
-            echo "=== [0b] übersprungen (Tailscale-Update NUR auf dev) ==="
-          fi
-          # ── 1) Request erzeugen (frischer Client, wss://) ──
+          # ── 1) Request erzeugen (frischer Client, wss://, --network host) ──
           mkdir -p "$STATE_DIR"
-          # v3.6: Differenzial-Test – falsches Token vs. echtes Token. 1006 bei BEIDEN
-          # ⇒ dev-Gateway schließt WS VOR Auth (Config/Version/Pairing-Problem);
-          # 1008 'token mismatch' beim falschen ⇒ Secret DEV_OC1_GATEWAY_TOKEN ist
-          # staler als dev-Container-Token. read-only, kein State.
-          echo "=== [1a] Client mit FALSCHEM Token (erwartet: 1008 token mismatch) ==="
-          set +e
-          OUTB=$(CLIENT gateway call health --url "wss://${E2E_HOST}:${E2E_PORT}" --token "wrong-token-e2e-xyz" --timeout 15000 2>&1)
-          RCB=$?
-          set -e
-          printf '%s\n' "$OUTB" | tail -6; echo "rc=$RCB"
-          echo "=== [1] Client mit echtem Token (erwartet: 1008 pairing required) rc=0/1 ==="
           set +e
           OUT=$(CLIENT gateway call health --url "wss://${E2E_HOST}:${E2E_PORT}" --token "$GW_TOKEN" --timeout 20000 2>&1)
           RC=$?
@@ -396,66 +342,9 @@ jobs:
           printf '%s\n' "$OUT"
           REQ=$(printf '%s' "$OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)
           if [ -z "$REQ" ]; then
-            echo "❌ KEINE UUID-requestId gefunden (rc=$RC) – vermuteter Bug ODER Infra (Transport)." >&2
-            echo "=== Diagnose v3.9 (dev vs prod Komplett-Vergleich) ===" >&2
-            # Stand: beide Hosts schließen curl-WS-Upgrades mit 1006 (ua=curl,
-            # phase=ws_upgrade_started) – curl ist KEIN gültiger Client-Test.
-            # Prod-Bild created=2026-08-06, dev-Bild created=2026-08-04 (v3.7) →
-            # Versionstheorie. v3.9 holt: tailscale-Version, serve-json komplett,
-            # Bild-Zeitstempel, [ws]-Logs --since 10m (erreicht der CLI-Client
-            # das Gateway überhaupt?) auf dev UND prod.
-            for HOST_TAG in dev prod; do
-              if [ "$HOST_TAG" = "dev" ]; then
-                H_IP="$VPS_IP"; H_SSH="$SSH"
-              else
-                H_IP=$(curl -s -H "Authorization: Bearer $TS_TOKEN" \
-                  "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses" \
-                  | python3 -c "
-          import json, sys
-          devs = json.load(sys.stdin).get('devices', [])
-          for dev in devs:
-              if dev.get('hostname') in ('vps-prod', 'vps-prod-1'):
-                  addrs = dev.get('addresses') or []
-                  if addrs:
-                      print(addrs[0])
-                      break
-          ")
-                H_SSH="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR ${VPS_USER}@${H_IP}"
-              fi
-              [ -n "$H_IP" ] || { echo "[$HOST_TAG] IP nicht gefunden" >&2; continue; }
-              echo "=== $HOST_TAG (${H_IP}) ===" >&2
-              $H_SSH "echo ---ts-version---; tailscale version | head -1; echo ---serve-json---; tailscale serve status --json 2>/dev/null; echo ---image---; sudo docker inspect -f 'img={{.Config.Image}} created={{.Created}}' openclaw-${APPROVE_INSTANCE} 2>&1; echo ---ws-logs-10m---; sudo docker logs --since 10m openclaw-${APPROVE_INSTANCE} 2>&1 | grep -aE '\[ws\]|pairing|approve|reject|device' | tail -25" >&2 || true
-            done
-            # v3.10 BEFUND (Run 31156304549): Root-Cause GEFUNDEN – NICHT dev!
-            # Runner-docker default-net → prod = 1006 (ebenso dev); --network=host
-            # → dev UND prod = 1008 token mismatch (Client erreicht Gateway).
-            # dev serve/TLS/Gateway/ACL sind GESUND (prod-Referenz verhält sich
-            # identisch). Der Docker-Bridge-Pfad des Runners erreicht das Tailnet
-            # nicht; host-Netz tut es. FIX: CLIENT() nutzt --network host.
-            echo "--- runner-tun-device ---" >&2
-            if test -c /dev/net/tun; then echo "tun device present" >&2; else echo "tun device MISSING" >&2; fi
-            echo "--- runner-tailscale-prefs ---" >&2
-            tailscale debug prefs 2>/dev/null | grep -iE 'tun|route|netfilter' | head -5 >&2 || true
-            echo "--- client-default-net-prod (Runner docker → prod) ---" >&2
-            docker run --rm --entrypoint openclaw -u root -v "$STATE_DIR:/tmp/e2e" -e OPENCLAW_STATE_DIR=/tmp/e2e "$OPENCLAW_IMAGE" gateway call health --url "wss://vps-prod.${TS_TAILNET}:${E2E_PORT}" --token "wrong-token-0000-0000" --timeout 15000 2>&1 | grep -aE '1008|1006|token mismatch|closed|dropped' | head -4 >&2 || true
-            echo "--- client-host-net-dev (Runner docker --network=host → dev) ---" >&2
-            docker run --rm --network host --entrypoint openclaw -u root -v "$STATE_DIR:/tmp/e2e" -e OPENCLAW_STATE_DIR=/tmp/e2e "$OPENCLAW_IMAGE" gateway call health --url "wss://${E2E_HOST}:${E2E_PORT}" --token "wrong-token-0000-0000" --timeout 15000 2>&1 | grep -aE '1008|1006|token mismatch|closed|dropped' | head -4 >&2 || true
-            echo "--- client-host-net-prod (Runner docker --network=host → prod) ---" >&2
-            docker run --rm --network host --entrypoint openclaw -u root -v "$STATE_DIR:/tmp/e2e" -e OPENCLAW_STATE_DIR=/tmp/e2e "$OPENCLAW_IMAGE" gateway call health --url "wss://vps-prod.${TS_TAILNET}:${E2E_PORT}" --token "wrong-token-0000-0000" --timeout 15000 2>&1 | grep -aE '1008|1006|token mismatch|closed|dropped' | head -4 >&2 || true
-            echo "--- gateway-config dev (redigiert) ---" >&2
-            $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} sh -c 'cat \$OPENCLAW_CONFIG_DIR/openclaw.json 2>/dev/null || cat /home/node/.openclaw/openclaw.json 2>/dev/null || find / -maxdepth 6 -name openclaw.json 2>/dev/null | head -1 | xargs -r cat'" > /tmp/e2e-gw-config.json 2>/dev/null || true
-            python3 - <<'PYEOF' >&2
-          import json, re
-
-          try:
-              d = json.load(open('/tmp/e2e-gw-config.json'))
-          except Exception as e:
-              print('dev config read failed:', e)
-              raise SystemExit
-          s = json.dumps(d, indent=2, default=str)
-          s = re.sub(r'("[^"]*(?:token|secret|apiKey|password|key)[^"]*"\s*:\s*")[^"]*(")', r'\1[REDACTED]\2', s, flags=re.I)
-          print(s)
-          PYEOF
+            echo "❌ KEINE UUID-requestId gefunden (rc=$RC) – Lifecycle-Abbruch mit Befund." >&2
+            echo "   Erwartet: 1008 'pairing required' mit requestId (UUID-36)." >&2
+            echo "   Diagnose-Block entfernt (Review-Auflage H1) – vor dem Run Transport/Token/Config pruefen." >&2
             exit 1
           fi
           echo "✅ [1] requestId (UUID-36): $REQ"
@@ -577,7 +466,7 @@ jobs:
             echo "| Schritt | Ergebnis | Beleg |"
             echo "|---------|----------|-------|"
             echo "| 1 Request (UUID) | erzeugt | \`$REQ\` |"
-            echo "| 2 List (pending, Feld deviceId) | UUID gefunden | devices list --json |"
+            echo "| 2 List (pending, Feld requestId) | UUID gefunden | devices list --json |"
             echo "| 3 Approve | RC 0 | approve.out |"
             echo "| 4 Nutzbar | health ok: true | Client-Run 2 |"
             echo "| 5 Löschen (remove) | paired=0 | \`$DEVICE_ID\` |"
@@ -626,7 +515,6 @@ jobs:
           fi
 
           python3 tools/device-approve/approve.py "${ARGS[@]}" \
-            --instance-map /tmp/instance-map.txt \
             --request-id "$APPROVE_ID" \
             --type-filter "$DERIVED_TYPE" \
             --target-filter "$APPROVE_TARGET" \
@@ -656,7 +544,6 @@ jobs:
 
           python3 tools/device-approve/approve.py \
             --list-only \
-            --instance-map /tmp/instance-map.txt \
             --type-filter "$DERIVED_TYPE" \
             --target-filter "$APPROVE_TARGET" \
             --instance-filter "$APPROVE_INSTANCE" \
