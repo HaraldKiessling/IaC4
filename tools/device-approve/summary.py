@@ -74,6 +74,7 @@ def status_header(status: str, result: Optional[dict] = None) -> str:
     label = _label_for_type(_found_type(result))
     mapping = {
         "approved": f"## ✅ {label}-Freigabe — Erfolgreich",
+        "rejected": f"## ✅ {label}-Reject — Erfolgreich",  # v3.2: Reject-Modus
         "found": f"## ✅ {label}-Freigabe — Gefunden (Discovery)",
         # not_found ist kein Fehler (Owner-Vereinbarung 15:06, gruener Run)
         "not_found": f"## 🔎 {label}-Freigabe — Kein Treffer",
@@ -98,6 +99,7 @@ def result_to_markdown(result: dict) -> str:
     # Status-Zeile
     status_label = {
         "approved": "✅ Freigegeben",
+        "rejected": "✅ Abgelehnt (rejected)",  # v3.2: Reject-Modus
         "found": "✅ Gefunden",
         "not_found": "🔎 Nicht gefunden",
         "error": "❌ Fehler",

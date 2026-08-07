@@ -14,6 +14,13 @@ Modi:
      ignoriert (Warning, R02), type=auto → both (O3). Exit 0 auch bei leerer
      Liste (gruen); JSON auf stdout, --summary = Markdown-Tabelle in
      $GITHUB_STEP_SUMMARY.
+  5. --reject-only (NEU, v3.2): Reject-Modus – ID in der Ein-Job-Remote-
+     Schleife suchen und per `openclaw devices reject <ID>` ablehnen
+     (REJECT-Marker, B2-Semantik). NUR device-Requests: die openclaw CLI hat
+     kein 'pairing reject' (Telegram-Codes sind CLI-seitig nicht reject-bar)
+     → derived_type != device ⇒ Exit 2. --full-run --reject-only = Ein-Job-
+     Reject (Workflow mode=reject); --reject-only schliesst --list-only/
+     --discover-only aus.
 
 --summary: JSON auf stdout + Markdown direkt in $GITHUB_STEP_SUMMARY via
 File-Open (Review Major #3, Δ7).
@@ -38,9 +45,10 @@ Rueckgabe-Schema (Minor #7):
    "scanned": [...], "filters_applied": {type, target, instance}}
 
 Exit-Code-Vertrag (Owner-Vereinbarung 2026-08-06 15:06, Run-#6-Befund):
-  - 0 = approved ODER found ODER not_found  (not_found = gruener Run, kein Fehler)
-  - 1 = error (Infrastruktur/Auth/Injection/Approve-Fehler – bleibt rot)
-  - 2 = Validierungs-/Config-Fehler (CLI-Missbrauch, fehlende Credentials)
+  - 0 = approved ODER rejected ODER found ODER not_found  (not_found = gruener Run, kein Fehler)
+  - 1 = error (Infrastruktur/Auth/Injection/Aktions-Fehler – bleibt rot)
+  - 2 = Validierungs-/Config-Fehler (CLI-Missbrauch, fehlende Credentials,
+        Reject mit Nicht-Device-Typ)
 """
 
 from __future__ import annotations
@@ -231,6 +239,38 @@ def run_local_approve(
     return proc.returncode
 
 
+def _local_reject_cmd(typ: str, request_id: str) -> List[str]:
+    """Δ3 (v3.2): lokales Reject-Kommando je Typ.
+
+    NUR device – die openclaw CLI hat kein 'pairing reject' (empirisch
+    2026-08-07: `openclaw pairing` kennt nur approve|list|help);
+    Telegram-Codes sind CLI-seitig nicht reject-bar.
+    """
+    if typ != "device":
+        raise ValueError(
+            "Reject-Modus unterstuetzt nur device-Requests (kein 'pairing reject' "
+            "in der openclaw CLI – nur `openclaw devices reject <ID>`)."
+        )
+    return ["openclaw", "devices", "reject", request_id]
+
+
+def run_local_reject(
+    request_id: str,
+    found_type: str,
+    *,
+    runner=None,
+    timeout: int = LOCAL_TIMEOUT,
+) -> int:
+    """Lokaler Reject (v3.2): `openclaw devices reject <ID>` (analog Δ2)."""
+    cmd = _local_reject_cmd(found_type, request_id)
+    proc = (runner or subprocess.run)(  # noqa: S603 – keine Shell
+        cmd, capture_output=True, text=True, timeout=timeout
+    )
+    if proc.returncode != 0 and proc.stderr:
+        print(proc.stderr, file=sys.stderr)
+    return proc.returncode
+
+
 def run_local_list_discovery(
     derived_type: str,
     *,
@@ -310,6 +350,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="Listen-Modus (v3.1): ALLE pending Requests auflisten (kein Approve, "
                          "keine ID noetig). Schliesst --full-run/--discover-only aus; "
                          "--request-id wird ignoriert (R02); type=auto → both (O3)")
+    ap.add_argument("--reject-only", action="store_true",
+                    help="Reject-Modus (v3.2): ID in der Ein-Job-Remote-Schleife suchen und per "
+                         "`openclaw devices reject <ID>` ablehnen (REJECT-Marker, B2-Semantik). "
+                         "NUR device-Requests – die openclaw CLI hat kein 'pairing reject'. "
+                         "Schliesst --list-only/--discover-only aus; --full-run --reject-only = "
+                         "Ein-Job-Reject (Workflow mode=reject)")
     ap.add_argument("--full-run", action="store_true",
                     help="Ein-Job: Discovery + Approve in einem Aufruf (Workflow-Standard v3.0)")
     ap.add_argument("--summary", action="store_true", help="Markdown-Summary in $GITHUB_STEP_SUMMARY")
@@ -319,6 +365,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if opts.full_run and opts.discover_only:
         ap.error("--full-run und --discover-only schliessen sich aus")
+    if opts.reject_only and opts.discover_only:
+        ap.error("--reject-only und --discover-only schliessen sich aus")
+    if opts.reject_only and opts.list_only:
+        ap.error("--reject-only und --list-only schliessen sich aus")
 
     # Env-Overrides
     rid = opts.request_id or os.environ.get("APPROVE_ID", "")
@@ -362,7 +412,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         derived_type = type_f
         filters = {"type": derived_type, "target": target_f, "instance": inst_f}
     else:
-        # ── Approve-Modus-Validierung (unverändert, v2.2: Fail-Fast) ──
+        # ── Approve-/Reject-Modus-Validierung (unverändert, v2.2: Fail-Fast) ──
         if not rid:
             print("❌ Keine Request-ID – --request-id oder APPROVE_ID setzen.", file=sys.stderr)
             return 2
@@ -374,6 +424,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         valid, derived_type, err = validate_and_classify_id(rid, type_f)
         if not valid:
             print(f"❌ {err}", file=sys.stderr)
+            return 2
+
+        # v3.2 (Reject-Modus): NUR device-Requests – die openclaw CLI hat kein
+        # 'pairing reject' (empirisch 2026-08-07). Fail-Fast VOR dem SSH-Aufbau.
+        if opts.reject_only and derived_type != "device":
+            print("❌ Reject-Modus unterstuetzt nur device-Requests – die openclaw CLI "
+                  "hat kein 'pairing reject' (nur `openclaw devices reject <ID>`).",
+                  file=sys.stderr)
             return 2
 
         if inst_f != "all":
@@ -499,6 +557,24 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
             return emit(result, 0)
 
+        # v3.2: Lokaler Reject (nur device, Δ3) vor dem Approve-Pfad
+        if opts.reject_only:
+            rc = run_local_reject(rid, d_result.found_type)
+            status = "rejected" if rc == 0 else "error"
+            result = build_result_json(
+                status=status,
+                request_id=rid,
+                found=[{
+                    "target": "local",
+                    "instance": "local",
+                    "type": d_result.found_type,
+                    "vps_ip": None,
+                }],
+                scanned=d_result.scanned,
+                filters_applied=filters,
+            )
+            return emit(result, 0 if rc == 0 else 1)
+
         # Lokaler Approve (typ-spezifisch, Δ2)
         rc = run_local_approve(rid, d_result.found_type)
         status = "approved" if rc == 0 else "error"
@@ -556,6 +632,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             resolve_ip=resolve_ip,
             run_remote=run_remote,
             approve=not opts.discover_only,
+            # v3.2: Aktion approve|reject (Reject-Modus = Ein-Job-Reject)
+            action="reject" if opts.reject_only else "approve",
             # Run-#36-Fix: $GITHUB_OUTPUT nur im Workflow gesetzt; lokal (None)
             # bleibt der bisherige Bibliotheks-/CLI-Pfad unveraendert.
             github_output=os.environ.get("GITHUB_OUTPUT"),
@@ -592,13 +670,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         return emit(result_obj, 0)
 
     if not result.approved:
-        # Ein-Job-Inkonsistenz/-Fehler: ID in der SSH-Session gefunden, aber der
-        # Approve wurde nicht bestätigt (APPROVE-Marker fehlen ODER Approve-
-        # Befehl fehlgeschlagen, B2-2.Review) → laut scheitern, Output zeigen.
-        msg = ("ID gefunden, aber Approve wurde nicht in der SSH-Session "
-               "bestätigt (APPROVE-Marker fehlen oder Approve fehlgeschlagen).")
+        # Ein-Job-Inkonsistenz/-Fehler: ID in der SSH-Session gefunden, aber die
+        # Aktion (Approve/Reject) wurde nicht bestätigt (Aktions-Marker fehlen
+        # ODER Aktion fehlgeschlagen, B2-2.Review) → laut scheitern, Output zeigen.
+        aktion = "Reject" if opts.reject_only else "Approve"
+        msg = (f"ID gefunden, aber {aktion} wurde nicht in der SSH-Session "
+               f"bestätigt ({aktion}-Marker fehlen oder {aktion} fehlgeschlagen).")
         if result.approve_output:
-            msg += f"\nApprove-Output:\n{result.approve_output}"
+            msg += f"\n{aktion}-Output:\n{result.approve_output}"
         print(f"❌ {msg}", file=sys.stderr)
         final = build_result_json(
             status="error",
@@ -615,7 +694,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return emit(final, 1)
 
     final = build_result_json(
-        status="approved",
+        status="rejected" if opts.reject_only else "approved",
         request_id=rid,
         found=[{
             "target": result.target,
