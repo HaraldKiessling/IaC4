@@ -12,15 +12,17 @@ Formaten auf: UUID-36 (`21e6459c-…`, `840fc0f0-…`) und 64-Hex-deviceIds
 
 **Antwort (empirisch, siehe unten):** Pending Device-Requests haben IMMER eine
 UUID-36-`requestId` (Gateway-vergeben). In `openclaw devices list --json`
-steht diese UUID im Feld `deviceId` des pending-Eintrags → die UUID **wird** in
-der Liste gefunden, und `openclaw devices approve <UUID>` funktioniert. Die
-64-Hex-Werte sind die `deviceId`s der **gepaarten** Geräte (nach dem Approve).
+steht diese UUID im Feld `requestId` des pending-Eintrags → die UUID **wird** in
+der Liste gefunden, und `openclaw devices approve <requestId>` funktioniert. Das
+Feld `deviceId` des pending-Eintrags ist dagegen der 64er-Public-Key-Hash des
+anfragenden Clients (kein UUID-Format). Nach dem Approve ist die UUID-36
+verbraucht; der gepaarte Eintrag wird über die 64-hex-`deviceId` adressiert.
 
 ## CLI-Fakten (empirisch, OpenClaw 2026.7.1)
 
 | Kommando | Bedeutung | ID-Format |
 |---|---|---|
-| `openclaw devices list --json` | pending + paired | `deviceId` (pending: UUID-36, paired: 64-hex) |
+| `openclaw devices list --json` | pending + paired | pending: `requestId` (UUID-36) + `deviceId` (64-hex Key-Hash); paired: `deviceId` (64-hex) |
 | `openclaw devices approve <requestId>` | pending → paired | UUID-36 |
 | `openclaw devices reject <requestId>` | pending ablehnen | UUID-36 |
 | `openclaw devices remove <deviceId>` | **paired-Eintrag löschen** | 64-hex |
@@ -43,8 +45,8 @@ und bleibt über alle Schritte identisch.
 | # | Schritt | Kommando | Erwartung |
 |---|---|---|---|
 | 1 | Request erzeugen | frischer Client: `openclaw gateway call health --url wss://vps-<t>.<tailnet>:<port> --token <GW_TOKEN>` | 1008 `pairing required … (requestId: <UUID-36>)`, pending Request entsteht |
-| 2 | List-Nachweis | SSH: `sudo docker exec openclaw-<inst> openclaw devices list --json` | UUID im pending[]-Eintrag, Feld `deviceId` |
-| 3 | Approve | SSH: `sudo docker exec openclaw-<inst> openclaw devices approve <UUID>` | pending → paired (64-hex deviceId, clientId `openclaw-cli`) |
+| 2 | List-Nachweis | SSH: `sudo docker exec openclaw-<inst> openclaw devices list --json` | UUID im pending[]-Eintrag, Feld `requestId` (UUID-36) |
+| 3 | Approve | SSH: `sudo docker exec openclaw-<inst> openclaw devices approve <requestId>` | pending → paired (64-hex deviceId, clientId `openclaw-cli`) |
 | 4 | Nutzbar | derselbe Client reconnectet (`health`) | `"ok": true`, kein 1008 |
 | 5 | Löschen | SSH: `sudo docker exec openclaw-<inst> openclaw devices remove <deviceId>` | paired-Eintrag weg |
 | 6 | Nicht nutzbar | derselbe Client reconnectet | Fehler/1008 (neue requestId) |
@@ -53,14 +55,27 @@ und bleibt über alle Schritte identisch.
 ### Fehlerabbruch (vermuteter Bug-Pfad)
 
 Wird in Schritt 1/2 KEINE UUID-requestId gefunden oder erscheint die UUID
-nicht im pending-Array → Lauf bricht mit Befund ab (kein Weiterraten).
+nicht im pending-Array → Lauf bricht mit Befund ab (kein Weiterraten). Seit
+Review-Auflage H1 (PR #110) endet der Lauf dort ohne Diagnose-Payload – der
+Transport-/Token-/Config-Check gehört vor den Run.
 
 ## Befunde
 
 | Umgebung | Request-UUID | List-Feld | Approve | Nutzbar | Delete | Nicht nutzbar |
 |---|---|---|---|---|---|---|
-| dev/oc1 | (Run-Beleg) | `deviceId` = UUID | RC 0 | health ok | paired=0 | 1008 |
-| prod/oc1 | (Run-Beleg) | `deviceId` = UUID | RC 0 | health ok | paired=0 | 1008 |
+| dev/oc1 | [Run 31156870577](https://github.com/HaraldKiessling/IaC4/actions/runs/31156870577) | `requestId` = UUID | RC 0 | health ok | paired=0 | 1008 |
+| prod/oc1 | [Run 31157287607](https://github.com/HaraldKiessling/IaC4/actions/runs/31157287607) | `requestId` = UUID | RC 0 | health ok | paired=0 | 1008 |
 
 Details pro Lauf: Job-Summary des 05-Workflows mode=e2e (Run-URL) + Run-Log
 (JSON-Auszüge, keine Secrets).
+
+Weitere Nachweise (Approve/Reject/Listen-Pfad, ohne e2e-Lifecycle):
+
+| Zweck | Run | Beleg |
+|---|---|---|
+| Reject-Validierung (device) | [Run 31156775179](https://github.com/HaraldKiessling/IaC4/actions/runs/31156775179) | Ein-Job-Reject-Pfad |
+| Approve (Owner-ID 2daff7a2) | [Run 31168376348](https://github.com/HaraldKiessling/IaC4/actions/runs/31168376348) | Approve-Ergebnis |
+| Approve (Owner-ID cb169e88) | [Run 31169341980](https://github.com/HaraldKiessling/IaC4/actions/runs/31169341980) | Approve-Ergebnis |
+| Listen-Nachweis | [Run 31168469067](https://github.com/HaraldKiessling/IaC4/actions/runs/31168469067) / [Run 31169455208](https://github.com/HaraldKiessling/IaC4/actions/runs/31169455208) | pending[] mit requestId (UUID-36) |
+
+*Tabelle aktualisiert im Rahmen der Review-Auflagen H3/H5 (PR #110, 2026-08-07).*

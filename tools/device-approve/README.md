@@ -130,9 +130,9 @@ Diagnose-Sicht „WAS pendet gerade WO?“ – vor einem Approve oder nach einem
 `not_found`. Workflow-Input `mode: list` (Workflow 05) bzw. CLI:
 
 ```bash
-# SSH: alle pending Requests ueber alle VPS (keine ID noetig)
+# SSH: alle pending Requests ueber alle VPS (keine ID noetig; die Instanz-Map
+# generiert approve.py selbst via sot_parser, v3.4/H2 – kein /tmp-Instance-Map noetig)
 python3 tools/device-approve/approve.py --list-only \
-  --instance-map /tmp/instance-map.txt \
   --type-filter both --target-filter both --instance-filter all \
   --vps-user "$VPS_USER" --ssh-key ~/.ssh/id_ed25519 \
   --ts-tailnet "$TS_TAILNET" --ts-client-id "$TS_CLIENT_ID" \
@@ -205,9 +205,8 @@ REJECT-Marker, B2-Semantik). Workflow-Input `mode: reject` (Workflow 05) bzw.
 CLI:
 
 ```bash
-# SSH: Ein-Job-Reject (nur device-Requests)
+# SSH: Ein-Job-Reject (nur device-Requests; Instanz-Map via sot_parser, v3.4/H2)
 python3 tools/device-approve/approve.py --full-run --reject-only \
-  --instance-map /tmp/instance-map.txt \
   --request-id "$APPROVE_ID" \
   --type-filter device --target-filter prod --instance-filter all \
   --vps-user "$VPS_USER" --ssh-key ~/.ssh/id_ed25519 \
