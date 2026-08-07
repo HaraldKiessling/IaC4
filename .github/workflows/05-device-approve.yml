@@ -346,6 +346,7 @@ jobs:
               | grep -aE "HTTP/|101|502|400|error|refused|timed out" | head -5 || true
           done
           echo "=== [0] VPS-seitig: serve-json komplett + Zertifikat (Laufzeit/Issuer) ==="
+          # shellcheck disable=SC2016  # $c wird REMOTE expandiert (absichtlich)
           $SSH 'tailscale serve status --json; echo ---cert-files---; sudo ls -la /var/lib/tailscale/certs/ 2>&1; for c in /var/lib/tailscale/certs/*.crt; do echo ---cert---; sudo openssl x509 -in "$c" -noout -subject -issuer -dates 2>&1; done' >&2 || true
           # ── 1) Request erzeugen (frischer Client, wss://) ──
           mkdir -p "$STATE_DIR"
