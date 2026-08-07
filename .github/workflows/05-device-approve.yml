@@ -328,6 +328,25 @@ jobs:
             echo "| **VPS-IP** | $VPS_IP |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
+          # ── 0) Runner-seitige Pfad-Probe (dev vs prod, read-only; v3.5) ──
+          # Lückenschluss v3.4: Selbst-Tests liefen VPS-seitig (curl -k) – was der
+          # Runner sieht (DNS, TLS-Zertifikat OHNE -k, WS-Upgrade) bleibt offen.
+          # Das 1006 des Clients deutet auf TLS/Cert-Ebene oder Runner→dev-Pfad.
+          echo "=== [0] DNS-Resolution (Runner) ==="
+          getent hosts "$E2E_HOST" || true
+          getent hosts "vps-prod.${TS_TAILNET}" || true
+          for H in "$E2E_HOST" "vps-prod.${TS_TAILNET}"; do
+            echo "=== [0] Runner→${H}:${E2E_PORT} TLS-verbose (MIT Zertifikatsprüfung) ==="
+            curl -sv --max-time 12 "https://${H}:${E2E_PORT}/health" 2>&1 \
+              | grep -aE "Trying|Connected|SSL connection|subject:|issuer:|verify|SSL certificate|HTTP/|\"ok\"|error|refused|timed out|Operation" | head -14 || true
+            echo "=== [0] Runner→${H}:${E2E_PORT} WS-Upgrade ==="
+            curl -skv --max-time 12 --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+              -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+              "https://${H}:${E2E_PORT}/health" 2>&1 \
+              | grep -aE "HTTP/|101|502|400|error|refused|timed out" | head -5 || true
+          done
+          echo "=== [0] VPS-seitig: serve-json komplett + Zertifikat (Laufzeit/Issuer) ==="
+          $SSH "tailscale serve status --json; echo ---cert-files---; sudo ls -la /var/lib/tailscale/certs/ 2>&1; for c in /var/lib/tailscale/certs/*.crt; do echo ---cert---; sudo openssl x509 -in \"$c\" -noout -subject -issuer -dates 2>&1; done" >&2 || true
           # ── 1) Request erzeugen (frischer Client, wss://) ──
           mkdir -p "$STATE_DIR"
           set +e
