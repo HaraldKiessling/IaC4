@@ -77,8 +77,9 @@ Weitere Nachweise (Approve/Reject/Listen-Pfad, ohne e2e-Lifecycle):
 | Approve (Owner-ID 2daff7a2) | [Run 31168376348](https://github.com/HaraldKiessling/IaC4/actions/runs/31168376348) | Approve-Ergebnis |
 | Approve (Owner-ID cb169e88) | [Run 31169341980](https://github.com/HaraldKiessling/IaC4/actions/runs/31169341980) | Approve-Ergebnis |
 | Listen-Nachweis | [Run 31168469067](https://github.com/HaraldKiessling/IaC4/actions/runs/31168469067) / [Run 31169455208](https://github.com/HaraldKiessling/IaC4/actions/runs/31169455208) | pending[] mit requestId (UUID-36) |
-| Remove (mode=remove, prod/oc1) | [Run _RUN_ID_](https://github.com/HaraldKiessling/IaC4/actions/runs/_RUN_ID_) | Revoke 2daff7a2-Geraet, paired=0 |
-| Remove-List-Nachweis | [Run _RUN_ID_LIST_](https://github.com/HaraldKiessling/IaC4/actions/runs/_RUN_ID_LIST_) | Gerät weder pending noch paired |
+| Remove (mode=remove, prod/oc1) | [Run 31179037313](https://github.com/HaraldKiessling/IaC4/actions/runs/31179037313) | status `removed`, found prod/oc1 (deviceId ea9b406a…), REMOVE-Marker |
+| Remove-Idempotenz (2. Lauf) | [Run 31179068439](https://github.com/HaraldKiessling/IaC4/actions/runs/31179068439) | status `not_found` → Exit 0 (grün, Vertrag 0=removed|not_found) |
+| Remove-List-Nachweis | [Run 31179182663](https://github.com/HaraldKiessling/IaC4/actions/runs/31179182663) | paired-Eintrag entfernt; Geraet hat danach erneut gepairt (neuer pending-Request 2086be70…, Gerät-seitig) |
 
 *Tabelle aktualisiert im Rahmen der Review-Auflagen H3/H5 (PR #110, 2026-08-07)
 und des Remove-Modus v3.5 (PR für session-20260807/device-remove, 2026-08-07).*
