@@ -1,38 +1,165 @@
 ---
-# 05 – OpenClaw Device-Pairing (Control-UI-Freigabe)
-#   Workflow-basierte Gerätekopplung (IaC4-Zugriffs-Design: kein direkter VPS-Zugriff).
-#   Flow: Control-UI zeigt "pairing required" + requestId -> diesen Workflow starten
-#   (request_id aus der UI), Workflow listet pending Devices und approved die Request-ID.
-name: "05 – OpenClaw Device-Pairing"
+# 05 – Unified Freigabe: Telegram-Pairing + Device-Approve (ID-basiert)
+#   v3.0 (Ein-Job-Design, 2026-08-06 – Workflow-05-Performance-Optimierung,
+#   Review-Befunde R01-R08 aufgelöst):
+#   - EIN Job: Discovery + Approve in DERSELBEN SSH-Session (APPROVE-BEGIN/END-
+#     Marker, discovery.py v3.0). KEIN environment:-Gate, KEIN Required Reviewer
+#     (Owner-Entscheidung 2026-08-06 14:48: „Nein, kein Klick notwendig …“).
+#   - 1 SSH pro VPS statt pro Instanz: VPS-Gruppierung (group_by_vps) + Remote-
+#     Schleife über alle Instanzen (build_ein_job_remote_cmd); type=both fragt
+#     pairing + devices in DERSELBEN Session ab (R02).
+#   - Concurrency-Group `device-approve` (cancel-in-progress: false) verhindert
+#     parallele Approve-Runs (Doppel-Approve).
+#   - Inputs UNVERÄNDERT (R01/R04): `id` (Telegram-Bot-Payload
+#     client_payload.id!), `type`, `target`, `instance` (all|oc1…ocN).
+#   - Tailscale-Action v4.1.3 (R05); Auth via tools/telegram-approve-bot/
+#     auth_check.sh + discovery.py --validate-id (R07); kein jq auf den VPS
+#     (R08 – Remote-Match per grep, Verifikation in Python).
+#   - Ersetzt: v2.2 (Zwei-Job) – approve_step.py bleibt als Library erhalten
+#     (DEPRECATED für Workflow-Aufrufe, M3), wird aber nicht mehr vom Workflow
+#     aufgerufen (R03-E12).
+#
+#   v3.1 (Listen-Modus, 2026-08-06 – Design 05-workflow-listen-modus.md,
+#   Review-Befunde R01-R09 aufgelöst):
+#   - NEUER Input `mode` (approve|list, default approve). Bei mode=list wird
+#     KEINE Request-ID benötigt (`id` required: false): aggregiert über alle
+#     (gefilterten) Instanzen je VPS-SSH alle pending Requests
+#     (pairing requests[] + devices pending[]) → Job-Summary-Tabelle + JSON.
+#     KEIN Approve; Exit 0 auch bei leerer Liste (grün).
+#   - R01: JSON-Block-Generierung geteilt (discovery.py
+#     _build_json_collection_block) – build_ein_job_remote_cmd (Approve) und
+#     build_list_remote_cmd (List) nutzen dieselbe Quelle.
+#   - R02 Mapping mode→CLI: approve → --full-run --request-id $APPROVE_ID
+#     (--validate-id im Validate-Step); list → --list-only (OHNE --request-id;
+#     gefüllte `id` wird im Validate-Step NICHT validiert und NICHT in
+#     GITHUB_ENV geschrieben). type=auto wird im Listen-Modus zu 'both' (O3:
+#     keine ID zum Ableiten).
+#   - R06 Concurrency: Der Listen-Modus teilt die Concurrency-Group
+#     `device-approve` (cancel-in-progress: false) → serielle Ausführung. Ein
+#     List-Run wird hinter einem laufenden Approve-Run in die Queue gestellt –
+#     konservativ-korrekt (kein stale read), kann aber zu Wartezeiten führen.
+#   - R09 Timeout: identisch zum Approve-Modus – timeout-minutes: 15
+#     (Workflow), SSH_TIMEOUT=60s (Python). Worst-Case bei 5 unerreichbaren
+#     VPS: ~5×60s ≈ 5 Min. (List-Mode hat keinen Approve-Schritt → kürzer
+#     als Approve-Mode).
+#   - Auth-Gates UNVERÄNDERT: Whitelist (repository_dispatch, auth_check.sh),
+#     Tailscale-only SSH; --validate-id NUR im Approve-Modus.
+#
+#   v3.2 (Reject-Modus, 2026-08-07 – Diagnose-Folgeauftrag):
+#   - Input `mode` erweitert um 'reject' (options: approve|list|reject).
+#     mode=reject analog zum approve-Pfad: ID wird validiert (--validate-id,
+#     Zwei-Format-Regex) und per Ein-Job-Remote-Schleife in der SSH-Session
+#     `openclaw devices reject <ID>` ausgeführt (REJECT-Marker, B2-Semantik,
+#     discovery.py action="reject"; approve.py --reject-only).
+#   - NUR device-Requests: die openclaw CLI hat kein 'pairing reject'
+#     (empirisch 2026-08-07) → reject mit abgeleitetem Typ != device bricht
+#     im Validate-Step ab (exit 1) und in approve.py (exit 2, defense in
+#     depth). ID-Formate unverändert (Pairing-Kurzcode 6-12 / Device 36-128
+#     Hex-mit-Dash) – gleiche Regex wie approve.
+#   - Exit-Code-Vertrag wie approve: 0 = rejected ODER not_found (grün),
+#     1 = error, 2 = Config. Concurrency-Group/Timeouts unverändert.
+#
+#   v3.3 (E2E-Lifecycle, 2026-08-07 – Owner-Auftrag 06:12 „Geräte-Verbindung
+#   beantragen, GUID in Liste, approve, nutzen, löschen, nicht mehr nutzbar“):
+#   - Input `mode` erweitert um 'e2e' (options: approve|list|reject|e2e).
+#   - mode=e2e führt den kompletten Device-Pairing-Lifecycle in DIESEM Job aus
+#     (frischer openclaw-Client im Runner-Docker, eigene Identität in
+#     /tmp/e2e-<target>-<inst>, wss:// via Tailscale-Serve):
+#       1) Request erzeugen (1008 pairing required → UUID-requestId)
+#       2) List-Nachweis: UUID im pending[] von `devices list --json`
+#          (Feld requestId = UUID-36; deviceId = 64er-Public-Key-Hash –
+#          beantwortet die UUID-Format-Frage)
+#       3) Approve: `openclaw devices approve <UUID>` (SSH docker exec)
+#       4) Nutzbar: Client-Reconnect → health ok: true
+#       5) Löschen: `openclaw devices remove <deviceId>` (64-hex, paired)
+#       6) Nicht mehr nutzbar: Client-Reconnect → 1008/Fehler
+#       7) Cleanup: neuen pending Request per `devices reject` entfernen
+#   - Abbruch mit Befund (exit 1), wenn die UUID nicht gefunden wird.
+#   - id wird im E2E-Modus ignoriert (keine Validierung, wie Listen-Modus).
+#   - WICHTIG: approve/reject wirken nur auf pending (requestId=UUID-36),
+#     remove nur auf paired (deviceId=64-hex) – CLI-Fakten OpenClaw 2026.7.1.
+#
+#   v3.4 (Review-Auflagen PR #110, 2026-08-07 – finaler Review, CHANGE REQUEST):
+#   - e2e-Step auf den 7-Schritte-Lifecycle reduziert (H1): Runner-seitige
+#     Pfad-Probe [0] (DNS/TLS/WS-Upgrade), Tailscale-apt-Update dev [0b],
+#     Falsches-Token-Test [1a] und Diagnose-v3.9-Block (docker default-vs-host-
+#     net, tun device, Gateway-Config-Dump) entfernt – reines Sandbox-Debugging
+#     der Transport-Untersuchung (Commits e74ee3f→5d75967). Abbruch mit Befund
+#     (exit 1) bleibt. Der Fix c215f5c (--network host im CLIENT-Alias) BLEIBT.
+#   - /tmp/instance-map-{full,}.txt entfaellt (H2): approve.py generiert die
+#     Map selbst via sot_parser (load_instance_map_from_ssot, root=.). Der
+#     SSoT-Step installiert nur noch pyyaml (Runner-Dependency).
+#   - Doku-Korrektur (H3): UUID-36 liegt im pending-Eintrag in Feld `requestId`
+#     (Feld `deviceId` = 64er-Public-Key-Hash) – konsistent zu d51107b.
+#   - Tailscale-apt-Update dev entfernt (H4): Infrastruktur-Patch gehoert in
+#     Bootstrap/SSoT, nicht in den Freigabe-Workflow.
+#
+#   Secrets (Ist-Zustand, M2): TAILSCALE_OAUTH_CLIENT_ID /
+#   TAILSCALE_OAUTH_CLIENT_SECRET (Tailscale-Action v4.1.3, NICHT TS_OAUTH_*),
+#   VPS_USER, SSH_KEY, TELEGRAM_APPROVE_USERS (Whitelist für den Telegram-Pfad,
+#   M1: wird im Validate-Step als AUTHORIZED_USERS an auth_check.sh gereicht).
+#
+#   Sicherheits-Gates: Whitelist (repository_dispatch, auth_check.sh),
+#   Regex-Sperre je Typ (discovery.py --validate-id), Tailscale-only SSH,
+#   keine Secrets in Logs, Audit = GH Actions Run.
+#   Job-Outputs (m3): entfallen mit dem zweiten Job – kein externer Consumer
+#   (kein needs.discover); approve.py schreibt GITHUB_OUTPUT nur noch für
+#   Debug/Audit im Run-Log.
+name: "05 – Freigabe (Telegram-Pairing + Device-Approve, Ein-Job)"
+
+run-name: "${{ inputs.mode || 'approve' }} ${{ inputs.id || github.event.client_payload.id || '' }}"
 
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: 'Ziel-VPS'
-        required: true
-        default: 'dev'
-        type: choice
-        options: [dev, prod]
-      instance:
-        description: 'OpenClaw-Instanz'
-        required: true
-        default: 'oc1'
-        type: choice
-        options: [oc1, oc2, oc3]
-      request_id:
-        description: 'Request-ID aus der Control-UI (leer = nur Liste anzeigen)'
+      mode:
+        description: 'Modus (approve = Freigabe einer ID, list = alle pending Requests anzeigen, reject = Request ablehnen – nur device)'
         required: false
-        default: ''
+        default: 'approve'
+        type: choice
+        options: [approve, list, reject, e2e]
+      id:
+        description: 'Request-ID (Pairing-Code QVDCXJEM ODER Device-ID 9df47d69…) – nur bei mode=approve|reject'
+        required: false
+        type: string
+      type:
+        description: 'Typ (auto = aus ID-Format ableiten; bei mode=list default both)'
+        required: false
+        default: 'auto'
+        type: choice
+        options: [auto, telegram, device, both]
+      target:
+        description: 'Ziel-VPS (dev | prod | both)'
+        required: false
+        default: 'both'
+        type: choice
+        options: [both, dev, prod]
+      instance:
+        description: 'OC-Instanz (all = alle, oder oc1…ocN)'
+        required: false
+        default: 'all'
+        type: string
+  repository_dispatch:
+    types: [device-approve]
 
 permissions:
   contents: read
 
+# ★ Concurrency-Group: verhindert parallele Approve-Runs (Design §5).
+#   R06: Auch der Listen-Modus teilt diese Gruppe (seriell, kein stale read) –
+#   ein List-Run wartet hinter einem laufenden Approve-Run in der Queue.
+#   cancel-in-progress: false → neue Runs warten, statt einen laufenden
+#   Approve abzubrechen (konservativ, kein Doppel-Approve).
+concurrency:
+  group: device-approve
+  cancel-in-progress: false
+
 jobs:
-  pairing:
-    name: "Device-Pairing (target: ${{ inputs.target }}, ${{ inputs.instance }})"
+  discover-and-approve:
+    name: "${{ inputs.mode == 'list' && 'Pending-Requests listen' || 'Discovery + Approve/Reject' }} (${{ inputs.target || 'both' }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15  # R09: identisch zum Approve-Modus (Worst-Case 5 unerreichbare VPS ≈ 5 Min.)
+    # ★ KEIN environment:-Attribut – Owner-Entscheidung: kein Gate nötig.
     env:
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
@@ -40,6 +167,101 @@ jobs:
       TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
       TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
     steps:
+      - uses: actions/checkout@v4
+
+      # Eingaben validieren + normalisieren + Typ ableiten (R01: Input-Name
+      # bleibt `id` – client_payload.id; R07: Auth-Check via auth_check.sh,
+      # ID-Validierung + Typ-Ableitung via discovery.py --validate-id).
+      # v3.1 (R02): Mode-abhängig – bei mode=list wird eine gefüllte `id`
+      # NICHT validiert und NICHT in GITHUB_ENV geschrieben (approve.py
+      # erhält kein --request-id). --validate-id läuft NUR im Approve-/
+      # Reject-Modus (v3.2; reject zusätzlich mit device-only-Hard-Gate).
+      - name: Eingaben validieren + normalisieren + Typ ableiten
+        id: inputs
+        env:
+          INPUT_ID: ${{ github.event.inputs.id || github.event.client_payload.id }}
+          INPUT_TYPE: ${{ github.event.inputs.type || github.event.client_payload.type || 'auto' }}
+          INPUT_TARGET: ${{ github.event.inputs.target || github.event.client_payload.target || 'both' }}
+          INPUT_INSTANCE: ${{ github.event.inputs.instance || github.event.client_payload.instance || 'all' }}
+          INPUT_MODE: ${{ inputs.mode || 'approve' }}
+          TG_USER_ID: ${{ github.event.client_payload.telegram_user_id || '' }}
+          AUTHORIZED_USERS: ${{ secrets.TELEGRAM_APPROVE_USERS }}
+        run: |
+          set -euo pipefail
+
+          # Auth nur für repository_dispatch (Telegram-Pfad): auth_check.sh prüft
+          # NUR die User-ID (Nicht-Leer + numerisch VOR Whitelist-Grep). M1: der
+          # Whitelist-Check bleibt in auth_check.sh (R07-bevorzugt statt
+          # Python-Migration) – TELEGRAM_APPROVE_USERS-Secret wird oben als
+          # AUTHORIZED_USERS referenziert. Die Request-ID-Validierung ist an
+          # discovery.py --validate-id delegiert (Single Source of Truth – auch
+          # 6-7-stellige Pairing-Kurzcodes).
+          if [ -n "$TG_USER_ID" ]; then
+            export TG_USER_ID AUTHORIZED_USERS
+            bash tools/telegram-approve-bot/auth_check.sh
+          fi
+
+          # Instanz-Validierung (BEIDE Modi): 'all' oder oc[1-9][0-9]* (kein oc0)
+          if [ "$INPUT_INSTANCE" != "all" ]; then
+            if ! printf '%s' "$INPUT_INSTANCE" | grep -qE '^oc[1-9][0-9]*$'; then
+              echo "❌ Ungültige Instanz: '$INPUT_INSTANCE'" >&2
+              echo "   Erlaubt: 'all' oder 'oc1', 'oc2', … (kein 'oc0')" >&2
+              exit 1
+            fi
+          fi
+
+          if [ "$INPUT_MODE" = "list" ] || [ "$INPUT_MODE" = "e2e" ]; then
+            # ── Listen-Modus (v3.1, R02) / E2E-Modus (v3.3) ──
+            # id wird ignoriert: NICHT validieren, NICHT in GITHUB_ENV schreiben,
+            # NICHT an approve.py übergeben. type=auto → both (O3: keine ID zum
+            # Ableiten – Diagnose will ALLES sehen).
+            LIST_TYPE="$INPUT_TYPE"
+            [ "$LIST_TYPE" = "auto" ] && LIST_TYPE="both"
+            {
+              echo "APPROVE_ID="
+              echo "DERIVED_TYPE=$LIST_TYPE"
+              echo "APPROVE_TARGET=$INPUT_TARGET"
+              echo "APPROVE_INSTANCE=$INPUT_INSTANCE"
+            } >> "$GITHUB_ENV"
+            if [ "$INPUT_MODE" = "e2e" ]; then
+              echo "🧪 E2E-Modus: id='${INPUT_ID:-}' ignoriert (keine Validierung), type=$LIST_TYPE"
+            else
+              echo "📋 Listen-Modus: id='${INPUT_ID:-}' ignoriert (keine Validierung, R02), type=$LIST_TYPE"
+            fi
+          else
+            # ── Approve-/Reject-Modus (v3.2) ──
+            # ID-Validierung + Typ-Ableitung (Zwei-Format-Regex, keine Shell)
+            DERIVED_TYPE=$(python3 tools/device-approve/discovery.py \
+              --validate-id "$INPUT_ID" --type "$INPUT_TYPE")
+
+            # v3.2 (Reject-Modus): NUR device-Requests – die openclaw CLI hat
+            # kein 'pairing reject' (nur `openclaw devices reject <ID>`).
+            if [ "$INPUT_MODE" = "reject" ] && [ "$DERIVED_TYPE" != "device" ]; then
+              echo "❌ Reject-Modus: nur device-Requests unterstuetzt (kein 'pairing reject' in der openclaw CLI)." >&2
+              exit 1
+            fi
+
+            {
+              echo "APPROVE_ID=$INPUT_ID"
+              echo "DERIVED_TYPE=$DERIVED_TYPE"
+              echo "APPROVE_TARGET=$INPUT_TARGET"
+              echo "APPROVE_INSTANCE=$INPUT_INSTANCE"
+            } >> "$GITHUB_ENV"
+            echo "✅ Eingaben validiert (mode=$INPUT_MODE, id=$INPUT_ID, derived_type=$DERIVED_TYPE, target=$INPUT_TARGET, instance=$INPUT_INSTANCE)"
+          fi
+
+      # SSoT-Mapping (v3.4/H2): approve.py generiert die Instanz-Map selbst
+      # via sot_parser (load_instance_map_from_ssot, tools/telegram-approve-bot/,
+      # iter_enabled_instances) – die frueheren /tmp/instance-map-{full,}.txt-
+      # Zwischendateien entfallen. Dieser Step installiert nur die
+      # Python-Dependency pyyaml (Runner hat sie nicht vorinstalliert).
+      # Filterung target/instance uebernimmt approve.py via
+      # --target-filter/--instance-filter.
+      - name: Python-Dependency pyyaml installieren (SSoT-Parser)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+
       - name: Connect Runner to Tailnet
         uses: tailscale/github-action@v4.1.3
         with:
@@ -47,31 +269,287 @@ jobs:
           oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           tags: tag:ci,tag:ia4
 
-      - name: Tailscale-OAuth-Token + VPS-IP ermitteln
-        run: |
-          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
-            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
-            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
-          NODE="vps-${{ inputs.target }}"
-          TS_IP=$(curl -sS "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses,lastSeen" \
-            -H "Authorization: Bearer $TS_TOKEN" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n)] | .[0].addresses[0]')
-          [ -n "$TS_IP" ] || { echo "❌ Keine Tailscale-IP für $NODE"; exit 1; }
-          echo "VPS_TS_IP=$TS_IP" >> $GITHUB_ENV
-
       - name: SSH-Key vorbereiten
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-      - name: Pending Devices auflisten
+      # ★ Device E2E Lifecycle (v3.3, Owner-Auftrag 2026-08-07): mode=e2e führt
+      # den kompletten Lifecycle in EINEM Job aus – frischer openclaw-Client
+      # (neue Device-Identität in /tmp/e2e-<target>-<inst>, bleibt über alle
+      # Schritte identisch) gegen wss:// via Tailscale-Serve:
+      #   1) Request erzeugen (1008 pairing required + UUID-requestId)
+      #   2) List-Nachweis (devices list --json: UUID im pending[], Feld requestId)
+      #   3) Approve (devices approve <UUID>) 4) Nutzbar (Reconnect, health ok)
+      #   5) Löschen (devices remove <deviceId>) 6) Nicht mehr nutzbar (1008)
+      #   7) Cleanup (reject neuer Request). Abbruch mit Befund, falls die UUID
+      #      nicht gefunden wird (vermuteter Bug-Pfad). Kein Merge.
+      - name: "Device E2E Lifecycle (Request→List→Approve→Nutzbar→Delete→Nicht-nutzbar)"
+        if: ${{ inputs.mode == 'e2e' }}
+        env:
+          GW_TOKEN: ${{ inputs.target == 'dev' && secrets.DEV_OC1_GATEWAY_TOKEN || secrets.PROD_OC1_GATEWAY_TOKEN }}
+          OPENCLAW_IMAGE: "ghcr.io/openclaw/openclaw:2026.7.1"   # Pin (ADR-017)
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
-            "$VPS_USER@$VPS_TS_IP" "sudo docker exec openclaw-${{ inputs.instance }} openclaw devices list" \
-            || echo "❌ Konnte openclaw-${{ inputs.instance }} nicht erreichen"
+          set -euo pipefail
+          case "$APPROVE_INSTANCE" in
+            oc1) E2E_PORT=18789 ;;
+            oc2) E2E_PORT=18790 ;;
+            oc3) E2E_PORT=18791 ;;
+            *) echo "❌ Unbekannte Instanz: $APPROVE_INSTANCE" >&2; exit 2 ;;
+          esac
+          E2E_HOST="vps-${APPROVE_TARGET}.${TS_TAILNET}"
+          STATE_DIR="/tmp/e2e-${APPROVE_TARGET}-${APPROVE_INSTANCE}"
+          # VPS-IP via Tailscale-API (etabliertes Muster, vps-<target>/-1-Fallback)
+          TS_TOKEN=$(curl -s -d "client_id=$TS_CLIENT_ID" -d "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+          VPS_IP=$(curl -s -H "Authorization: Bearer $TS_TOKEN" \
+            "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses" \
+            | python3 -c "
+          import json, sys
+          devs = json.load(sys.stdin).get('devices', [])
+          for dev in devs:
+              if dev.get('hostname') in ('vps-$APPROVE_TARGET', 'vps-$APPROVE_TARGET-1'):
+                  addrs = dev.get('addresses') or []
+                  if addrs:
+                      print(addrs[0])
+                      break
+          ")
+          [ -n "$VPS_IP" ] || { echo "❌ VPS-IP für vps-$APPROVE_TARGET nicht gefunden" >&2; exit 1; }
+          SSH="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR ${VPS_USER}@${VPS_IP}"
+          CLIENT() {
+            docker run --rm --network host --entrypoint openclaw -u root -v "$STATE_DIR:/tmp/e2e" \
+              -e OPENCLAW_STATE_DIR=/tmp/e2e "$OPENCLAW_IMAGE" "$@"
+          }
+          {
+            echo "## 🧪 Device E2E Lifecycle ($APPROVE_TARGET/$APPROVE_INSTANCE)"
+            echo ""
+            echo "| Feld | Wert |"
+            echo "|------|------|"
+            echo "| **Gateway** | \`wss://$E2E_HOST:$E2E_PORT\` |"
+            echo "| **VPS-IP** | $VPS_IP |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          # ── 1) Request erzeugen (frischer Client, wss://, --network host) ──
+          mkdir -p "$STATE_DIR"
+          set +e
+          OUT=$(CLIENT gateway call health --url "wss://${E2E_HOST}:${E2E_PORT}" --token "$GW_TOKEN" --timeout 20000 2>&1)
+          RC=$?
+          set -e
+          echo "=== [1] Client-Connect (erwartet: 1008 pairing required) rc=$RC ==="
+          printf '%s\n' "$OUT"
+          REQ=$(printf '%s' "$OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)
+          if [ -z "$REQ" ]; then
+            echo "❌ KEINE UUID-requestId gefunden (rc=$RC) – Lifecycle-Abbruch mit Befund." >&2
+            echo "   Erwartet: 1008 'pairing required' mit requestId (UUID-36)." >&2
+            echo "   Diagnose-Block entfernt (Review-Auflage H1) – vor dem Run Transport/Token/Config pruefen." >&2
+            exit 1
+          fi
+          echo "✅ [1] requestId (UUID-36): $REQ"
+          # ── 2) List-Nachweis ──
+          $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} openclaw devices list --json" > /tmp/e2e-devices-pending.json
+          echo "=== [2] devices list --json (pending-Array) ==="
+          python3 - "$REQ" <<'PYEOF'
+          import json, sys
+          req = sys.argv[1]
+          data = json.load(open('/tmp/e2e-devices-pending.json'))
+          pending = data.get('pending') or []
+          print(json.dumps(pending, indent=2))
+          print(f"pending_count={len(pending)}")
+          print(f"uuid_in_raw_json={'yes' if req in open('/tmp/e2e-devices-pending.json').read() else 'NO'}")
+          # v3.11 (Run 31156554728): Feldname ist requestId (UUID-36), NICHT
+          # deviceId (64er-PublicKey-Hash). Beleg pending[0].requestId=UUID.
+          match = [e for e in pending if e.get('requestId') == req]
+          print(f"uuid_in_field_requestId={'yes' if match else 'NO'}")
+          for i, e in enumerate(pending):
+              print(f"entry[{i}] requestId={e.get('requestId')} deviceId={e.get('deviceId')} clientId={e.get('clientId')} platform={e.get('platform')}")
+          if not match:
+              print(f"❌ UUID NICHT im pending[] (Feld requestId) – Schlüssel des Eintrags: {sorted(pending[0].keys()) if pending else 'keine'}", file=sys.stderr)
+              sys.exit(1)
+          print(f"PENDING_DEVICE_ID={match[0].get('deviceId')}")
+          PYEOF
+          PENDING_DEVICE_ID=$(python3 - "$REQ" <<'PYEOF'
+          import json, sys
+          data = json.load(open('/tmp/e2e-devices-pending.json'))
+          for e in (data.get('pending') or []):
+              if e.get('requestId') == sys.argv[1]:
+                  print(e.get('deviceId') or '')
+                  break
+          PYEOF
+          )
+          [ -n "$PENDING_DEVICE_ID" ] || { echo "❌ PENDING_DEVICE_ID nicht extrahierbar" >&2; exit 1; }
+          echo "✅ [2] UUID im pending[] gefunden (Feld requestId = requestId), PENDING_DEVICE_ID=$PENDING_DEVICE_ID"
+          # ── 3) Approve ──
+          echo "=== [3] devices approve $REQ ==="
+          $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} openclaw devices approve ${REQ}" | tee /tmp/e2e-approve.out
+          $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} openclaw devices list --json" > /tmp/e2e-devices-approved.json
+          echo "=== [3] paired nach approve ==="
+          python3 - <<'PYEOF'
+          import json
+          data = json.load(open('/tmp/e2e-devices-approved.json'))
+          print(f"pending_count={len(data.get('pending') or [])}")
+          for e in (data.get('paired') or []):
+              print(f"paired deviceId={e.get('deviceId')} clientId={e.get('clientId')} platform={e.get('platform')} role={e.get('role')}")
+          PYEOF
+          echo "✅ [3] approve RC 0"
+          # ── 4) Nutzbar (gleiche Client-Identität) ──
+          OUT=$(CLIENT gateway call health --url "wss://${E2E_HOST}:${E2E_PORT}" --token "$GW_TOKEN" --timeout 20000 2>&1)
+          echo "=== [4] Client-Reconnect (erwartet: health ok) ==="
+          printf '%s\n' "$OUT"
+          printf '%s' "$OUT" | grep -q '"ok": true' || { echo "❌ [4] Verbindung NICHT nutzbar" >&2; exit 1; }
+          echo "✅ [4] Verbindung nutzbar (health ok: true)"
+          # ── 5) Löschen (remove paired deviceId) ──
+          # v3.11: deviceId stammt aus dem [2]-pending-Eintrag (64er-Hash, identisch
+          # nach approve); Fallback: clientId-Scan im paired[] (cli|openclaw-cli).
+          DEVICE_ID="$PENDING_DEVICE_ID"
+          if [ -z "$DEVICE_ID" ]; then
+            DEVICE_ID=$(python3 - <<'PYEOF'
+          import json
+          data = json.load(open('/tmp/e2e-devices-approved.json'))
+          for e in (data.get('paired') or []):
+              if e.get('clientId') in ('cli', 'openclaw-cli'):
+                  print(e.get('deviceId') or '')
+                  break
+          PYEOF
+          )
+          fi
+          [ -n "$DEVICE_ID" ] || { echo "❌ [5] paired-Eintrag (clientId=cli) nicht gefunden" >&2; exit 1; }
+          echo "=== [5] devices remove $DEVICE_ID ==="
+          $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} openclaw devices remove ${DEVICE_ID}" | tee /tmp/e2e-remove.out
+          $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} openclaw devices list --json" > /tmp/e2e-devices-removed.json
+          python3 - "$DEVICE_ID" <<'PYEOF'
+          import json, sys
+          dev = sys.argv[1]
+          data = json.load(open('/tmp/e2e-devices-removed.json'))
+          n = len([e for e in (data.get('paired') or []) if e.get('deviceId') == dev])
+          print(f"paired_entries_with_deviceId={n} (erwartet 0)")
+          if n:
+              print("❌ [5] Eintrag weiterhin gepaart", file=sys.stderr)
+              sys.exit(1)
+          PYEOF
+          echo "✅ [5] Verbindung gelöscht"
+          # ── 6) Nicht mehr nutzbar ──
+          set +e
+          OUT=$(CLIENT gateway call health --url "wss://${E2E_HOST}:${E2E_PORT}" --token "$GW_TOKEN" --timeout 20000 2>&1)
+          RC=$?
+          set -e
+          echo "=== [6] Client-Reconnect nach remove (erwartet: Fehler/1008) rc=$RC ==="
+          printf '%s\n' "$OUT"
+          if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q '"ok": true'; then
+            echo "❌ [6] Verbindung weiterhin nutzbar – Löschen wirkungslos!" >&2
+            exit 1
+          fi
+          NEW_REQ=$(printf '%s' "$OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)
+          echo "✅ [6] Verbindung NICHT mehr nutzbar"
+          # ── 7) Cleanup (reject neuer Request) + Endzustand ──
+          if [ -n "$NEW_REQ" ]; then
+            echo "=== [7] Cleanup: devices reject $NEW_REQ ==="
+            $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} openclaw devices reject ${NEW_REQ}" | tee /tmp/e2e-reject.out
+          else
+            echo "[7] Kein neuer pending Request – kein Cleanup nötig."
+          fi
+          $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} openclaw devices list --json" > /tmp/e2e-devices-final.json
+          echo "=== [7] Endzustand ==="
+          python3 - <<'PYEOF'
+          import json
+          data = json.load(open('/tmp/e2e-devices-final.json'))
+          print(f"pending={len(data.get('pending') or [])} paired={len(data.get('paired') or [])}")
+          for e in (data.get('pending') or []):
+              print("pending:", e.get('deviceId'), e.get('clientId'), e.get('platform'))
+          PYEOF
+          {
+            echo ""
+            echo "### ✅ Lifecycle-Ergebnis ($APPROVE_TARGET/$APPROVE_INSTANCE)"
+            echo ""
+            echo "| Schritt | Ergebnis | Beleg |"
+            echo "|---------|----------|-------|"
+            echo "| 1 Request (UUID) | erzeugt | \`$REQ\` |"
+            echo "| 2 List (pending, Feld requestId) | UUID gefunden | devices list --json |"
+            echo "| 3 Approve | RC 0 | approve.out |"
+            echo "| 4 Nutzbar | health ok: true | Client-Run 2 |"
+            echo "| 5 Löschen (remove) | paired=0 | \`$DEVICE_ID\` |"
+            echo "| 6 Nicht mehr nutzbar | 1008/Fehler | Client-Run 3 |"
+            echo "| 7 Cleanup (reject) | pending=0 | devices-final.json |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Request-ID approved (falls angegeben)
-        if: inputs.request_id != ''
+      # ★ EINZIGER Discovery+Aktions-Schritt (Ein-Job, v3.0; v3.2: auch Reject);
+      # v3.3: übersprungen im E2E-Modus (Lifecycle läuft im eigenen Step).
+      # --full-run ruft discovery.py-run_discovery mit VPS-Gruppierung auf
+      # (1 SSH pro VPS); die Aktion (Approve ODER Reject) läuft direkt in der
+      # SSH-Session beim Fund – auch bei prod (kein Gate). mode=reject →
+      # --reject-only (Ein-Job-Reject, REJECT-Marker). Exit-Code-Vertrag
+      # (Owner-Vereinbarung 15:06):
+      #   0 = approved/rejected ODER not_found (gruener Run – Status im JSON/stdout),
+      #   1 = error (Infrastruktur/Auth/Aktions-Fehler – roter Run).
+      # not_found wird NICHT separat behandelt und NICHT mit `|| true`
+      # maskiert – approve.py liefert dafuer Exit-Code 0.
+      # v3.1: läuft NUR im Approve-/Reject-Modus (mode=list überspringt diesen Step).
+      - name: Discovery + Aktion (Approve/Reject, Ein-Job)
+        id: full_run
+        if: ${{ inputs.mode != 'list' && inputs.mode != 'e2e' }}
+        env:
+          INPUT_MODE: ${{ inputs.mode || 'approve' }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
-            "$VPS_USER@$VPS_TS_IP" "sudo docker exec openclaw-${{ inputs.instance }} openclaw devices approve ${{ inputs.request_id }}"
+          set -euo pipefail
+          {
+            echo "## 🚀 Discovery + Aktion (Approve/Reject, Ein-Job, v3.0/v3.2)"
+            echo ""
+            echo "| Feld | Wert |"
+            echo "|------|------|"
+            echo "| **Modus** | $INPUT_MODE |"
+            echo "| **ID** | \`$APPROVE_ID\` |"
+            echo "| **Target** | $APPROVE_TARGET |"
+            echo "| **Typ** | $DERIVED_TYPE |"
+            echo "| **Instanz** | $APPROVE_INSTANCE |"
+            echo "| **Trigger** | ${{ github.event_name }} |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # v3.2: mode=reject → --reject-only (Ein-Job-Reject)
+          ARGS=(--full-run)
+          if [ "$INPUT_MODE" = "reject" ]; then
+            ARGS+=(--reject-only)
+          fi
+
+          python3 tools/device-approve/approve.py "${ARGS[@]}" \
+            --request-id "$APPROVE_ID" \
+            --type-filter "$DERIVED_TYPE" \
+            --target-filter "$APPROVE_TARGET" \
+            --instance-filter "$APPROVE_INSTANCE" \
+            --vps-user "$VPS_USER" \
+            --ssh-key ~/.ssh/id_ed25519 \
+            --ts-tailnet "$TS_TAILNET" \
+            --ts-client-id "$TS_CLIENT_ID" \
+            --ts-client-secret "$TS_CLIENT_SECRET" \
+            --summary
+
+          {
+            echo ""
+            echo "✅ **Ein-Job-Design: Direktfreigabe/-ablehnung in der SSH-Session – kein separater Job, kein Environment-Gate.**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ★ Listen-Modus (v3.1): --list-only aggregiert ALLE pending Requests
+      # über alle (gefilterten) Instanzen (1 SSH pro VPS, build_list_remote_cmd
+      # – KEIN Approve). JSON auf stdout (Run-Log), Markdown-Tabelle via
+      # --summary in die Job-Summary. Exit-Code-Vertrag: 0 = Liste erstellt
+      # (auch leer = grün), 1 = Infrastruktur/Auth, 2 = Config.
+      - name: Pending-Requests listen (Listen-Modus)
+        id: list_run
+        if: ${{ inputs.mode == 'list' }}
+        run: |
+          set -euo pipefail
+
+          python3 tools/device-approve/approve.py \
+            --list-only \
+            --type-filter "$DERIVED_TYPE" \
+            --target-filter "$APPROVE_TARGET" \
+            --instance-filter "$APPROVE_INSTANCE" \
+            --vps-user "$VPS_USER" \
+            --ssh-key ~/.ssh/id_ed25519 \
+            --ts-tailnet "$TS_TAILNET" \
+            --ts-client-id "$TS_CLIENT_ID" \
+            --ts-client-secret "$TS_CLIENT_SECRET" \
+            --summary

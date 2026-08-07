@@ -1,0 +1,73 @@
+---
+# CI – Freigabe (Statik + Unit, KEIN Tailscale/SSH/Deploy)
+#   Automatisiert die lokale Validierung aus Design 05 v3.0:
+#   actionlint + shellcheck + pytest + bash -n für Workflow 05 (v3, Ein-Job),
+#   tools/device-approve (v3.0), tools/telegram-approve-bot und Tests.
+#   Läuft auf dem session-Branch (push) und bei PRs.
+name: "CI – Freigabe (Statik + Unit)"
+
+on:
+  push:
+    branches: [session-20260806/device-approve-telegram, session-20260807/device-reject]
+    paths:
+      - '.github/workflows/05-device-approve.yml'
+      - '.github/workflows/ci-device-approve.yml'
+      - 'tools/device-approve/**'
+      - 'tools/telegram-approve-bot/**'
+      - 'tests/device-approve/**'
+  pull_request:
+    paths:
+      - '.github/workflows/05-device-approve.yml'
+      - '.github/workflows/ci-device-approve.yml'
+      - 'tools/device-approve/**'
+      - 'tools/telegram-approve-bot/**'
+      - 'tests/device-approve/**'
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: "actionlint (Workflow-Syntax)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint – Workflow 05 (v3) + CI selbst
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: .github/workflows/05-device-approve.yml .github/workflows/ci-device-approve.yml
+
+  shellcheck:
+    name: "shellcheck (Shell-Skripte)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck – auth_check.sh + Shell-Tests
+        run: |
+          set -euo pipefail
+          command -v shellcheck >/dev/null 2>&1 || sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck tools/telegram-approve-bot/auth_check.sh tests/device-approve/test_auth_check.sh
+
+  pytest:
+    name: "pytest (device-approve v3.0 + Bot/SSoT-Parser)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Abhängigkeiten
+        run: python -m pip install --quiet pyyaml pytest requests
+      - name: pytest – tests/device-approve/
+        run: python -m pytest -v tests/device-approve/
+
+  bash-syntax:
+    name: "bash -n (Syntax)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n Syntax-Check
+        run: |
+          set -euo pipefail
+          bash -n tools/telegram-approve-bot/auth_check.sh
+          bash -n tests/device-approve/test_auth_check.sh

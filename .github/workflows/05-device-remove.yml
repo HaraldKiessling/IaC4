@@ -1,0 +1,184 @@
+---
+# 05 – Device Remove (Revoke) – Eigenständiger Revoke-Workflow
+#   Etabliertes Muster: Tailscale-Join → SSH → docker exec openclaw CLI
+#   (identisch zu Workflow 05 e2e-Modus, aber nur list+remove-Schritte).
+#   Kein Approve, kein Reject, kein e2e-Client – direktes Remove eines
+#   gepaarten Geräts per deviceId auf der angegebenen Instanz.
+#
+#   Concurrency-Group `device-approve` (cancel-in-progress: false) –
+#   teilt die Gruppe mit dem Approve/List/Reject-Workflow für serielle
+#   Ausführung.
+name: "05 – Device Remove (Revoke)"
+
+run-name: "remove ${{ inputs.instance || 'oc1' }} (${{ inputs.target || 'prod' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Ziel-VPS'
+        required: false
+        default: 'prod'
+        type: choice
+        options: [dev, prod]
+      instance:
+        description: 'OC-Instanz (oc1…ocN)'
+        required: false
+        default: 'oc1'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: device-approve
+  cancel-in-progress: false
+
+jobs:
+  remove:
+    name: "Device Remove (${{ inputs.target }}/${{ inputs.instance }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+      TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+      TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connect Runner to Tailnet
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: SSH-Key vorbereiten
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Device identifizieren + entfernen (prod/oc1)
+        env:
+          REMOVE_TARGET: ${{ inputs.target }}
+          REMOVE_INSTANCE: ${{ inputs.instance }}
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          set -euo pipefail
+
+          # VPS-IP via Tailscale-API (etabliertes Muster)
+          TS_TOKEN=$(curl -s -d "client_id=${TS_CLIENT_ID}" -d "client_secret=${TS_CLIENT_SECRET}" \
+            "https://api.tailscale.com/api/v2/oauth/token" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+          VPS_IP=$(curl -s -H "Authorization: Bearer ${TS_TOKEN}" \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            | python3 -c "
+          import json, sys
+          devs = json.load(sys.stdin).get('devices', [])
+          for dev in devs:
+              if dev.get('hostname') in ('vps-${REMOVE_TARGET}', 'vps-${REMOVE_TARGET}-1'):
+                  addrs = dev.get('addresses') or []
+                  if addrs:
+                      print(addrs[0])
+                      break
+          ")
+          [ -n "${VPS_IP:-}" ] || { echo "❌ VPS-IP fuer vps-${REMOVE_TARGET} nicht gefunden" >&2; exit 1; }
+          echo "🔗 VPS-IP: ${VPS_IP}"
+
+          SSH_CMD="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR ${VPS_USER}@${VPS_IP}"
+          DOCKER_EXEC="sudo docker exec openclaw-${REMOVE_INSTANCE}"
+
+          # ── 1) devices list --json (komplett, inkl. paired[]) ──
+          echo "=== [1] devices list --json ==="
+          ${SSH_CMD} "${DOCKER_EXEC} openclaw devices list --json" > /tmp/devices.json
+
+          echo "=== RAW (gekuerzt) ==="
+          head -c 3000 /tmp/devices.json
+          echo ""
+
+          # Extract paired entries and find the most recently approved
+          # device with platform ~ "Linux armv81" (expected per task).
+          python3 - "${REMOVE_INSTANCE}" "${REMOVE_TARGET}" << 'PYEOF'
+          import json, sys
+
+          inst = sys.argv[1]
+          target = sys.argv[2]
+          data = json.load(open('/tmp/devices.json'))
+
+          paired = data.get('paired') or []
+          print(f"paired_count={len(paired)}")
+
+          if not paired:
+              print("❌ Kein gepaartes Gerät gefunden", file=sys.stderr)
+              sys.exit(1)
+
+          # Zeige alle paired entries + approvedAtMs (konvertiert)
+          for e in paired:
+              from datetime import datetime, timezone
+              ts = datetime.fromtimestamp(e.get('approvedAtMs',0)/1000, tz=timezone.utc).isoformat()
+              print(f"deviceId={e.get('deviceId')} platform={e.get('platform')} clientId={e.get('clientId')} role={e.get('role')} approvedAt={ts}")
+
+          # Sort by approvedAtMs descending → newest first
+          paired.sort(key=lambda e: e.get('approvedAtMs', 0), reverse=True)
+
+          # Target: most recently approved device (neuestes = das heute freigegebene)
+          newest = paired[0]
+          device_id = newest.get('deviceId')
+          print(f"\n✅ GEWÄHLT (neuestes approvedAt): deviceId={device_id} platform={newest.get('platform')} approvedAtMs={newest.get('approvedAtMs')}")
+
+          with open('/tmp/remove-device-id.txt', 'w') as f:
+              f.write(device_id)
+          PYEOF
+
+          DEVICE_ID=$(cat /tmp/remove-device-id.txt)
+          [ -n "${DEVICE_ID:-}" ] || { echo "❌ deviceId nicht extrahierbar" >&2; exit 1; }
+          echo ""
+
+          # ── 2) devices remove <deviceId> ──
+          echo "=== [2] devices remove ${DEVICE_ID} ==="
+          ${SSH_CMD} "${DOCKER_EXEC} openclaw devices remove ${DEVICE_ID}" | tee /tmp/remove.out
+          REMOVE_RC=${PIPESTATUS[0]}
+          echo "remove_rc=${REMOVE_RC}"
+
+          # ── 3) Nachweis: Gerät nicht mehr paired ──
+          echo ""
+          echo "=== [3] Nachweis: devices list --json ==="
+          ${SSH_CMD} "${DOCKER_EXEC} openclaw devices list --json" > /tmp/devices-after.json
+          python3 - "${DEVICE_ID}" << 'PYEOF'
+          import json, sys
+          dev = sys.argv[1]
+          data = json.load(open('/tmp/devices-after.json'))
+          paired = data.get('paired') or []
+          match = [e for e in paired if e.get('deviceId') == dev]
+          print(f"paired_count={len(paired)} target_deviceId_still_paired={len(match)}")
+          if match:
+              print(f"❌ Gerät {dev} weiterhin gepaart", file=sys.stderr)
+              sys.exit(1)
+          print("✅ Gerät NICHT mehr paired – Revoke erfolgreich")
+          PYEOF
+
+          echo ""
+          echo "=== ERGEBNIS ==="
+          echo "deviceId entfernt: ${DEVICE_ID}"
+          echo "Instanz: ${REMOVE_TARGET}/${REMOVE_INSTANCE}"
+
+      - name: Job-Summary
+        if: always()
+        run: |
+          {
+            echo "## 🗑️ Device Remove (Revoke)"
+            echo ""
+            echo "| Feld | Wert |"
+            echo "|------|------|"
+            echo "| **Target** | ${{ inputs.target }} |"
+            echo "| **Instanz** | ${{ inputs.instance }} |"
+            echo "| **Run-ID** | ${{ github.run_id }} |"
+            echo "| **Run-URL** | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
