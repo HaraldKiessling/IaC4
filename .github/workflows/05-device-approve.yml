@@ -348,6 +348,33 @@ jobs:
           echo "=== [0] VPS-seitig: serve-json komplett + Zertifikat (Laufzeit/Issuer) ==="
           # shellcheck disable=SC2016  # $c wird REMOTE expandiert (absichtlich)
           $SSH 'tailscale serve status --json; echo ---cert-files---; sudo ls -la /var/lib/tailscale/certs/ 2>&1; for c in /var/lib/tailscale/certs/*.crt; do echo ---cert---; sudo openssl x509 -in "$c" -noout -subject -issuer -dates 2>&1; done' >&2 || true
+          # ── 0b) Tailscale-Update auf dev (v3.8, Owner-Folgeauftrag 06:48): ──
+          # Befund 06:44-06:51: 1006 mit falschem UND echtem Token ⇒ dev-Gateway
+          # schließt WS VOR Auth; einziger struktureller Differenzfaktor dev vs prod
+          # ist die Tailscale-Version (dev 1.102.1 vs prod 1.102.2, WS-Proxy-Pfad von
+          # tailscale serve). FIX: dev per apt auf die aktuelle Tailscale-Version heben
+          # (Debian-Weg; Repo-SSoT ansible/roles/tailscale installiert via
+          # tailscale.com/install.sh → Tailscale-apt-Repo, dasselbe Repo). NUR dev,
+          # prod wird NICHT angefasst. Serve-Zustand danach prüfen und bei Verlust
+          # gemäß SSoT (ansible/roles/openclaw-gateway/tasks/instance.yml Z.214-223)
+          # reaktivieren: tailscale serve --bg --https=<port> http://localhost:<port>.
+          if [ "$APPROVE_TARGET" = "dev" ]; then
+            echo "=== [0b] Tailscale-Update dev (apt, Debian-Weg) ==="
+            $SSH "sudo apt-get update -qq && sudo apt-get install -y -qq tailscale"
+            echo "--- tailscale version nach Update ---"
+            $SSH "tailscale version"
+            echo "--- serve-Status nach Update ---"
+            $SSH "tailscale serve status --json" > /tmp/e2e-serve.json || true
+            if ! grep -q "http://localhost:${E2E_PORT}" /tmp/e2e-serve.json; then
+              echo "⚠️ serve für Port ${E2E_PORT} nach Update nicht aktiv – reaktiviere (SSoT instance.yml Z.220)"
+              $SSH "tailscale serve --bg --https=${E2E_PORT} http://localhost:${E2E_PORT}"
+            else
+              echo "✅ serve für Port ${E2E_PORT} nach Update weiterhin aktiv"
+            fi
+            $SSH "tailscale serve status" || true
+          else
+            echo "=== [0b] übersprungen (Tailscale-Update NUR auf dev) ==="
+          fi
           # ── 1) Request erzeugen (frischer Client, wss://) ──
           mkdir -p "$STATE_DIR"
           # v3.6: Differenzial-Test – falsches Token vs. echtes Token. 1006 bei BEIDEN
