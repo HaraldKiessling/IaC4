@@ -32,12 +32,11 @@ Requests, `remove` NUR auf **paired** Geräte. Für den Owner-Lösch-Schritt
 
 ## Harness
 
-Reproduzierbarer Lauf: `.github/workflows/06-device-e2e-lifecycle.yml`
-(workflow_dispatch: `target` dev|prod, `instance` oc1). Der Lauf nutzt die
-etablierten Muster aus Workflow 05 (Tailscale-Join, SSH docker exec,
-Tailscale-API-IP-Auflösung) und führt den kompletten Lifecycle in EINEM Job
-aus – der frische Client (neue Device-Identität) lebt im Runner-Volume
-(`/tmp/e2e-<target>-<inst>`) und bleibt über alle Schritte identisch.
+Reproduzierbarer Lauf: **Workflow 05, `mode: e2e`** (workflow_dispatch:
+`target` dev|prod, `instance` oc1) – im selben Job wie die etablierten Muster
+(Tailscale-Join, SSH docker exec, Tailscale-API-IP-Auflösung). Der frische
+Client (neue Device-Identität) lebt im Runner-Volume (`/tmp/e2e-<target>-<inst>`)
+und bleibt über alle Schritte identisch.
 
 ### Ablauf (je Umgebung, zuerst dev, dann prod)
 
@@ -63,5 +62,5 @@ nicht im pending-Array → Lauf bricht mit Befund ab (kein Weiterraten).
 | dev/oc1 | (Run-Beleg) | `deviceId` = UUID | RC 0 | health ok | paired=0 | 1008 |
 | prod/oc1 | (Run-Beleg) | `deviceId` = UUID | RC 0 | health ok | paired=0 | 1008 |
 
-Details pro Lauf: Job-Summary des 06-Workflows (Run-URL) + Run-Log
+Details pro Lauf: Job-Summary des 05-Workflows mode=e2e (Run-URL) + Run-Log
 (JSON-Auszüge, keine Secrets).
