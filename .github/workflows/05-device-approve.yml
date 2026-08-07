@@ -407,8 +407,8 @@ jobs:
             s = json.dumps(d, indent=2, default=str)
             s = re.sub(r'("[^"]*(?:token|secret|apiKey|password|key)[^"]*"\s*:\s*")[^"]*(")', r'\1[REDACTED]\2', s, flags=re.I)
             print(s)
-            PYEOF
-            exit 1
+          PYEOF
+          exit 1
           fi
           echo "✅ [1] requestId (UUID-36): $REQ"
           # ── 2) List-Nachweis ──
