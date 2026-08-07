@@ -470,15 +470,28 @@ jobs:
           print(json.dumps(pending, indent=2))
           print(f"pending_count={len(pending)}")
           print(f"uuid_in_raw_json={'yes' if req in open('/tmp/e2e-devices-pending.json').read() else 'NO'}")
-          match = [e for e in pending if e.get('deviceId') == req]
-          print(f"uuid_in_field_deviceId={'yes' if match else 'NO'}")
+          # v3.11 (Run 31156554728): Feldname ist requestId (UUID-36), NICHT
+          # deviceId (64er-PublicKey-Hash). Beleg pending[0].requestId=UUID.
+          match = [e for e in pending if e.get('requestId') == req]
+          print(f"uuid_in_field_requestId={'yes' if match else 'NO'}")
           for i, e in enumerate(pending):
-              print(f"entry[{i}] deviceId={e.get('deviceId')} clientId={e.get('clientId')} platform={e.get('platform')} publicKey={e.get('publicKey')}")
+              print(f"entry[{i}] requestId={e.get('requestId')} deviceId={e.get('deviceId')} clientId={e.get('clientId')} platform={e.get('platform')}")
           if not match:
-              print("❌ UUID NICHT im pending[] (Feld deviceId) – vermuteter Bug!", file=sys.stderr)
+              print(f"❌ UUID NICHT im pending[] (Feld requestId) – Schlüssel des Eintrags: {sorted(pending[0].keys()) if pending else 'keine'}", file=sys.stderr)
               sys.exit(1)
+          print(f"PENDING_DEVICE_ID={match[0].get('deviceId')}")
           PYEOF
-          echo "✅ [2] UUID im pending[] gefunden (Feld deviceId = requestId)"
+          PENDING_DEVICE_ID=$(python3 - "$REQ" <<'PYEOF'
+          import json, sys
+          data = json.load(open('/tmp/e2e-devices-pending.json'))
+          for e in (data.get('pending') or []):
+              if e.get('requestId') == sys.argv[1]:
+                  print(e.get('deviceId') or '')
+                  break
+          PYEOF
+          )
+          [ -n "$PENDING_DEVICE_ID" ] || { echo "❌ PENDING_DEVICE_ID nicht extrahierbar" >&2; exit 1; }
+          echo "✅ [2] UUID im pending[] gefunden (Feld requestId = requestId), PENDING_DEVICE_ID=$PENDING_DEVICE_ID"
           # ── 3) Approve ──
           echo "=== [3] devices approve $REQ ==="
           $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} openclaw devices approve ${REQ}" | tee /tmp/e2e-approve.out
@@ -499,16 +512,21 @@ jobs:
           printf '%s' "$OUT" | grep -q '"ok": true' || { echo "❌ [4] Verbindung NICHT nutzbar" >&2; exit 1; }
           echo "✅ [4] Verbindung nutzbar (health ok: true)"
           # ── 5) Löschen (remove paired deviceId) ──
-          DEVICE_ID=$(python3 - <<'PYEOF'
+          # v3.11: deviceId stammt aus dem [2]-pending-Eintrag (64er-Hash, identisch
+          # nach approve); Fallback: clientId-Scan im paired[] (cli|openclaw-cli).
+          DEVICE_ID="$PENDING_DEVICE_ID"
+          if [ -z "$DEVICE_ID" ]; then
+            DEVICE_ID=$(python3 - <<'PYEOF'
           import json
           data = json.load(open('/tmp/e2e-devices-approved.json'))
           for e in (data.get('paired') or []):
-              if e.get('clientId') == 'openclaw-cli':
-                  print(e['deviceId'])
+              if e.get('clientId') in ('cli', 'openclaw-cli'):
+                  print(e.get('deviceId') or '')
                   break
           PYEOF
           )
-          [ -n "$DEVICE_ID" ] || { echo "❌ [5] paired-Eintrag (openclaw-cli) nicht gefunden" >&2; exit 1; }
+          fi
+          [ -n "$DEVICE_ID" ] || { echo "❌ [5] paired-Eintrag (clientId=cli) nicht gefunden" >&2; exit 1; }
           echo "=== [5] devices remove $DEVICE_ID ==="
           $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} openclaw devices remove ${DEVICE_ID}" | tee /tmp/e2e-remove.out
           $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} openclaw devices list --json" > /tmp/e2e-devices-removed.json
