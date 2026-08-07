@@ -338,7 +338,9 @@ jobs:
           printf '%s\n' "$OUT"
           REQ=$(printf '%s' "$OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)
           if [ -z "$REQ" ]; then
-            echo "❌ KEINE UUID-requestId gefunden – vermuteter Bug (UUID wird nicht gemeldet)." >&2
+            echo "❌ KEINE UUID-requestId gefunden (rc=$RC) – vermuteter Bug ODER Infra (Transport)." >&2
+            echo "=== Diagnose (SSH) ===" >&2
+            $SSH "tailscale serve status; echo ---docker-ps---; sudo docker ps --filter name=openclaw-${APPROVE_INSTANCE}; echo ---docker-port---; sudo docker port openclaw-${APPROVE_INSTANCE} || true; echo ---listen---; sudo ss -tlnp | grep -E '1878[0-9]|1879[0-9]' || true" >&2
             exit 1
           fi
           echo "✅ [1] requestId (UUID-36): $REQ"
