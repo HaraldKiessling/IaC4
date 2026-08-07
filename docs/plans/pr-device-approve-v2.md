@@ -9,7 +9,7 @@
 
 ## Titel
 
-**05 v2.2 – Unified Freigabe: Telegram-Pairing + Device-Approve (ID-basiert)**
+### 05 v2.2 – Unified Freigabe: Telegram-Pairing + Device-Approve (ID-basiert)
 
 ## Zusammenfassung
 

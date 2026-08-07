@@ -199,4 +199,4 @@ F10 beantwortet). `devices list --json` → `{"pending": [...], "paired": [...]}
 - V2-Draft: `architect/iac4-design/05-workflow-erweiterung-v2.md`
 - Workflows: `05-device-approve.yml` (v2.2), `06-device-approve-telegram.yml`
   (gelöscht – in 05 v2.2 integriert)
-- Doku: https://docs.openclaw.ai/cli/pairing
+- Doku: <https://docs.openclaw.ai/cli/pairing>
