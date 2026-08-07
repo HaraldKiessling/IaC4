@@ -346,9 +346,20 @@ jobs:
               | grep -aE "HTTP/|101|502|400|error|refused|timed out" | head -5 || true
           done
           echo "=== [0] VPS-seitig: serve-json komplett + Zertifikat (Laufzeit/Issuer) ==="
-          $SSH "tailscale serve status --json; echo ---cert-files---; sudo ls -la /var/lib/tailscale/certs/ 2>&1; for c in /var/lib/tailscale/certs/*.crt; do echo ---cert---; sudo openssl x509 -in \"$c\" -noout -subject -issuer -dates 2>&1; done" >&2 || true
+          $SSH 'tailscale serve status --json; echo ---cert-files---; sudo ls -la /var/lib/tailscale/certs/ 2>&1; for c in /var/lib/tailscale/certs/*.crt; do echo ---cert---; sudo openssl x509 -in "$c" -noout -subject -issuer -dates 2>&1; done' >&2 || true
           # ── 1) Request erzeugen (frischer Client, wss://) ──
           mkdir -p "$STATE_DIR"
+          # v3.6: Differenzial-Test – falsches Token vs. echtes Token. 1006 bei BEIDEN
+          # ⇒ dev-Gateway schließt WS VOR Auth (Config/Version/Pairing-Problem);
+          # 1008 'token mismatch' beim falschen ⇒ Secret DEV_OC1_GATEWAY_TOKEN ist
+          # staler als dev-Container-Token. read-only, kein State.
+          echo "=== [1a] Client mit FALSCHEM Token (erwartet: 1008 token mismatch) ==="
+          set +e
+          OUTB=$(CLIENT gateway call health --url "wss://${E2E_HOST}:${E2E_PORT}" --token "wrong-token-e2e-xyz" --timeout 15000 2>&1)
+          RCB=$?
+          set -e
+          printf '%s\n' "$OUTB" | tail -6; echo "rc=$RCB"
+          echo "=== [1] Client mit echtem Token (erwartet: 1008 pairing required) rc=0/1 ==="
           set +e
           OUT=$(CLIENT gateway call health --url "wss://${E2E_HOST}:${E2E_PORT}" --token "$GW_TOKEN" --timeout 20000 2>&1)
           RC=$?
