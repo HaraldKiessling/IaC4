@@ -397,17 +397,20 @@ jobs:
           REQ=$(printf '%s' "$OUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)
           if [ -z "$REQ" ]; then
             echo "❌ KEINE UUID-requestId gefunden (rc=$RC) – vermuteter Bug ODER Infra (Transport)." >&2
-            echo "=== Diagnose v3.8 (Gateway-Logs dev+prod, Configs redigiert) ===" >&2
-            # v3.7-Fakt (dev-Logs): serve-proxied WS → 'Proxy headers detected from
-            # untrusted address' + close code=1006 phase=ws_upgrade_started; nur
-            # direkte Docker-Netz-Verbindungen erreichen Auth (1008 token mismatch).
-            # Prod-Vergleich entscheidet: trustedProxies/Config-Delta oder Version.
-            echo "--- gateway-logs dev (letzte 25, um Connect-Zeitpunkt) ---" >&2
-            $SSH "sudo docker logs --tail 25 openclaw-${APPROVE_INSTANCE} 2>&1 | tail -18" >&2 || true
-            echo "--- gateway-logs prod (letzte 25) ---" >&2
-            PROD_IP=$(curl -s -H "Authorization: Bearer $TS_TOKEN" \
-              "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses" \
-              | python3 -c "
+            echo "=== Diagnose v3.9 (dev vs prod Komplett-Vergleich) ===" >&2
+            # Stand: beide Hosts schließen curl-WS-Upgrades mit 1006 (ua=curl,
+            # phase=ws_upgrade_started) – curl ist KEIN gültiger Client-Test.
+            # Prod-Bild created=2026-08-06, dev-Bild created=2026-08-04 (v3.7) →
+            # Versionstheorie. v3.9 holt: tailscale-Version, serve-json komplett,
+            # Bild-Zeitstempel, [ws]-Logs --since 10m (erreicht der CLI-Client
+            # das Gateway überhaupt?) auf dev UND prod.
+            for HOST_TAG in dev prod; do
+              if [ "$HOST_TAG" = "dev" ]; then
+                H_IP="$VPS_IP"; H_SSH="$SSH"
+              else
+                H_IP=$(curl -s -H "Authorization: Bearer $TS_TOKEN" \
+                  "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses" \
+                  | python3 -c "
           import json, sys
           devs = json.load(sys.stdin).get('devices', [])
           for dev in devs:
@@ -417,10 +420,12 @@ jobs:
                       print(addrs[0])
                       break
           ")
-            if [ -n "$PROD_IP" ]; then
-              ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
-                "${VPS_USER}@${PROD_IP}" "sudo docker logs --tail 25 openclaw-${APPROVE_INSTANCE} 2>&1 | tail -18; echo ---image---; sudo docker inspect -f 'img={{.Config.Image}} imageid={{.Image}} created={{.Created}}' openclaw-${APPROVE_INSTANCE}" >&2 || true
-            fi
+                H_SSH="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR ${VPS_USER}@${H_IP}"
+              fi
+              [ -n "$H_IP" ] || { echo "[$HOST_TAG] IP nicht gefunden" >&2; continue; }
+              echo "=== $HOST_TAG (${H_IP}) ===" >&2
+              $H_SSH "echo ---ts-version---; tailscale version | head -1; echo ---serve-json---; tailscale serve status --json 2>/dev/null; echo ---image---; sudo docker inspect -f 'img={{.Config.Image}} created={{.Created}}' openclaw-${APPROVE_INSTANCE} 2>&1; echo ---ws-logs-10m---; sudo docker logs --since 10m openclaw-${APPROVE_INSTANCE} 2>&1 | grep -aE '\[ws\]|pairing|approve|reject|device' | tail -25" >&2 || true
+            done
             echo "--- gateway-config dev (redigiert) ---" >&2
             $SSH "sudo docker exec openclaw-${APPROVE_INSTANCE} sh -c 'cat \$OPENCLAW_CONFIG_DIR/openclaw.json 2>/dev/null || cat /home/node/.openclaw/openclaw.json 2>/dev/null || find / -maxdepth 6 -name openclaw.json 2>/dev/null | head -1 | xargs -r cat'" > /tmp/e2e-gw-config.json 2>/dev/null || true
             python3 - <<'PYEOF' >&2
@@ -435,23 +440,6 @@ jobs:
           s = re.sub(r'("[^"]*(?:token|secret|apiKey|password|key)[^"]*"\s*:\s*")[^"]*(")', r'\1[REDACTED]\2', s, flags=re.I)
           print(s)
           PYEOF
-            if [ -n "$PROD_IP" ]; then
-              echo "--- gateway-config prod (redigiert) ---" >&2
-              ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
-                "${VPS_USER}@${PROD_IP}" "sudo docker exec openclaw-${APPROVE_INSTANCE} sh -c 'cat \$OPENCLAW_CONFIG_DIR/openclaw.json 2>/dev/null || cat /home/node/.openclaw/openclaw.json 2>/dev/null || find / -maxdepth 6 -name openclaw.json 2>/dev/null | head -1 | xargs -r cat'" > /tmp/e2e-gw-config-prod.json 2>/dev/null || true
-              python3 - <<'PYEOF' >&2
-          import json, re
-
-          try:
-              d = json.load(open('/tmp/e2e-gw-config-prod.json'))
-          except Exception as e:
-              print('prod config read failed:', e)
-              raise SystemExit
-          s = json.dumps(d, indent=2, default=str)
-          s = re.sub(r'("[^"]*(?:token|secret|apiKey|password|key)[^"]*"\s*:\s*")[^"]*(")', r'\1[REDACTED]\2', s, flags=re.I)
-          print(s)
-          PYEOF
-            fi
             exit 1
           fi
           echo "✅ [1] requestId (UUID-36): $REQ"
