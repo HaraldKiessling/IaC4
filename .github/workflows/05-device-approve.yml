@@ -45,6 +45,20 @@
 #   - Auth-Gates UNVERÄNDERT: Whitelist (repository_dispatch, auth_check.sh),
 #     Tailscale-only SSH; --validate-id NUR im Approve-Modus.
 #
+#   v3.2 (Reject-Modus, 2026-08-07 – Diagnose-Folgeauftrag):
+#   - Input `mode` erweitert um 'reject' (options: approve|list|reject).
+#     mode=reject analog zum approve-Pfad: ID wird validiert (--validate-id,
+#     Zwei-Format-Regex) und per Ein-Job-Remote-Schleife in der SSH-Session
+#     `openclaw devices reject <ID>` ausgeführt (REJECT-Marker, B2-Semantik,
+#     discovery.py action="reject"; approve.py --reject-only).
+#   - NUR device-Requests: die openclaw CLI hat kein 'pairing reject'
+#     (empirisch 2026-08-07) → reject mit abgeleitetem Typ != device bricht
+#     im Validate-Step ab (exit 1) und in approve.py (exit 2, defense in
+#     depth). ID-Formate unverändert (Pairing-Kurzcode 6-12 / Device 36-128
+#     Hex-mit-Dash) – gleiche Regex wie approve.
+#   - Exit-Code-Vertrag wie approve: 0 = rejected ODER not_found (grün),
+#     1 = error, 2 = Config. Concurrency-Group/Timeouts unverändert.
+#
 #   Secrets (Ist-Zustand, M2): TAILSCALE_OAUTH_CLIENT_ID /
 #   TAILSCALE_OAUTH_CLIENT_SECRET (Tailscale-Action v4.1.3, NICHT TS_OAUTH_*),
 #   VPS_USER, SSH_KEY, TELEGRAM_APPROVE_USERS (Whitelist für den Telegram-Pfad,
@@ -64,13 +78,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Modus (approve = Freigabe einer ID, list = alle pending Requests anzeigen)'
+        description: 'Modus (approve = Freigabe einer ID, list = alle pending Requests anzeigen, reject = Request ablehnen – nur device)'
         required: false
         default: 'approve'
         type: choice
-        options: [approve, list]
+        options: [approve, list, reject]
       id:
-        description: 'Request-ID (Pairing-Code QVDCXJEM ODER Device-ID 9df47d69…) – nur bei mode=approve'
+        description: 'Request-ID (Pairing-Code QVDCXJEM ODER Device-ID 9df47d69…) – nur bei mode=approve|reject'
         required: false
         type: string
       type:
@@ -107,7 +121,7 @@ concurrency:
 
 jobs:
   discover-and-approve:
-    name: "${{ inputs.mode == 'list' && 'Pending-Requests listen' || 'Discovery + Approve' }} (${{ inputs.target || 'both' }})"
+    name: "${{ inputs.mode == 'list' && 'Pending-Requests listen' || 'Discovery + Approve/Reject' }} (${{ inputs.target || 'both' }})"
     runs-on: ubuntu-latest
     timeout-minutes: 15  # R09: identisch zum Approve-Modus (Worst-Case 5 unerreichbare VPS ≈ 5 Min.)
     # ★ KEIN environment:-Attribut – Owner-Entscheidung: kein Gate nötig.
@@ -125,7 +139,8 @@ jobs:
       # ID-Validierung + Typ-Ableitung via discovery.py --validate-id).
       # v3.1 (R02): Mode-abhängig – bei mode=list wird eine gefüllte `id`
       # NICHT validiert und NICHT in GITHUB_ENV geschrieben (approve.py
-      # erhält kein --request-id). --validate-id läuft NUR im Approve-Modus.
+      # erhält kein --request-id). --validate-id läuft NUR im Approve-/
+      # Reject-Modus (v3.2; reject zusätzlich mit device-only-Hard-Gate).
       - name: Eingaben validieren + normalisieren + Typ ableiten
         id: inputs
         env:
@@ -175,10 +190,17 @@ jobs:
             } >> "$GITHUB_ENV"
             echo "📋 Listen-Modus: id='${INPUT_ID:-}' ignoriert (keine Validierung, R02), type=$LIST_TYPE"
           else
-            # ── Approve-Modus (unverändert) ──
+            # ── Approve-/Reject-Modus (v3.2) ──
             # ID-Validierung + Typ-Ableitung (Zwei-Format-Regex, keine Shell)
             DERIVED_TYPE=$(python3 tools/device-approve/discovery.py \
               --validate-id "$INPUT_ID" --type "$INPUT_TYPE")
+
+            # v3.2 (Reject-Modus): NUR device-Requests – die openclaw CLI hat
+            # kein 'pairing reject' (nur `openclaw devices reject <ID>`).
+            if [ "$INPUT_MODE" = "reject" ] && [ "$DERIVED_TYPE" != "device" ]; then
+              echo "❌ Reject-Modus: nur device-Requests unterstuetzt (kein 'pairing reject' in der openclaw CLI)." >&2
+              exit 1
+            fi
 
             {
               echo "APPROVE_ID=$INPUT_ID"
@@ -186,7 +208,7 @@ jobs:
               echo "APPROVE_TARGET=$INPUT_TARGET"
               echo "APPROVE_INSTANCE=$INPUT_INSTANCE"
             } >> "$GITHUB_ENV"
-            echo "✅ Eingaben validiert (id=$INPUT_ID, derived_type=$DERIVED_TYPE, target=$INPUT_TARGET, instance=$INPUT_INSTANCE)"
+            echo "✅ Eingaben validiert (mode=$INPUT_MODE, id=$INPUT_ID, derived_type=$DERIVED_TYPE, target=$INPUT_TARGET, instance=$INPUT_INSTANCE)"
           fi
 
       # SSoT-Mapping (dynamisches Globbing vps-*.yml) + Filter target/instance
@@ -227,25 +249,30 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-      # ★ EINZIGER Discovery+Approve-Schritt (Ein-Job, v3.0): --full-run ruft
-      # discovery.py-run_discovery mit VPS-Gruppierung auf (1 SSH pro VPS);
-      # der Approve läuft direkt in der SSH-Session beim Fund – auch bei prod
-      # (kein Gate). Exit-Code-Vertrag (Owner-Vereinbarung 15:06):
-      #   0 = approved ODER not_found (gruener Run – Status im JSON/stdout),
-      #   1 = error (Infrastruktur/Auth/Approve-Fehler – roter Run).
+      # ★ EINZIGER Discovery+Aktions-Schritt (Ein-Job, v3.0; v3.2: auch Reject):
+      # --full-run ruft discovery.py-run_discovery mit VPS-Gruppierung auf
+      # (1 SSH pro VPS); die Aktion (Approve ODER Reject) läuft direkt in der
+      # SSH-Session beim Fund – auch bei prod (kein Gate). mode=reject →
+      # --reject-only (Ein-Job-Reject, REJECT-Marker). Exit-Code-Vertrag
+      # (Owner-Vereinbarung 15:06):
+      #   0 = approved/rejected ODER not_found (gruener Run – Status im JSON/stdout),
+      #   1 = error (Infrastruktur/Auth/Aktions-Fehler – roter Run).
       # not_found wird NICHT separat behandelt und NICHT mit `|| true`
       # maskiert – approve.py liefert dafuer Exit-Code 0.
-      # v3.1: läuft NUR im Approve-Modus (mode=list überspringt diesen Step).
-      - name: Discovery + Approve (Ein-Job)
+      # v3.1: läuft NUR im Approve-/Reject-Modus (mode=list überspringt diesen Step).
+      - name: Discovery + Aktion (Approve/Reject, Ein-Job)
         id: full_run
         if: ${{ inputs.mode != 'list' }}
+        env:
+          INPUT_MODE: ${{ inputs.mode || 'approve' }}
         run: |
           set -euo pipefail
           {
-            echo "## 🚀 Discovery + Approve (Ein-Job, v3.0)"
+            echo "## 🚀 Discovery + Aktion (Approve/Reject, Ein-Job, v3.0/v3.2)"
             echo ""
             echo "| Feld | Wert |"
             echo "|------|------|"
+            echo "| **Modus** | $INPUT_MODE |"
             echo "| **ID** | \`$APPROVE_ID\` |"
             echo "| **Target** | $APPROVE_TARGET |"
             echo "| **Typ** | $DERIVED_TYPE |"
@@ -254,8 +281,13 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
-          python3 tools/device-approve/approve.py \
-            --full-run \
+          # v3.2: mode=reject → --reject-only (Ein-Job-Reject)
+          ARGS=(--full-run)
+          if [ "$INPUT_MODE" = "reject" ]; then
+            ARGS+=(--reject-only)
+          fi
+
+          python3 tools/device-approve/approve.py "${ARGS[@]}" \
             --instance-map /tmp/instance-map.txt \
             --request-id "$APPROVE_ID" \
             --type-filter "$DERIVED_TYPE" \
@@ -270,7 +302,7 @@ jobs:
 
           {
             echo ""
-            echo "✅ **Ein-Job-Design: Direktfreigabe in der SSH-Session – kein separater Approve-Job, kein Environment-Gate.**"
+            echo "✅ **Ein-Job-Design: Direktfreigabe/-ablehnung in der SSH-Session – kein separater Job, kein Environment-Gate.**"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ★ Listen-Modus (v3.1): --list-only aggregiert ALLE pending Requests
