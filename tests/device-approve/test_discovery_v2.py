@@ -259,6 +259,25 @@ class TestEntryMatchesId:
     def test_device_deviceId_field(self):
         assert discovery.entry_matches_id(pending_entry(DEVICE_UUID), DEVICE_UUID, "device") is True
 
+    def test_device_requestId_field(self):
+        """v3.3.1: UUID-36 in pending[].requestId wird gefunden – das ist die
+        Approve-/Reject-ID (deviceId ist der 64er-PublicKey-Hash, e2e-Beleg
+        aee3a00/Run 31156554728; Workflow-Befund: 7 not_found-Runs)."""
+        entry = {"deviceId": DEVICE_HEX_64, "requestId": DEVICE_UUID,
+                 "platform": "Linux armv81"}
+        assert discovery.entry_matches_id(entry, DEVICE_UUID, "device") is True
+
+    def test_device_requestId_64hex_not_matched_by_uuid(self):
+        """Die 64er-deviceId matcht NICHT gegen eine fremde UUID im requestId."""
+        entry = {"deviceId": DEVICE_HEX_64, "requestId": ALT_UUID}
+        assert discovery.entry_matches_id(entry, DEVICE_UUID, "device") is False
+
+    def test_device_deviceId_fallback_without_requestId(self):
+        """v3.3.1-Fallback: pending-Eintrag ohne requestId-Feld matcht weiterhin
+        über deviceId (defensiv, alte Quellen)."""
+        entry = {"deviceId": DEVICE_HEX_64, "platform": "Win32"}
+        assert discovery.entry_matches_id(entry, DEVICE_HEX_64, "device") is True
+
     def test_device_no_match(self):
         assert discovery.entry_matches_id(pending_entry("other"), DEVICE_UUID, "device") is False
 

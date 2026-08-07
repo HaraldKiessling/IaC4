@@ -27,9 +27,16 @@ packages/gateway-protocol/src/schema/devices.ts:17-20, docs/cli/devices.md).
 Telegram: "" wenn das pairing-request kein requestId-Feld hat (ID-Feld dort
 bleibt `code`). Ephemeritaet: requestId wird pro Pairing-Versuch neu vergeben.
 
+v3.3.1 (Approve/Reject-Match auf requestId, 2026-08-07 – Bugfix): der
+Approve-/Reject-Pfad matchte `"deviceId": "<UUID>"`, aber die UUID-36 steht
+in pending[] im Feld `requestId` (deviceId = 64er-Key-Hash) → 7 Runs
+lieferten not_found obwohl pending (31165552730/31165829570 et al.). Fix:
+device-Matching auf requestId (Remote-grep + entry_matches_id), deviceId als
+defensiver Fallback; Listen-Pfad unveraendert.
+
 Import in Scripts (if __name__ == "__main__"):
   sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
   from discovery import ...
 """
 
-__version__ = "3.3.0"
+__version__ = "3.3.1"

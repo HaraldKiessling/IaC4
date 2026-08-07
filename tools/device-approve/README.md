@@ -1,4 +1,4 @@
-# Device-Approve v3.2 – Ein-Job-Fast-Path (Lokale Testanleitung)
+# Device-Approve v3.3.1 – Ein-Job-Fast-Path (Lokale Testanleitung)
 
 Package `tools/device-approve/` (Design 05 v3.0, Workflow-05-Performance-Optimierung)
 – Unified ID-basierte Freigabe (Telegram-Pairing + Device-Approve) als
@@ -31,6 +31,14 @@ zusätzlich `requestId` (UUID-36) ausgegeben – die ID, die
 ("" = nicht vorhanden, z.B. Telegram-pairing-requests ohne requestId-Feld;
 ID-Feld dort bleibt `code`). Job-Summary: neue Spalte „Request-ID“ mit der
 VOLLEN UUID (bewusste Ausnahme zur ID-Kürzung).
+**v3.3.1 – Approve/Reject-Match auf requestId (2026-08-07, Bugfix, Beleg:
+7 approve/reject-Runs not_found trotz pending, u.a. 31165552730/31165829570):**
+Der Approve-/Reject-Pfad matchte `"deviceId": "<UUID>"` – aber die UUID-36
+steht in pending[] im Feld `requestId` (deviceId ist der 64er-PublicKey-Hash).
+Fix: `_SOURCE_ID_FIELD` device → `requestId`; der Remote-grep matcht defensiv
+`"(requestId|deviceId)"`; `entry_matches_id` prüft requestId zuerst, deviceId
+als Fallback. Listen-Pfad unveraendert (extrahiert requestId seit v3.3).
+Validierung/Typ-Ableitung unveraendert (UUID-36 = device).
 **Ephemerität (wichtig vor approve/reject):** Die requestId wird pro
 Pairing-Versuch NEU vergeben (e2e-Beleg: nach jedem Client-Connect entsteht
 eine frische UUID; ein wiederholt neu pairender Client erzeugt laufend neue

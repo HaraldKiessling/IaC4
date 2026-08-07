@@ -32,6 +32,9 @@ discovery = SourceFileLoader(
 # Test-IDs v3.0 (kalibriert an realen IDs, 2026-08-06)
 TG_CODE = "QVDCXJEM"
 DEVICE_UUID = "b0999c46-ebe3-4c46-a72b-8b0a7c1df2d5"
+# v3.3.1: 64er-PublicKey-Hash (pending[].deviceId) + fremde UUID
+DEVICE_HEX_64 = "9df47d697653fb4069407734e06849b342738ed3e9ec4b172402aca911925392"
+ALT_UUID = "2e68bca9-4965-4e29-9a9d-d1a12644d644"
 
 MAP_DEV_PROD = [("oc1", "dev"), ("oc2", "dev"), ("oc1", "prod"), ("oc2", "prod")]
 
@@ -130,6 +133,27 @@ class TestBuildEinJobRemoteCmd:
         assert "---JSON-BEGIN:${inst}:device---" in cmd
         assert "pairing" not in cmd
 
+    def test_device_grep_matches_requestId_or_deviceId(self):
+        """v3.3.1: Remote-grep matcht requestId ODER deviceId – die UUID-36
+        steht in pending[].requestId (deviceId = 64er-Key-Hash, e2e-Beleg
+        aee3a00); defensiv bleibt deviceId im Alternativen-Pfad."""
+        cmd = discovery.build_ein_job_remote_cmd("device", ["oc1"], DEVICE_UUID)
+        assert 'grep -qE \'"(requestId|deviceId)"' in cmd
+        assert f'"{DEVICE_UUID}"' in cmd
+        # kein Feld-exklusiver Match mehr (alter Bug: nur deviceId)
+        assert 'grep -qE \'"deviceId"' not in cmd
+
+    def test_telegram_grep_matches_code_only(self):
+        """Telegram unveraendert: Remote-grep matcht nur `code`."""
+        cmd = discovery.build_ein_job_remote_cmd("telegram", ["oc1"], TG_CODE)
+        assert 'grep -qE \'"(code)"' in cmd
+
+    def test_both_grep_has_requestId_alternation_for_device(self):
+        """v3.3.1: type=both → device-Quelle matcht (requestId|deviceId)."""
+        cmd = discovery.build_ein_job_remote_cmd("both", ["oc1"], DEVICE_UUID)
+        assert 'grep -qE \'"(requestId|deviceId)"' in cmd
+        assert 'grep -qE \'"(code)"' in cmd
+
     def test_both_template_queries_both_sources_in_one_session(self):
         """R02: type=both → pairing UND devices in DERSELBEN Session."""
         cmd = discovery.build_ein_job_remote_cmd("both", ["oc1", "oc2"], DEVICE_UUID)
@@ -206,6 +230,25 @@ class TestParseEinJobOutput:
         assert result.instance == "oc2"
         assert result.found_type == "device"
         assert result.approved is True
+
+    def test_device_requestId_match_found_and_approved(self):
+        """v3.3.1: pending-Eintrag mit UUID-36 im requestId-Feld (deviceId =
+        64er-Hash) wird gefunden und approved – der Workflow-Bugfall
+        (7 not_found-Runs, u.a. 31165552730/31165829570)."""
+        entry = {"deviceId": DEVICE_HEX_64, "requestId": DEVICE_UUID,
+                 "platform": "Linux armv81"}
+        stdout = ein_job_stdout("oc2", "device", json.dumps({"pending": [entry], "paired": []}))
+        result = discovery.parse_ein_job_output(stdout, "device", request_id=DEVICE_UUID, target="prod")
+        assert result is not None
+        assert result.instance == "oc2"
+        assert result.found_type == "device"
+        assert result.approved is True
+
+    def test_device_requestId_mismatch_not_found(self):
+        """Fremde UUID matcht weder requestId noch deviceId → kein Fund."""
+        entry = {"deviceId": DEVICE_HEX_64, "requestId": ALT_UUID}
+        stdout = ein_job_stdout("oc2", "device", json.dumps({"pending": [entry], "paired": []}), found=0)
+        assert discovery.parse_ein_job_output(stdout, "device", request_id=DEVICE_UUID, target="prod") is None
 
     def test_no_find_returns_none(self):
         stdout = ein_job_stdout(

@@ -52,6 +52,20 @@ Liste stehen", e2e-Beleg aee3a00/Run 31156554728):
   - pending_entry_to_dict()/build_list_result_json(): JSON-Feld
     `entries[].requestId` ("" = nicht vorhanden, konsistent zu R04).
 
+v3.3.1 (Approve/Reject-Match auf requestId, 2026-08-07 – Bugfix nach
+  Workflow-Befund: 7 approve/reject-Runs lieferten not_found obwohl pending,
+  z.B. 31165552730/31165829570):
+  - Der Approve-/Reject-Pfad matchte `"deviceId": "<UUID>"` – aber die
+    UUID-36 steht in pending[] im Feld `requestId` (deviceId = 64er-Key-Hash).
+    - _SOURCE_ID_FIELD device: deviceId → requestId (kanonisches Feld).
+    - Remote-grep (build_ein_job_remote_cmd): matcht requestId ODER deviceId
+      (defensiv, "(requestId|deviceId)" – Fund zählt, wenn EINES der Felder
+      die Request-ID trägt; Telegram unveraendert: code).
+    - entry_matches_id: device → requestId zuerst, deviceId als Fallback.
+  - Listen-Pfad (parse_list_output) unveraendert – extrahiert requestId
+    bereits korrekt (v3.3). Validierung/Typ-Ableitung unveraendert
+    (UUID-36 = device).
+
 Empirisch (Sandbox, OpenClaw 2026.7.1, 2026-08-06):
   - `openclaw pairing list telegram --json` → {"channel": "telegram", "requests": []}
   - `openclaw devices list --json` → {"pending": [...], "paired": [...]}
@@ -143,7 +157,13 @@ SSH_TIMEOUT = 60
 
 # Array-Key + ID-Feld je Quelle (für den Remote-Match ohne jq, R08)
 _SOURCE_ARRAY_KEY = {"telegram": "requests", "device": "pending"}
-_SOURCE_ID_FIELD = {"telegram": "code", "device": "deviceId"}
+# v3.3.1: kanonisches ID-Feld je Quelle – device ist jetzt `requestId`
+# (UUID-36, die ID, die `openclaw devices approve/reject` erwartet;
+# pending[].deviceId ist der 64er-PublicKey-Hash, NICHT die Approve-ID).
+_SOURCE_ID_FIELD = {"telegram": "code", "device": "requestId"}
+# v3.3.1: ID-Felder je Quelle für den Remote-grep (defensiv: requestId ODER
+# deviceId) – der Fund zählt, wenn EINES der Felder die Request-ID trägt.
+_SOURCE_ID_FIELDS = {"telegram": ("code",), "device": ("requestId", "deviceId")}
 
 
 def node_for_target(target: str) -> str:
@@ -348,14 +368,18 @@ def parse_entries(data: dict, typ: str) -> list:
 
 
 def entry_matches_id(entry: dict, request_id: str, typ: str) -> bool:
-    """Exakter ID-Match auf dem typ-spezifischen ID-Feld (Δ3).
+    """Exakter ID-Match auf dem typ-spezifischen ID-Feld (Δ3, v3.3.1).
 
-    telegram → Feld `code` (Kurzcode), device → Feld `deviceId` (Hex).
+    telegram → Feld `code` (Kurzcode).
+    device → Feld `requestId` (UUID-36 – die ID, die `openclaw devices
+    approve/reject` erwartet; e2e-Beleg: pending[].requestId=UUID-36,
+    deviceId=64er-PublicKey-Hash), Fallback auf `deviceId` (defensiv für
+    Quellen ohne requestId-Feld).
     """
     if typ == "telegram":
         return entry.get("code") == request_id
     if typ == "device":
-        return entry.get("deviceId") == request_id
+        return entry.get("requestId") == request_id or entry.get("deviceId") == request_id
     return False
 
 
@@ -477,7 +501,10 @@ def build_ein_job_remote_cmd(
     for src_typ, list_tmpl, _approve_tmpl in _source_specs(typ):
         var = _source_var(typ, src_typ)
         array_key = _SOURCE_ARRAY_KEY[src_typ]
-        id_field = _SOURCE_ID_FIELD[src_typ]
+        # v3.3.1: ID-Felder für den Remote-grep – device matcht requestId ODER
+        # deviceId (defensiv; die UUID-36 steht in pending[].requestId, nicht
+        # in deviceId – e2e-Beleg aee3a00/Run 31156554728).
+        id_fields = "|".join(_SOURCE_ID_FIELDS[src_typ])
 
         lines.extend(_build_json_collection_block(src_typ, list_tmpl, var))
 
@@ -492,7 +519,7 @@ def build_ein_job_remote_cmd(
                 f"sed -n 's/.*\"{array_key}\"[[:space:]]*:[[:space:]]*\\[\\([^]]*\\)\\].*/\\1/p')"
             )
             lines.append(
-                f"  if printf '%s' \"$ENTRIES\" | grep -qE '\"{id_field}\"[[:space:]]*:[[:space:]]*\"{request_id}\"'; then"
+                f"  if printf '%s' \"$ENTRIES\" | grep -qE '\"({id_fields})\"[[:space:]]*:[[:space:]]*\"{request_id}\"'; then"
             )
             lines.append(f'    echo "---{marker}-BEGIN:${{inst}}:{src_typ}---"')
             # B2 (2. Review, Blocker): Aktion-Erfolg MUSS geprueft werden –
@@ -764,10 +791,15 @@ def parse_ein_job_output(
             continue  # fail-safe: defekte Ausgabe ueberspringen
         for entry in parse_entries(data, block_typ):
             if request_id and entry_matches_id(entry, request_id, block_typ):
+                # v3.3.1: requestId (UUID-36) vor deviceId (64er-Hash)
+                # bevorzugen – konsistent zum kanonischen ID-Feld.
                 matched = (
                     instance,
                     block_typ,
-                    entry.get("code") or entry.get("deviceId") or request_id,
+                    entry.get("code")
+                    or entry.get("requestId")
+                    or entry.get("deviceId")
+                    or request_id,
                 )
                 break
         if matched:
