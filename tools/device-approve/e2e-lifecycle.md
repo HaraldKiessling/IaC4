@@ -77,5 +77,28 @@ Weitere Nachweise (Approve/Reject/Listen-Pfad, ohne e2e-Lifecycle):
 | Approve (Owner-ID 2daff7a2) | [Run 31168376348](https://github.com/HaraldKiessling/IaC4/actions/runs/31168376348) | Approve-Ergebnis |
 | Approve (Owner-ID cb169e88) | [Run 31169341980](https://github.com/HaraldKiessling/IaC4/actions/runs/31169341980) | Approve-Ergebnis |
 | Listen-Nachweis | [Run 31168469067](https://github.com/HaraldKiessling/IaC4/actions/runs/31168469067) / [Run 31169455208](https://github.com/HaraldKiessling/IaC4/actions/runs/31169455208) | pending[] mit requestId (UUID-36) |
+| Remove (mode=remove, prod/oc1) | [Run _RUN_ID_](https://github.com/HaraldKiessling/IaC4/actions/runs/_RUN_ID_) | Revoke 2daff7a2-Geraet, paired=0 |
+| Remove-List-Nachweis | [Run _RUN_ID_LIST_](https://github.com/HaraldKiessling/IaC4/actions/runs/_RUN_ID_LIST_) | Gerät weder pending noch paired |
 
-*Tabelle aktualisiert im Rahmen der Review-Auflagen H3/H5 (PR #110, 2026-08-07).*
+*Tabelle aktualisiert im Rahmen der Review-Auflagen H3/H5 (PR #110, 2026-08-07)
+und des Remove-Modus v3.5 (PR für session-20260807/device-remove, 2026-08-07).*
+
+## Remove-Modus (v3.5, `mode: remove`) – Revoke gepaarter Geräte
+
+**Owner-Auftrag (2026-08-07 12:14, Antwort „2 b“):** mode=remove als
+Follow-up-Feature in Workflow 05 aufnehmen – der Revoke gepaarter Geräte läuft
+über den etablierten Workflow-Pfad (statt manuellem SSH / standalone-Workflow
+05-device-remove.yml).
+
+**CLI-Fakt (OpenClaw 2026.7.1, empirisch):** `openclaw devices remove
+<deviceId>` entfernt einen GEPAARTEN Eintrag – Argument ist die 64-hex
+deviceId aus `paired[]` (Public-Key-Hash), KEINE requestId (UUID-36 wird mit
+Exit 1 „unknown deviceId“ abgelehnt). `openclaw pairing` kennt KEIN remove
+(nur approve|list|help) → remove ist device-only.
+
+**Workflow-Mapping:** `mode: remove` → Validate-Step (device-only-Hard-Gate,
+--validate-id) → `approve.py --full-run --remove-only --request-id
+$APPROVE_ID` → Ein-Job-Remote-Schleife matcht Array `paired` + Feld
+`deviceId` (nicht pending/requestId) und führt `openclaw devices remove
+<deviceId>` in der SSH-Session aus (REMOVE-Marker, B2-Semantik).
+Exit-Code-Vertrag: 0 = removed ODER not_found (grün), 1 = error, 2 = config.

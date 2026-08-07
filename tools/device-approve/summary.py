@@ -16,6 +16,8 @@ v3.3 (2026-08-07, Owner-Auftrag „GUID soll in der Liste stehen"):
 Request-ID-Spalte – `entries[].requestId` (UUID-36, approve/reject-ID) wird
 VOLL gerendert (bewusste Ausnahme zur ID-Kuerzung); Telegram ohne
 requestId-Feld → "—" (Darstellung, JSON bleibt "").
+v3.4 (2026-08-07): Remove-Modus – status "removed" → Header "✅ Device-
+Remove — Erfolgreich" / Status-Label "✅ Entfernt (removed)".
 
 v2.2: Status-Ueberschrift typ-spezifisch – found[0].type == "telegram" →
 "Telegram-Pairing-Freigabe", sonst "Device-Freigabe" (Δ7, Design §3e).
@@ -91,6 +93,7 @@ def status_header(status: str, result: Optional[dict] = None) -> str:
     mapping = {
         "approved": f"## ✅ {label}-Freigabe — Erfolgreich",
         "rejected": f"## ✅ {label}-Reject — Erfolgreich",  # v3.2: Reject-Modus
+        "removed": f"## ✅ {label}-Remove — Erfolgreich",  # v3.4: Remove-Modus
         "found": f"## ✅ {label}-Freigabe — Gefunden (Discovery)",
         # not_found ist kein Fehler (Owner-Vereinbarung 15:06, gruener Run)
         "not_found": f"## 🔎 {label}-Freigabe — Kein Treffer",
@@ -116,6 +119,7 @@ def result_to_markdown(result: dict) -> str:
     status_label = {
         "approved": "✅ Freigegeben",
         "rejected": "✅ Abgelehnt (rejected)",  # v3.2: Reject-Modus
+        "removed": "✅ Entfernt (removed)",  # v3.4: Remove-Modus
         "found": "✅ Gefunden",
         "not_found": "🔎 Nicht gefunden",
         "error": "❌ Fehler",
