@@ -1,4 +1,4 @@
-# Device-Approve v3.3.1 – Ein-Job-Fast-Path (Lokale Testanleitung)
+# Device-Approve v3.5.0 – Ein-Job-Fast-Path (Lokale Testanleitung)
 
 Package `tools/device-approve/` (Design 05 v3.0, Workflow-05-Performance-Optimierung)
 – Unified ID-basierte Freigabe (Telegram-Pairing + Device-Approve) als
@@ -52,6 +52,19 @@ Marker, B2-Semantik). **NUR device-Requests:** die openclaw CLI hat kein
 approve|list|help) → Telegram-Codes sind CLI-seitig nicht reject-bar
 (Hard-Gate: `derived_type != device` ⇒ Exit 2 in approve.py, ValueError in
 build_ein_job_remote_cmd, Abbruch im Workflow-Validate-Step).
+**v3.5 – Remove-Modus (`--remove-only`, 2026-08-07, Owner-Auftrag 12:14
+„mode=remove als Follow-up-Feature in Workflow 05“, Antwort „2 b“):**
+Statt zu approven/abzulehnen wird ein GEPAARTES Geraet in derselben
+Ein-Job-Remote-Schleife gesucht und per `openclaw devices remove <deviceId>`
+entfernt (REMOVE-BEGIN/END/FAILED-Marker, B2-Semantik). **ID-Unterschied zu
+approve/reject (CLI-Fakt OpenClaw 2026.7.1):** remove matcht GEPAARTE
+Eintraege – Array `paired`, ID-Feld `deviceId` (64-hex Public-Key-Hash;
+paired-Eintraege haben KEINE requestId; e2e-Beleg `devices remove
+<deviceId>` → 'Removed 587758f1…'). approve/reject wirken weiterhin nur auf
+pending (requestId=UUID-36). **NUR device:** kein `pairing remove` in der
+CLI → `derived_type != device` ⇒ Exit 2 in approve.py, ValueError im
+Remote-Builder, Abbruch im Workflow-Validate-Step. Exit-Code-Vertrag:
+0 = removed ODER not_found (gruen), 1 = error, 2 = config.
 
 ## Schnellstart (lokaler Modus)
 
@@ -109,20 +122,22 @@ python3 tools/device-approve/approve.py --help
                           reject <ID>` ablehnen (REJECT-Marker, B2-Semantik). NUR
                           device-Requests (kein 'pairing reject' in der CLI);
                           schliesst --list-only/--discover-only aus
-  --reject-only           Reject-Modus (v3.2): ID suchen + per `openclaw devices
-                          reject <ID>` ablehnen (REJECT-Marker, B2-Semantik). NUR
-                          device-Requests (kein 'pairing reject' in der CLI);
-                          schliesst --list-only/--discover-only aus
+  --remove-only           Remove-Modus (v3.5): GEPAARTES Geraet suchen (Array
+                          `paired`, Feld `deviceId` 64-hex) + per `openclaw devices
+                          remove <deviceId>` entfernen (REMOVE-Marker, B2-Semantik).
+                          NUR device (kein 'pairing remove' in der CLI); schliesst
+                          --list-only/--discover-only/--reject-only aus
   --summary               Markdown-Summary in $GITHUB_STEP_SUMMARY
   --local                 Lokaler Modus ohne SSH (env APPROVE_LOCAL=1)
   --vps-user, --ssh-key, --ts-tailnet, --ts-client-id, --ts-client-secret
 ```
 
-`--full-run`, `--discover-only`, `--list-only` und `--reject-only` schließen
-sich teils gegenseitig aus: `--full-run` schließt `--discover-only` aus;
-`--reject-only` schließt `--list-only`/`--discover-only` aus (mit `--full-run`
-ist es der Ein-Job-Reject). Ohne `--discover-only`/`--list-only` ist der
-SSH-Modus immer Discovery + Aktion (Approve/Reject, Ein-Job).
+`--full-run`, `--discover-only`, `--list-only`, `--reject-only` und
+`--remove-only` schließen sich teils gegenseitig aus: `--full-run` schließt
+`--discover-only` aus; `--reject-only`/`--remove-only` schließen
+`--list-only`/`--discover-only` (und sich gegenseitig) aus (mit `--full-run`
+ist es der Ein-Job-Reject/-Remove). Ohne `--discover-only`/`--list-only` ist
+der SSH-Modus immer Discovery + Aktion (Approve/Reject/Remove, Ein-Job).
 
 ## Listen-Modus (v3.1, `--list-only`)
 
@@ -149,6 +164,7 @@ python3 tools/device-approve/approve.py --list-only --local
 | `approve` (default) | `--full-run --request-id $APPROVE_ID` | required, validiert (`--validate-id`) |
 | `list` | `--list-only` | **NICHT übergeben** – wird ignoriert (Warning, keine Validierung) |
 | `reject` (v3.2) | `--full-run --reject-only --request-id $APPROVE_ID` | required, validiert (`--validate-id`); nur device |
+| `remove` (v3.5) | `--full-run --remove-only --request-id $APPROVE_ID` | required, validiert (`--validate-id`); nur device; matcht paired[].deviceId (64-hex) |
 
 `--list-only` schließt `--full-run`/`--discover-only` aus (argparse-Fehler,
 Exit 2). `--list-only` + `--request-id` → Warning auf stderr, ID wird nie
@@ -236,6 +252,49 @@ python3 tools/device-approve/approve.py --reject-only --local --request-id "$APP
 |---|---|
 | device | `openclaw devices reject <ID>` |
 | telegram | — (CLI-seitig nicht reject-bar, kein `pairing reject`) |
+
+## Remove-Modus (v3.5, `--remove-only`)
+
+Entfernen eines konkreten GEPAARTEN Geraets (z.B. Revoke eines freigegebenen
+Geräts per Owner-Auftrag): deviceId in der Ein-Job-Remote-Schleife im Array
+`paired` suchen und per `openclaw devices remove <deviceId>` entfernen
+(docker exec im Instanz-Container, REMOVE-Marker, B2-Semantik).
+Workflow-Input `mode: remove` (Workflow 05) bzw. CLI:
+
+```bash
+# SSH: Ein-Job-Remove (nur device; Instanz-Map via sot_parser, v3.4/H2)
+python3 tools/device-approve/approve.py --full-run --remove-only \
+  --request-id "$DEVICE_ID" \
+  --type-filter device --target-filter prod --instance-filter all \
+  --vps-user "$VPS_USER" --ssh-key ~/.ssh/id_ed25519 \
+  --ts-tailnet "$TS_TAILNET" --ts-client-id "$TS_CLIENT_ID" \
+  --ts-client-secret "$TS_CLIENT_SECRET" --summary
+
+# Lokal (Gateway, kein TS-SSH noetig)
+python3 tools/device-approve/approve.py --remove-only --local --request-id "$DEVICE_ID"
+```
+
+### Remove-Regeln (verbindlich)
+
+- **NUR device:** die openclaw CLI hat kein `pairing remove` (empirisch
+  2026-08-07) – Telegram-Kurzcodes werden mit Exit 2 abgelehnt (approve.py),
+  der Remote-Builder wirft ValueError und der Workflow bricht im
+  Validate-Step ab (defense in depth).
+- **ID-Format:** deviceId = 64-hex Public-Key-Hash des gepaarten Geraets
+  (z.B. `9df47d69…925392`) – die ID aus `devices list --json` → `paired[].deviceId`.
+  requestId (UUID-36) wird von remove NICHT akzeptiert (CLI-Fakt 2026.7.1:
+  unbekannte ID → Exit 1 "unknown deviceId").
+- **Array `paired`, nicht `pending`:** remove matcht nur gepaarte Eintraege
+  (approve/reject wirken nur auf pending – requestId).
+- **Exit-Code-Vertrag:** 0 = removed ODER not_found (grüner Run), 1 = error,
+  2 = Config/Validierungs-Fehler (inkl. Nicht-Device-Remove).
+
+### Remove-Kommandos (Δ4, Templates in discovery.py – Single Source of Truth)
+
+| Typ | Remove-Kommando |
+|---|---|
+| device | `openclaw devices remove <deviceId>` |
+| telegram | — (CLI-seitig kein paired-Array / kein `pairing remove`) |
 
 ## Discovery-Quellen (Δ1, empirisch verifiziert 2026-08-06)
 
@@ -341,14 +400,14 @@ python3 -m pytest tests/device-approve/ -v
 |---|---|
 | `discovery.py` | Ein-Job-Kern v3.0 (group_by_vps, build_ein_job_remote_cmd, parse_ein_job_output, run_remote_ssh, run_discovery, --validate-id, --approve) |
 | `approve_step.py` | Approve-only-Library (typ-spezifisch; NICHT mehr vom Workflow aufgerufen, R03-E12) |
-| `approve.py` | CLI-Fassade (--full-run Ein-Job, --discover-only, --list-only v3.1, --summary, --local) |
+| `approve.py` | CLI-Fassade (--full-run Ein-Job, --discover-only, --list-only v3.1, --reject-only v3.2, --remove-only v3.5, --summary, --local) |
 | `summary.py` | Markdown-Summary-Generator (Minor #7 + list_result_to_markdown v3.1) |
 
 ## Rueckgabe-Schema
 
 ```json
 {
-  "status": "approved|found|not_found|error",
+  "status": "approved|rejected|removed|found|not_found|error",
   "id": "QVDCXJEM",
   "found": [{"target": "dev", "instance": "oc1", "type": "telegram", "vps_ip": "100.64.0.1"}],
   "scanned": ["dev/oc1", "dev/oc2"],

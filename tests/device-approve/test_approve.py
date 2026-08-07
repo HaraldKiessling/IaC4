@@ -270,7 +270,7 @@ class TestApproveCli:
         monkeypatch.setenv("APPROVE_ID", TG_CODE)
         monkeypatch.setattr(
             approve, "run_local_discovery",
-            lambda request_id, derived_type, runner=None, log=None, timeout=15: (
+            lambda request_id, derived_type, runner=None, log=None, timeout=15, **kw: (
                 None, {"scanned": ["local/local"], "unreachable": []}
             ),
         )
@@ -291,7 +291,7 @@ class TestApproveCli:
         )
         monkeypatch.setattr(
             approve, "run_local_discovery",
-            lambda request_id, derived_type, runner=None, log=None, timeout=15: (fake_result, {"scanned": ["local/local"], "unreachable": []}),
+            lambda request_id, derived_type, runner=None, log=None, timeout=15, **kw: (fake_result, {"scanned": ["local/local"], "unreachable": []}),
         )
         rc = approve.main(["--local", "--discover-only"])
         data = json.loads(capsys.readouterr().out)
@@ -307,7 +307,7 @@ class TestApproveCli:
             vps_ip=None, found_type="telegram",
             scanned=["local/local"], unreachable=[],
         )
-        monkeypatch.setattr(approve, "run_local_discovery", lambda request_id, derived_type, runner=None, log=None, timeout=15: (fake_result, {"scanned": ["local/local"], "unreachable": []}))
+        monkeypatch.setattr(approve, "run_local_discovery", lambda request_id, derived_type, runner=None, log=None, timeout=15, **kw: (fake_result, {"scanned": ["local/local"], "unreachable": []}))
         seen = []
         monkeypatch.setattr(approve, "run_local_approve",
                             lambda rid, found_type, runner=None, timeout=15: (seen.append((rid, found_type)) or 0))
@@ -325,7 +325,7 @@ class TestApproveCli:
         monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(sm))
         monkeypatch.setattr(
             approve, "run_local_discovery",
-            lambda request_id, derived_type, runner=None, log=None, timeout=15: (None, {"scanned": ["local/local"], "unreachable": []}),
+            lambda request_id, derived_type, runner=None, log=None, timeout=15, **kw: (None, {"scanned": ["local/local"], "unreachable": []}),
         )
         approve.main(["--local", "--discover-only", "--summary"])
         content = sm.read_text(encoding="utf-8")
@@ -340,7 +340,7 @@ class TestApproveCli:
         monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(sm))
         monkeypatch.setattr(
             approve, "run_local_discovery",
-            lambda request_id, derived_type, runner=None, log=None, timeout=15: (None, {"scanned": ["local/local"], "unreachable": []}),
+            lambda request_id, derived_type, runner=None, log=None, timeout=15, **kw: (None, {"scanned": ["local/local"], "unreachable": []}),
         )
         approve.main(["--local", "--discover-only", "--summary"])
         content = sm.read_text(encoding="utf-8")
@@ -352,7 +352,7 @@ class TestApproveCli:
         monkeypatch.setenv("APPROVE_ID", ALT_ID)
         monkeypatch.setattr(
             approve, "run_local_discovery",
-            lambda request_id, derived_type, runner=None, log=None, timeout=15: (None, {"scanned": ["local/local"], "unreachable": []}),
+            lambda request_id, derived_type, runner=None, log=None, timeout=15, **kw: (None, {"scanned": ["local/local"], "unreachable": []}),
         )
         rc = approve.main(["--local", "--discover-only"])
         data = json.loads(capsys.readouterr().out)
@@ -366,7 +366,7 @@ class TestApproveCli:
         monkeypatch.setenv("APPROVE_ID", REAL_ID)
         monkeypatch.setattr(
             approve, "run_local_discovery",
-            lambda request_id, derived_type, runner=None, log=None, timeout=15: (None, {"scanned": ["local/local"], "unreachable": []}),
+            lambda request_id, derived_type, runner=None, log=None, timeout=15, **kw: (None, {"scanned": ["local/local"], "unreachable": []}),
         )
         rc = approve.main(["--local", "--discover-only"])
         data = json.loads(capsys.readouterr().out)

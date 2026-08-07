@@ -21,6 +21,14 @@ Modi:
      → derived_type != device ⇒ Exit 2. --full-run --reject-only = Ein-Job-
      Reject (Workflow mode=reject); --reject-only schliesst --list-only/
      --discover-only aus.
+  6. --remove-only (NEU, v3.4): Remove-Modus – GEPAARTES Geraet in der
+     Ein-Job-Remote-Schleife suchen (Array `paired`, ID-Feld `deviceId`
+     64-hex) und per `openclaw devices remove <deviceId>` entfernen
+     (REMOVE-Marker, B2-Semantik). NUR device (kein 'pairing remove' in der
+     CLI) → derived_type != device ⇒ Exit 2. --full-run --remove-only =
+     Ein-Job-Remove (Workflow mode=remove); schliesst --list-only/
+     --discover-only/--reject-only aus. Exit-Code-Vertrag: 0 = removed ODER
+     not_found (gruen), 1 = error, 2 = config.
 
 --summary: JSON auf stdout + Markdown direkt in $GITHUB_STEP_SUMMARY via
 File-Open (Review Major #3, Δ7).
@@ -45,10 +53,10 @@ Rueckgabe-Schema (Minor #7):
    "scanned": [...], "filters_applied": {type, target, instance}}
 
 Exit-Code-Vertrag (Owner-Vereinbarung 2026-08-06 15:06, Run-#6-Befund):
-  - 0 = approved ODER rejected ODER found ODER not_found  (not_found = gruener Run, kein Fehler)
+  - 0 = approved ODER rejected ODER removed ODER found ODER not_found  (not_found = gruener Run, kein Fehler)
   - 1 = error (Infrastruktur/Auth/Injection/Aktions-Fehler – bleibt rot)
   - 2 = Validierungs-/Config-Fehler (CLI-Missbrauch, fehlende Credentials,
-        Reject mit Nicht-Device-Typ)
+        Reject/Remove mit Nicht-Device-Typ)
 """
 
 from __future__ import annotations
@@ -160,13 +168,17 @@ def run_local_discovery(
     runner=None,
     log: Optional[Callable[[str], None]] = None,
     timeout: int = LOCAL_TIMEOUT,
+    action: str = "approve",
 ) -> Tuple[Optional[DiscoveryResult], dict]:
     """Lokale Discovery ueber die openclaw CLI direkt auf dem Gateway.
 
     Telegram → `openclaw pairing list telegram --json` (Feld code, Schema
     {"channel": ..., "requests": [...]}, F10: Fehler/leer → fail-safe überspringen)
     Device   → `openclaw devices list --json` (Schema pending/paired; Match auf
-    requestId (UUID-36, approve/reject-ID) ODER deviceId (64er-Hash) – v3.3.1)
+    requestId (UUID-36, approve/reject-ID) ODER deviceId (64er-Hash) – v3.3.1).
+    v3.4 (action="remove"): matcht GEPAARTE Eintraege (Array `paired`, Feld
+    `deviceId` 64-hex) – remove adressiert paired, NICHT pending (CLI-Fakt
+    `openclaw devices remove <deviceId>`, 2026.7.1).
 
     Returns:
         (DiscoveryResult | None, stats_dict)
@@ -202,6 +214,12 @@ def run_local_discovery(
         if typ == "telegram":
             entries = data.get("requests") or data.get("pending") or []
             id_fields = ("code",)
+        elif action == "remove":
+            # v3.4: remove matcht GEPAARTE Eintraege (paired[]) per deviceId
+            # (64-hex) – pending[] ist fuer remove irrelevant (CLI-Fakt:
+            # `openclaw devices remove <deviceId>` loescht den paired-Eintrag).
+            entries = data.get("paired") or []
+            id_fields = ("deviceId",)
         else:
             entries = data.get("pending") or []
             # v3.3.1: pending[].requestId (UUID-36) ist die approve/reject-ID
@@ -267,6 +285,39 @@ def run_local_reject(
 ) -> int:
     """Lokaler Reject (v3.2): `openclaw devices reject <ID>` (analog Δ2)."""
     cmd = _local_reject_cmd(found_type, request_id)
+    proc = (runner or subprocess.run)(  # noqa: S603 – keine Shell
+        cmd, capture_output=True, text=True, timeout=timeout
+    )
+    if proc.returncode != 0 and proc.stderr:
+        print(proc.stderr, file=sys.stderr)
+    return proc.returncode
+
+
+def _local_remove_cmd(typ: str, request_id: str) -> List[str]:
+    """Δ4 (v3.4): lokales Remove-Kommando je Typ.
+
+    NUR device – die openclaw CLI hat kein 'pairing remove' (empirisch
+    2026-08-07: `openclaw pairing` kennt nur approve|list|help); remove
+    adressiert GEPAARTE Geraete per deviceId (64-hex Public-Key-Hash) –
+    `openclaw devices remove <deviceId>` (CLI-Fakt 2026.7.1).
+    """
+    if typ != "device":
+        raise ValueError(
+            "Remove-Modus unterstuetzt nur device-Eintraege (kein 'pairing remove' "
+            "in der openclaw CLI – nur `openclaw devices remove <deviceId>`)."
+        )
+    return ["openclaw", "devices", "remove", request_id]
+
+
+def run_local_remove(
+    request_id: str,
+    found_type: str,
+    *,
+    runner=None,
+    timeout: int = LOCAL_TIMEOUT,
+) -> int:
+    """Lokaler Remove (v3.4): `openclaw devices remove <deviceId>` (analog Δ2)."""
+    cmd = _local_remove_cmd(found_type, request_id)
     proc = (runner or subprocess.run)(  # noqa: S603 – keine Shell
         cmd, capture_output=True, text=True, timeout=timeout
     )
@@ -362,6 +413,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "NUR device-Requests – die openclaw CLI hat kein 'pairing reject'. "
                          "Schliesst --list-only/--discover-only aus; --full-run --reject-only = "
                          "Ein-Job-Reject (Workflow mode=reject)")
+    ap.add_argument("--remove-only", action="store_true",
+                    help="Remove-Modus (v3.4): GEPAARTES Geraet in der Ein-Job-Remote-Schleife "
+                         "suchen (Array `paired`, Feld `deviceId` 64-hex) und per "
+                         "`openclaw devices remove <deviceId>` entfernen (REMOVE-Marker, "
+                         "B2-Semantik). NUR device – die openclaw CLI hat kein 'pairing remove'. "
+                         "Schliesst --list-only/--discover-only/--reject-only aus; "
+                         "--full-run --remove-only = Ein-Job-Remove (Workflow mode=remove)")
     ap.add_argument("--full-run", action="store_true",
                     help="Ein-Job: Discovery + Approve in einem Aufruf (Workflow-Standard v3.0)")
     ap.add_argument("--summary", action="store_true", help="Markdown-Summary in $GITHUB_STEP_SUMMARY")
@@ -375,6 +433,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         ap.error("--reject-only und --discover-only schliessen sich aus")
     if opts.reject_only and opts.list_only:
         ap.error("--reject-only und --list-only schliessen sich aus")
+    if opts.remove_only and opts.discover_only:
+        ap.error("--remove-only und --discover-only schliessen sich aus")
+    if opts.remove_only and opts.list_only:
+        ap.error("--remove-only und --list-only schliessen sich aus")
+    if opts.remove_only and opts.reject_only:
+        ap.error("--remove-only und --reject-only schliessen sich aus")
 
     # Env-Overrides
     rid = opts.request_id or os.environ.get("APPROVE_ID", "")
@@ -432,11 +496,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"❌ {err}", file=sys.stderr)
             return 2
 
-        # v3.2 (Reject-Modus): NUR device-Requests – die openclaw CLI hat kein
-        # 'pairing reject' (empirisch 2026-08-07). Fail-Fast VOR dem SSH-Aufbau.
-        if opts.reject_only and derived_type != "device":
-            print("❌ Reject-Modus unterstuetzt nur device-Requests – die openclaw CLI "
-                  "hat kein 'pairing reject' (nur `openclaw devices reject <ID>`).",
+        # v3.2/v3.4 (Reject-/Remove-Modus): NUR device – die openclaw CLI hat
+        # weder 'pairing reject' noch 'pairing remove' (empirisch 2026-08-07).
+        # Fail-Fast VOR dem SSH-Aufbau.
+        if (opts.reject_only or opts.remove_only) and derived_type != "device":
+            aktion_name = "Reject" if opts.reject_only else "Remove"
+            aktion_flag = "reject" if opts.reject_only else "remove"
+            print(f"❌ {aktion_name}-Modus unterstuetzt nur device-Requests – die openclaw CLI "
+                  f"hat kein 'pairing {aktion_flag}' (nur `openclaw devices {aktion_flag} <ID>`).",
                   file=sys.stderr)
             return 2
 
@@ -536,7 +603,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # ── Lokaler Modus ──
     if is_local:
-        d_result, stats = run_local_discovery(rid, derived_type, log=log)
+        d_result, stats = run_local_discovery(
+            rid, derived_type, log=log,
+            action="remove" if opts.remove_only else "approve",
+        )
         if d_result is None:
             result = build_result_json(
                 status="not_found",
@@ -567,6 +637,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         if opts.reject_only:
             rc = run_local_reject(rid, d_result.found_type)
             status = "rejected" if rc == 0 else "error"
+            result = build_result_json(
+                status=status,
+                request_id=rid,
+                found=[{
+                    "target": "local",
+                    "instance": "local",
+                    "type": d_result.found_type,
+                    "vps_ip": None,
+                }],
+                scanned=d_result.scanned,
+                filters_applied=filters,
+            )
+            return emit(result, 0 if rc == 0 else 1)
+
+        # v3.4: Lokaler Remove (nur device, Δ4) vor dem Approve-Pfad
+        if opts.remove_only:
+            rc = run_local_remove(rid, d_result.found_type)
+            status = "removed" if rc == 0 else "error"
             result = build_result_json(
                 status=status,
                 request_id=rid,
@@ -638,8 +726,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             resolve_ip=resolve_ip,
             run_remote=run_remote,
             approve=not opts.discover_only,
-            # v3.2: Aktion approve|reject (Reject-Modus = Ein-Job-Reject)
-            action="reject" if opts.reject_only else "approve",
+            # v3.2/v3.4: Aktion approve|reject|remove (Reject-/Remove-Modus =
+            # Ein-Job-Reject/-Remove)
+            action=("remove" if opts.remove_only
+                    else ("reject" if opts.reject_only else "approve")),
             # Run-#36-Fix: $GITHUB_OUTPUT nur im Workflow gesetzt; lokal (None)
             # bleibt der bisherige Bibliotheks-/CLI-Pfad unveraendert.
             github_output=os.environ.get("GITHUB_OUTPUT"),
@@ -677,9 +767,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if not result.approved:
         # Ein-Job-Inkonsistenz/-Fehler: ID in der SSH-Session gefunden, aber die
-        # Aktion (Approve/Reject) wurde nicht bestätigt (Aktions-Marker fehlen
-        # ODER Aktion fehlgeschlagen, B2-2.Review) → laut scheitern, Output zeigen.
-        aktion = "Reject" if opts.reject_only else "Approve"
+        # Aktion (Approve/Reject/Remove) wurde nicht bestätigt (Aktions-Marker
+        # fehlen ODER Aktion fehlgeschlagen, B2-2.Review) → laut scheitern.
+        if opts.remove_only:
+            aktion = "Remove"
+        elif opts.reject_only:
+            aktion = "Reject"
+        else:
+            aktion = "Approve"
         msg = (f"ID gefunden, aber {aktion} wurde nicht in der SSH-Session "
                f"bestätigt ({aktion}-Marker fehlen oder {aktion} fehlgeschlagen).")
         if result.approve_output:
@@ -700,7 +795,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return emit(final, 1)
 
     final = build_result_json(
-        status="rejected" if opts.reject_only else "approved",
+        status=("removed" if opts.remove_only
+                else ("rejected" if opts.reject_only else "approved")),
         request_id=rid,
         found=[{
             "target": result.target,

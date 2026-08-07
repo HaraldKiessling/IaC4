@@ -52,6 +52,20 @@ Liste stehen", e2e-Beleg aee3a00/Run 31156554728):
   - pending_entry_to_dict()/build_list_result_json(): JSON-Feld
     `entries[].requestId` ("" = nicht vorhanden, konsistent zu R04).
 
+v3.4 (Remove-Modus, 2026-08-07 – Owner-Auftrag 12:14 „mode=remove als
+  Follow-up-Feature in Workflow 05“, Antwort „2 b“):
+  - build_ein_job_remote_cmd(action=...)/parse_ein_job_output(action=...):
+    action "remove" analog approve/reject – REMOVE-BEGIN/END/FAILED-Marker,
+    B2-Semantik (FOUND=1 erst nach Exit-Code 0).
+  - REMOVE_CMD_TEMPLATES: NUR device (`openclaw devices remove <ID>`) – die
+    openclaw CLI hat KEIN 'pairing remove' (empirisch 2026-08-07: `openclaw
+    pairing` kennt nur approve|list|help) → device-only-Hard-Gate wie reject.
+  - WICHTIGER ID-Unterschied zu approve/reject: remove matcht GEPAARTE
+    Eintraege – das Array ist `paired` (NICHT `pending`) und das ID-Feld ist
+    `deviceId` (64-hex Public-Key-Hash; paired-Eintraege haben KEINE
+    requestId). CLI-Fakt: `openclaw devices remove <deviceId>` (2026.7.1),
+    e2e-Beleg: 'Removed 587758f1…' nach `devices remove <deviceId>`.
+
 v3.3.1 (Approve/Reject-Match auf requestId, 2026-08-07 – Bugfix nach
   Workflow-Befund: 7 approve/reject-Runs lieferten not_found obwohl pending,
   z.B. 31165552730/31165829570):
@@ -98,6 +112,8 @@ INSTANCE_RE = re.compile(r"^oc[1-9][0-9]*$")
 VALID_TYPES = ("auto", "telegram", "device", "both")
 # Typen, die als Remote-Schleifen-Quelle zulässig sind (auto ist aufgelöst)
 REMOTE_TYPES = ("telegram", "device", "both")
+# v3.4: zulaessige Aktionen der Ein-Job-Remote-Schleife (approve|reject|remove)
+VALID_ACTIONS = ("approve", "reject", "remove")
 
 SSH_OPTS = [
     "-o", "StrictHostKeyChecking=accept-new",
@@ -125,6 +141,15 @@ APPROVE_CMD_TEMPLATES = {
 REJECT_CMD_TEMPLATES = {
     "device": "sudo docker exec openclaw-{instance} openclaw devices reject {request_id}",
 }
+# Δ4 (v3.4, Remove-Modus): Remove-Kommando je Typ. NUR device – die openclaw
+# CLI hat KEIN 'pairing remove' (empirisch 2026-08-07: `openclaw pairing` kennt
+# nur approve|list|help). Remove adressiert GEPAARTE Geraete per deviceId
+# (64-hex Public-Key-Hash) – `openclaw devices remove <deviceId>`
+# (CLI-Fakt 2026.7.1, e2e-Beleg 'Removed 587758f1…'). Kein pairing-Counterpart
+# → Remove erlaubt ausschliesslich device-Eintraege (Hard-Gate wie reject).
+REMOVE_CMD_TEMPLATES = {
+    "device": "sudo docker exec openclaw-{instance} openclaw devices remove {request_id}",
+}
 
 # Remote-Marker (v3.0): Label = Instanz [:Typ] – der Typ-Suffix macht type=both
 # in einer SSH-Session eindeutig parsebar (R02).
@@ -148,6 +173,15 @@ REJECT_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 REJECT_FAILED_RE = re.compile(rf"---REJECT-FAILED:(?P<label>{_LABEL_RE})---")
+# v3.4 (Remove-Modus): Marker analog zu APPROVE-/REJECT-* – der Remove laeuft
+# in derselben Remote-Schleife (REMOVE-BEGIN/END + REMOVE-FAILED bei
+# Exit-Code != 0; FOUND=1 erst NACH Exit-Code 0 – kein falscher Erfolg,
+# B2-Semantik).
+REMOVE_BLOCK_RE = re.compile(
+    rf"---REMOVE-BEGIN:(?P<label>{_LABEL_RE})---\n(?P<body>.*?)---REMOVE-END:(?P=label)---",
+    re.DOTALL,
+)
+REMOVE_FAILED_RE = re.compile(rf"---REMOVE-FAILED:(?P<label>{_LABEL_RE})---")
 FOUND_RE = re.compile(r"---FOUND:(?P<found>[01])---")
 
 API_TIMEOUT = 30
@@ -160,10 +194,41 @@ _SOURCE_ARRAY_KEY = {"telegram": "requests", "device": "pending"}
 # v3.3.1: kanonisches ID-Feld je Quelle – device ist jetzt `requestId`
 # (UUID-36, die ID, die `openclaw devices approve/reject` erwartet;
 # pending[].deviceId ist der 64er-PublicKey-Hash, NICHT die Approve-ID).
+# v3.4 (Remove): fuer action="remove" gilt das Array `paired` und das
+# ID-Feld `deviceId` (64-hex) – gepaarte Eintraege haben KEINE requestId.
 _SOURCE_ID_FIELD = {"telegram": "code", "device": "requestId"}
 # v3.3.1: ID-Felder je Quelle für den Remote-grep (defensiv: requestId ODER
 # deviceId) – der Fund zählt, wenn EINES der Felder die Request-ID trägt.
 _SOURCE_ID_FIELDS = {"telegram": ("code",), "device": ("requestId", "deviceId")}
+
+
+def _action_array_key(typ: str, action: str) -> str:
+    """Array-Key je Quelle + Aktion.
+
+    approve/reject wirken auf OFFENE Eintraege (telegram: requests,
+    device: pending); remove wirkt auf GEPAARTE Eintraege (device: paired)
+    – CLI-Fakt: `openclaw devices remove <deviceId>` loescht den paired-
+    Eintrag (e2e-Beleg 'Removed 587758f1…'), approve/reject nur pending
+    (v3.2/v3.3.1). Telegram hat kein paired-Array → remove ist device-only
+    (Hard-Gate in build_ein_job_remote_cmd).
+    """
+    if action == "remove":
+        return "paired"
+    return _SOURCE_ARRAY_KEY[typ]
+
+
+def _action_id_fields(typ: str, action: str) -> Tuple[str, ...]:
+    """ID-Felder je Quelle + Aktion für den Remote-grep + Python-Match.
+
+    approve/reject (device): requestId (UUID-36) ODER deviceId (defensiv,
+    v3.3.1). remove (device): NUR deviceId – paired-Eintraege fuehren die
+    64-hex deviceId, aber KEINE requestId (CLI-Fakt 2026.7.1, e2e-Beleg
+    aee3a00: paired[] hat deviceId/publicKey/platform/clientId, keine
+    requestId). Telegram: unveraendert `code` (kein remove).
+    """
+    if action == "remove":
+        return ("deviceId",)
+    return _SOURCE_ID_FIELDS[typ]
 
 
 def node_for_target(target: str) -> str:
@@ -267,12 +332,13 @@ class DiscoveryResult:
     unreachable: List[str] = field(default_factory=list)
     # v3.0 (Ein-Job): approved=True wenn der Approve direkt in der SSH-Session
     # bestätigt wurde (APPROVE-Marker + FOUND=1); approve_output = Session-Text
-    # v3.2: Feldname historisch 'approved' – gilt auch fuer den Reject-Modus
-    # (action='reject': REJECT-Marker + FOUND=1 → Aktion in der Session ok);
+    # v3.2/v3.4: Feldname historisch 'approved' – gilt auch fuer den Reject-/
+    # Remove-Modus (action='reject': REJECT-Marker + FOUND=1; action='remove':
+    # REMOVE-Marker + FOUND=1 → Aktion in der Session ok);
     # approve_output = Session-Text der jeweiligen Aktion.
     approved: bool = False
     approve_output: str = ""
-    action: str = "approve"  # v3.2: "approve" | "reject" (durchgefuehrte Aktion)
+    action: str = "approve"  # v3.4: "approve" | "reject" | "remove"
 
 
 class RequestNotFoundError(Exception):
@@ -367,20 +433,38 @@ def parse_entries(data: dict, typ: str) -> list:
     return data.get("pending") or []
 
 
-def entry_matches_id(entry: dict, request_id: str, typ: str) -> bool:
-    """Exakter ID-Match auf dem typ-spezifischen ID-Feld (Δ3, v3.3.1).
+def entry_matches_id(entry: dict, request_id: str, typ: str, action: str = "approve") -> bool:
+    """Exakter ID-Match auf dem typ-spezifischen ID-Feld (Δ3, v3.3.1, v3.4).
 
     telegram → Feld `code` (Kurzcode).
     device → Feld `requestId` (UUID-36 – die ID, die `openclaw devices
     approve/reject` erwartet; e2e-Beleg: pending[].requestId=UUID-36,
     deviceId=64er-PublicKey-Hash), Fallback auf `deviceId` (defensiv für
     Quellen ohne requestId-Feld).
+    v3.4 (remove): NUR Feld `deviceId` – remove adressiert GEPAARTE Geraete
+    (paired[]), die keine requestId fuehren (CLI-Fakt: `openclaw devices
+    remove <deviceId>`, 64-hex).
     """
     if typ == "telegram":
         return entry.get("code") == request_id
+    if action == "remove":
+        return entry.get("deviceId") == request_id
     if typ == "device":
         return entry.get("requestId") == request_id or entry.get("deviceId") == request_id
     return False
+
+
+def _action_entries(data: dict, typ: str, action: str) -> list:
+    """Eintraege je Quelle + Aktion aus dem Discovery-JSON.
+
+    approve/reject → offene Eintraege (telegram: requests/pending-Fallback,
+    device: pending). remove → GEPAARTE Eintraege (device: paired) –
+    v3.4: der Parser muss fuer remove das paired[]-Array lesen (der
+    Remote-Grep matcht ebenfalls "paired", siehe _action_array_key).
+    """
+    if action == "remove":
+        return data.get("paired") or []
+    return parse_entries(data, typ)
 
 
 # ── Ein-Job-Remote-Loop (v3.0: 1 SSH pro VPS, Discovery + Approve) ──
@@ -467,20 +551,28 @@ def build_ein_job_remote_cmd(
     (REJECT_CMD_TEMPLATES + REJECT-Marker). Reject ist NUR fuer device-
     Requests zulaessig (die openclaw CLI hat kein 'pairing reject') →
     typ != "device" ⇒ ValueError (Hard-Gate, defense in depth).
+    v3.4 (Remove-Modus): "remove" analog – REMOVE_CMD_TEMPLATES +
+    REMOVE-Marker, matcht GEPAARTE Eintraege (Array "paired", ID-Feld
+    "deviceId" 64-hex). Remove ist NUR fuer device zulaessig (kein
+    'pairing remove' in der openclaw CLI) → typ != "device" ⇒ ValueError.
 
     Raises:
         ValueError: unbekannter Typ, leere Instanzliste, ungueltige Instanz
-                    oder ID (Format-Sperre, defense in depth), Reject mit
-                    Nicht-Device-Typ.
+                    oder ID (Format-Sperre, defense in depth), Reject/Remove
+                    mit Nicht-Device-Typ.
     """
-    if action not in ("approve", "reject"):
+    if action not in VALID_ACTIONS:
         raise ValueError(
-            f"Unbekannte Aktion: '{action}'. Erlaubt: approve, reject."
+            f"Unbekannte Aktion: '{action}'. Erlaubt: {', '.join(VALID_ACTIONS)}."
         )
-    if action == "reject" and typ != "device":
+    if action in ("reject", "remove") and typ != "device":
+        # v3.2/v3.4: reject UND remove sind device-only – die openclaw CLI
+        # hat weder 'pairing reject' noch 'pairing remove' (empirisch
+        # 2026-08-07: `openclaw pairing` kennt nur approve|list|help).
+        aktion_name = "Reject" if action == "reject" else "Remove"
         raise ValueError(
-            "Reject-Modus unterstuetzt nur device-Requests – die openclaw CLI "
-            "hat kein 'pairing reject' (nur `openclaw devices reject <ID>`)."
+            f"{aktion_name}-Modus unterstuetzt nur device-Requests – die openclaw CLI "
+            f"hat kein 'pairing {action}' (nur `openclaw devices {action} <ID>`)."
         )
     if typ not in REMOTE_TYPES:
         raise ValueError(
@@ -493,18 +585,23 @@ def build_ein_job_remote_cmd(
     validate_request_id(request_id, typ)
 
     lines = ["FOUND=0", "for inst in " + " ".join(instances) + "; do"]
-    # v3.2: Aktion waehlt Kommando-Templates + Marker-Praefix (APPROVE|REJECT)
-    cmd_templates = (
-        APPROVE_CMD_TEMPLATES if action == "approve" else REJECT_CMD_TEMPLATES
-    )
-    marker = "APPROVE" if action == "approve" else "REJECT"
+    # v3.2/v3.4: Aktion waehlt Kommando-Templates + Marker-Praefix
+    # (APPROVE|REJECT|REMOVE) – approve/reject wirken auf pending/requests,
+    # remove auf paired (deviceId; _action_array_key/_action_id_fields).
+    if action == "approve":
+        cmd_templates = APPROVE_CMD_TEMPLATES
+    elif action == "reject":
+        cmd_templates = REJECT_CMD_TEMPLATES
+    else:
+        cmd_templates = REMOVE_CMD_TEMPLATES
+    marker = {"approve": "APPROVE", "reject": "REJECT", "remove": "REMOVE"}[action]
     for src_typ, list_tmpl, _approve_tmpl in _source_specs(typ):
         var = _source_var(typ, src_typ)
-        array_key = _SOURCE_ARRAY_KEY[src_typ]
-        # v3.3.1: ID-Felder für den Remote-grep – device matcht requestId ODER
-        # deviceId (defensiv; die UUID-36 steht in pending[].requestId, nicht
-        # in deviceId – e2e-Beleg aee3a00/Run 31156554728).
-        id_fields = "|".join(_SOURCE_ID_FIELDS[src_typ])
+        # v3.4: Array-Key + ID-Felder aktionsabhaengig – remove matcht
+        # "paired" + "deviceId" (64-hex), approve/reject "pending"/"requests"
+        # + requestId/deviceId (v3.3.1).
+        array_key = _action_array_key(src_typ, action)
+        id_fields = "|".join(_action_id_fields(src_typ, action))
 
         lines.extend(_build_json_collection_block(src_typ, list_tmpl, var))
 
@@ -761,10 +858,13 @@ def parse_ein_job_output(
     `---FOUND:1|0---`.
 
     v3.2 (Reject-Modus): `action` waehlt die Marker-Menge – "approve"
-    (APPROVE-BEGIN/END/FAILED) oder "reject" (REJECT-BEGIN/END/FAILED).
-    approved=True gilt fuer die jeweilige Aktion (Reject → rejected).
+    (APPROVE-BEGIN/END/FAILED), "reject" (REJECT-BEGIN/END/FAILED) oder
+    v3.4 "remove" (REMOVE-BEGIN/END/FAILED) – disjunkt, damit ein
+    Reject-/Remove-Lauf nicht als Approve-Lauf gelesen wird und umgekehrt.
+    approved=True gilt fuer die jeweilige Aktion (Reject → rejected,
+    Remove → removed).
 
-    Der ID-Match wird hier in Python verifiziert (parse_entries +
+    Der ID-Match wird hier in Python verifiziert (_action_entries +
     entry_matches_id, R08); approved=True nur wenn zusätzlich Aktion-Marker +
     FOUND=1 vorliegen (Aktion wirklich in der Session gelaufen).
 
@@ -789,8 +889,8 @@ def parse_ein_job_output(
             data = json.loads(body)
         except (json.JSONDecodeError, TypeError):
             continue  # fail-safe: defekte Ausgabe ueberspringen
-        for entry in parse_entries(data, block_typ):
-            if request_id and entry_matches_id(entry, request_id, block_typ):
+        for entry in _action_entries(data, block_typ, action):
+            if request_id and entry_matches_id(entry, request_id, block_typ, action):
                 # v3.3.1: requestId (UUID-36) vor deviceId (64er-Hash)
                 # bevorzugen – konsistent zum kanonischen ID-Feld.
                 matched = (
@@ -805,11 +905,15 @@ def parse_ein_job_output(
         if matched:
             break
 
-    # v3.2: Marker-Menge je Aktion (approve|reject) – disjunkt geparst, damit
-    # ein Reject-Lauf nicht als Approve-Lauf gelesen wird und umgekehrt.
+    # v3.2/v3.4: Marker-Menge je Aktion (approve|reject|remove) – disjunkt
+    # geparst, damit ein Reject-/Remove-Lauf nicht als Approve-Lauf gelesen
+    # wird und umgekehrt.
     if action == "reject":
         action_blocks_re = REJECT_BLOCK_RE
         action_failed_re = REJECT_FAILED_RE
+    elif action == "remove":
+        action_blocks_re = REMOVE_BLOCK_RE
+        action_failed_re = REMOVE_FAILED_RE
     else:
         action_blocks_re = APPROVE_BLOCK_RE
         action_failed_re = APPROVE_FAILED_RE
@@ -889,8 +993,8 @@ def run_discovery(
         run_remote(vps_ip, remote_cmd) -> stdout der SSH-Session
         approve: True = Ein-Job (Aktion in der Session), False = nur Discovery
         github_output: Pfad für $GITHUB_OUTPUT (request_id, found_*, derived_type)
-        action: "approve" (Default) | "reject" – waehlt Marker + Kommando
-                (v3.2; reject nur device-Requests)
+        action: "approve" (Default) | "reject" | "remove" – waehlt Marker +
+                Kommando (v3.2/v3.4; reject/remove nur device-Requests)
 
     Raises:
         RequestNotFoundError: ID auf keiner Instanz gefunden (unreachable-Liste)
@@ -934,7 +1038,12 @@ def run_discovery(
         if github_output:
             _write_github_output(github_output, result, derived_type)
         if result.approved:
-            aktion = "rejected" if action == "reject" else "freigegeben"
+            if action == "reject":
+                aktion = "rejected"
+            elif action == "remove":
+                aktion = "entfernt"
+            else:
+                aktion = "freigegeben"
             log(f"✅ Request-ID in {target}/{result.instance} gefunden und {aktion} "
                 f"(Typ: {result.found_type})!")
         else:
@@ -1029,12 +1138,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--reject", action="store_true",
                         help="Ein-Job-Reject (v3.2): Request per `openclaw devices reject <ID>` "
                              "in der SSH-Session ablehnen (nur device-Requests)")
+    parser.add_argument("--remove", action="store_true",
+                        help="Ein-Job-Remove (v3.4): gepaartes Geraet per "
+                             "`openclaw devices remove <deviceId>` in der SSH-Session "
+                             "entfernen (nur device, matcht paired[].deviceId=64-hex)")
     # Validierungs-Modus (Workflow-Step "Eingaben validieren", DRY mit approve.py)
     parser.add_argument("--validate-id", help="Nur ID validieren + Typ ableiten (stdout), exit 0/2")
     opts = parser.parse_args(args)
 
-    if opts.approve and opts.reject:
-        parser.error("--approve und --reject schliessen sich aus")
+    if opts.approve and (opts.reject or opts.remove):
+        parser.error("--approve schliesst --reject/--remove aus")
+    if opts.reject and opts.remove:
+        parser.error("--reject und --remove schliessen sich aus")
 
     # ── Validierungs-Modus ──
     if opts.validate_id is not None:
@@ -1074,12 +1189,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     if derived_type == "auto":
         derived_type = derive_type(opts.request_id)
 
-    # v3.2: Reject-Modus nur fuer device-Requests (openclaw CLI hat kein
-    # 'pairing reject') – Fail-Fast vor dem SSH-Aufbau.
-    action = "reject" if opts.reject else "approve"
-    if action == "reject" and derived_type != "device":
-        print("❌ Reject-Modus unterstuetzt nur device-Requests – die openclaw CLI "
-              "hat kein 'pairing reject' (nur `openclaw devices reject <ID>`).",
+    # v3.2/v3.4: Reject-/Remove-Modus nur fuer device-Requests (openclaw CLI
+    # hat weder 'pairing reject' noch 'pairing remove', empirisch 2026-08-07)
+    # – Fail-Fast vor dem SSH-Aufbau.
+    action = "reject" if opts.reject else ("remove" if opts.remove else "approve")
+    if action in ("reject", "remove") and derived_type != "device":
+        aktion_name = "Reject" if action == "reject" else "Remove"
+        print(f"❌ {aktion_name}-Modus unterstuetzt nur device-Requests – die openclaw CLI "
+              f"hat kein 'pairing {action}' (nur `openclaw devices {action} <ID>`).",
               file=sys.stderr)
         return 2
 
@@ -1114,7 +1231,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             derived_type=derived_type,
             resolve_ip=resolve_ip,
             run_remote=run_remote,
-            approve=opts.approve or opts.reject,
+            approve=opts.approve or opts.reject or opts.remove,
             github_output=os.environ.get("GITHUB_OUTPUT"),
             log=log,
             action=action,
@@ -1132,9 +1249,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                 json.dump(result_obj, fh, ensure_ascii=False)
         return 1
 
-    if (opts.approve or opts.reject) and not result.approved:
-        aktion = "Reject" if opts.reject else "Approve"
-        marker_name = "REJECT" if opts.reject else "APPROVE"
+    if (opts.approve or opts.reject or opts.remove) and not result.approved:
+        if opts.remove:
+            aktion, marker_name = "Remove", "REMOVE"
+        elif opts.reject:
+            aktion, marker_name = "Reject", "REJECT"
+        else:
+            aktion, marker_name = "Approve", "APPROVE"
         print(
             f"❌ ID '{opts.request_id}' gefunden, aber {aktion} wurde nicht in der "
             f"SSH-Session bestätigt ({marker_name}-Marker fehlen).",
