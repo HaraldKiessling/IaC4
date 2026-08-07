@@ -42,6 +42,16 @@ v3.2 (Reject-Modus, 2026-08-07):
     Telegram-Codes sind CLI-seitig nicht reject-bar (Hard-Gate).
   - run_discovery(action=...), discovery-CLI --reject.
 
+v3.3 (Listen-Modus + requestId, 2026-08-07 – Owner-Auftrag „GUID soll in der
+Liste stehen", e2e-Beleg aee3a00/Run 31156554728):
+  - PendingEntry.request_id: pro pending Eintrag wird AUCH das Feld
+    `requestId` (UUID-36) extrahiert – das ist die ID, die
+    `openclaw devices approve/reject` erwartet (pending[].deviceId ist der
+    64er-PublicKey-Hash, NICHT die Approve-ID). Telegram: "" wenn das
+    pairing-request kein requestId-Feld hat (ID-Feld dort bleibt `code`).
+  - pending_entry_to_dict()/build_list_result_json(): JSON-Feld
+    `entries[].requestId` ("" = nicht vorhanden, konsistent zu R04).
+
 Empirisch (Sandbox, OpenClaw 2026.7.1, 2026-08-06):
   - `openclaw pairing list telegram --json` → {"channel": "telegram", "requests": []}
   - `openclaw devices list --json` → {"pending": [...], "paired": [...]}
@@ -562,6 +572,10 @@ class PendingEntry:
     vps_ip: Optional[str]
     entry_type: str  # "telegram" | "device"
     entry_id: str  # code (Telegram) oder deviceId
+    # v3.3: requestId (UUID-36) des pending-Eintrags – die ID, die
+    # approve/reject erwartet (e2e-Beleg aee3a00: pending[].requestId=UUID-36,
+    # deviceId=64er-PublicKey-Hash). Telegram: "" wenn kein requestId-Feld.
+    request_id: str = ""
     # R04-Konvention: platform "" = Wahrheit (Telegram hat kein platform-Feld,
     # O7); die Markdown-Tabelle rendert "" → "—" (Darstellung).
     platform: str = ""
@@ -586,6 +600,10 @@ def parse_list_output(
     Nutzt dieselben JSON_BLOCK_RE-Marker wie der Approve-Modus (R01): pro
     Eintrag werden type (aus dem Label-Suffix), id (code|deviceId), platform
     (device; "" bei telegram, R04) und createdAtMs (0 wenn fehlt) extrahiert.
+    v3.3: zusaetzlich requestId (UUID-36) – das Feld, das approve/reject
+    erwartet (pending[].deviceId ist der 64er-PublicKey-Hash, e2e-Beleg
+    aee3a00). Telegram: "" wenn das pairing-request kein requestId-Feld hat
+    (konsistent: ID-Feld dort bleibt `code`, approve matcht `code`).
     Defensiv (R07): leere/defekte Bloecke und kaputtes JSON werden uebersprungen
     – der Rest der Liste bleibt erhalten.
     """
@@ -607,6 +625,9 @@ def parse_list_output(
                 vps_ip=None,  # wird vom Aufrufer (run_list_discovery) gesetzt
                 entry_type=block_typ,
                 entry_id=entry.get("code") or entry.get("deviceId") or "?",
+                # v3.3: requestId (UUID-36) der Approve-/Reject-ID; "" wenn
+                # die Quelle kein Feld liefert (Telegram ohne requestId).
+                request_id=entry.get("requestId") or "",
                 platform=entry.get("platform", "") or "",
                 created_at_ms=entry.get("createdAtMs", 0) or 0,
             ))
@@ -614,12 +635,17 @@ def parse_list_output(
 
 
 def pending_entry_to_dict(entry: PendingEntry) -> dict:
-    """PendingEntry → JSON-Dict (Listen-Schema, Design §11)."""
+    """PendingEntry → JSON-Dict (Listen-Schema, Design §11).
+
+    v3.3: Feld `requestId` (UUID-36, approve/reject-ID) – "" = nicht
+    vorhanden (Telegram ohne requestId-Feld, konsistent zu R04-""-Konvention).
+    """
     return {
         "instance": entry.instance,
         "target": entry.target,
         "type": entry.entry_type,
         "id": entry.entry_id,
+        "requestId": entry.request_id,
         "platform": entry.platform,  # "" = Wahrheit (R04)
         "createdAtMs": entry.created_at_ms,
         "vps_ip": entry.vps_ip,
@@ -921,7 +947,8 @@ def build_list_result_json(
     """Rueckgabe-Schema des Listen-Modus (Design §11).
 
     status = "list_ok"; entries = Liste aller pending-Eintraege (auch leer –
-    Exit 0, gruener Run). platform "" = Wahrheit (R04).
+    Exit 0, gruener Run). platform "" = Wahrheit (R04); requestId (UUID-36)
+    = approve/reject-ID des pending Eintrags, "" wenn nicht vorhanden (v3.3).
     """
     return {
         "status": status,

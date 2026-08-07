@@ -12,6 +12,10 @@ v3.1 (Listen-Modus): list_result_to_markdown() rendert das Listen-Schema
 "unreachable": [...], "filters_applied": {...}}) als Job-Summary-Tabelle.
 Konventionen (Review R03/R04): Sortierung createdAtMs DESC (Sekundaerschluessel
 stabil), platform "" → "—" in der Tabelle (JSON = Wahrheit).
+v3.3 (2026-08-07, Owner-Auftrag „GUID soll in der Liste stehen"):
+Request-ID-Spalte – `entries[].requestId` (UUID-36, approve/reject-ID) wird
+VOLL gerendert (bewusste Ausnahme zur ID-Kuerzung); Telegram ohne
+requestId-Feld → "—" (Darstellung, JSON bleibt "").
 
 v2.2: Status-Ueberschrift typ-spezifisch – found[0].type == "telegram" →
 "Telegram-Pairing-Freigabe", sonst "Device-Freigabe" (Δ7, Design §3e).
@@ -54,6 +58,18 @@ def _fmt_list_id(entry_id: str) -> str:
     if len(entry_id) > 24:
         return f"`{entry_id[:24]}…`"
     return f"`{entry_id}`"
+
+
+def _fmt_request_id(request_id: str) -> str:
+    """Request-ID (UUID-36) in der Tabelle: VOLL (v3.3, Owner-Auftrag „GUID
+    soll in der Liste stehen" – die requestId ist die approve/reject-ID, die
+    Antwort auf „bei welchem OC liegt welche GUID" soll direkt ablesbar
+    sein; bewusste Ausnahme zur ID-Kuerzung oben). Leer (Telegram ohne
+    requestId-Feld) → "—" (Darstellung, JSON bleibt "").
+    """
+    if not request_id:
+        return "—"
+    return f"`{request_id}`"
 
 
 
@@ -139,18 +155,23 @@ def list_result_to_markdown(result: dict) -> str:
     {
       "status": "list_ok",
       "entries": [{"instance": "oc1", "target": "dev", "type": "telegram",
-                    "id": "QVDCXJEM", "platform": "", "createdAtMs": …,
-                    "vps_ip": …}],
+                    "id": "QVDCXJEM", "requestId": "", "platform": "",
+                    "createdAtMs": …, "vps_ip": …}],
       "scanned": ["dev/oc1", ...],
       "unreachable": ["vps-prod"],
       "filters_applied": {"type": "both", "target": "both", "instance": "all"}
     }
+    v3.3: requestId (UUID-36) = approve/reject-ID des pending Eintrags
+    (device; Telegram ohne Feld → "", Tabelle rendert "—").
 
     Darstellungs-Konventionen (Review R03/R04, verbindlich):
     - R03 Sortierung: createdAtMs DESC (neueste zuerst); Sekundaerschluessel
       (target, instance, type, id) – deterministisch und stabil.
     - R04 platform: JSON "" ist die Wahrheit (Telegram hat kein platform-Feld,
       O7); die Tabelle rendert "" → "—" (Darstellung, JSON bleibt "").
+    - v3.3 Request-ID-Spalte: `requestId` (UUID-36) der approve/reject-ID wird
+      VOLL gerendert (Owner-Auftrag „GUID in der Liste", bewusste Ausnahme zur
+      ID-Kuerzung); Telegram ohne requestId-Feld → "—". Voll-ID immer im JSON.
     - Erstellt: UTC (YYYY-MM-DD HH:MM, O2); fehlendes createdAtMs → "—".
     - Leere Liste: "Keine offenen Requests" + Platzhalterzeile – Exit 0 bleibt
       gruen (Owner-Vereinbarung: leere Liste ≠ Fehler).
@@ -176,16 +197,18 @@ def list_result_to_markdown(result: dict) -> str:
     else:
         lines = ["## 📋 Pending-Requests — Keine offenen Requests", ""]
 
-    lines.append("| # | Instanz | Typ | ID | Platform | Erstellt |")
-    lines.append("|---|---------|-----|----|----------|----------|")
+    # v3.3: Request-ID-Spalte (UUID-36, voll) zwischen Typ und ID.
+    lines.append("| # | Instanz | Typ | Request-ID | ID | Platform | Erstellt |")
+    lines.append("|---|---------|-----|------------|----|----------|----------|")
     if not entries:
-        lines.append("| — | — | — | — | — | — |")
+        lines.append("| — | — | — | — | — | — | — |")
     for i, e in enumerate(entries, start=1):
         inst_str = f"{e.get('target', '')}/{e.get('instance', '')}"
         typ_label = _LIST_TYPE_LABELS.get(e.get("type", ""), e.get("type", ""))
         platform = e.get("platform", "") or "—"  # R04: "" → "—" (Darstellung)
         lines.append(
-            f"| {i} | {inst_str} | {typ_label} | {_fmt_list_id(e.get('id', ''))} "
+            f"| {i} | {inst_str} | {typ_label} | {_fmt_request_id(e.get('requestId', ''))} "
+            f"| {_fmt_list_id(e.get('id', ''))} "
             f"| {platform} | {_fmt_created(e.get('createdAtMs', 0))} |"
         )
     lines.append("")

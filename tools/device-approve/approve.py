@@ -320,6 +320,8 @@ def run_local_list_discovery(
                 vps_ip=None,
                 entry_type=typ,
                 entry_id=entry.get("code") or entry.get("deviceId") or "?",
+                # v3.3: requestId (UUID-36) konsistent zum Listen-Modus.
+                request_id=entry.get("requestId") or "",
                 platform=entry.get("platform", "") or "",
                 created_at_ms=entry.get("createdAtMs", 0) or 0,
             ))

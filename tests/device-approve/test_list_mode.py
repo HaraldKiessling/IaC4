@@ -6,11 +6,12 @@ Abgedeckt:
     (Hard-Gate), LIST-BEGIN/END-Marker, R05 (validate_instance), R01-Regression
     (JSON-Bloecke identisch zu build_ein_job_remote_cmd)
   - TestParseListOutput: telegram+device gemischt, leere/defekte Ausgabe,
-    platform-Default (R04), createdAtMs-Default
+    platform-Default (R04), createdAtMs-Default, requestId-Extraktion (v3.3)
   - TestRunListDiscovery: 1 SSH pro VPS, scanned/unreachable, leere Liste ist
     KEIN Fehler, vps_ip wird gesetzt
-  - TestListResultToMarkdown: Tabelle (R03 Sortierung, R04 platform "" → "—"),
-    Leer-Fall, unreachable, Filter, UTC-Datum, ID-Kuerzung
+  - TestListResultToMarkdown: Tabelle (R03 Sortierung, R04 platform "" → "—",
+    v3.3 Request-ID-Spalte mit voller UUID), Leer-Fall, unreachable, Filter,
+    UTC-Datum, ID-Kuerzung
   - TestListModeCli: --list-only-Flag (R02: --request-id ignoriert, keine
     Validierung), Flag-Konflikte, Exit 0 bei leerer Liste, Exit 2 bei
     fehlenden Credentials, type=auto → both (O3), --summary-Markdown
@@ -38,6 +39,9 @@ import summary  # noqa: E402
 TG_CODE = "QVDCXJEM"
 DEVICE_UUID = "b0999c46-ebe3-4c46-a72b-8b0a7c1df2d5"
 DEVICE_HEX_64 = "9df47d697653fb4069407734e06849b342738ed3e9ec4b172402aca911925392"
+# v3.3: requestId (UUID-36) ist die approve/reject-ID des pending-Eintrags
+# (e2e-Beleg aee3a00); deviceId im pending[] ist der 64er-PublicKey-Hash.
+DEVICE_REQUEST_ID = "21e6459c-8b1e-4c3a-9d07-0c0e1f2a3b4c"
 
 MAP_DEV_PROD = [("oc1", "dev"), ("oc2", "dev"), ("oc1", "prod"), ("oc2", "prod")]
 
@@ -52,10 +56,11 @@ def pairing_json(code, requests=None):
     return json.dumps({"channel": "telegram", "requests": entries})
 
 
-def devices_json(device_id, pending=None, platform="Win32", created=1785915850624):
+def devices_json(device_id, pending=None, platform="Win32", created=1785915850624,
+                  request_id=DEVICE_REQUEST_ID):
     entries = pending if pending is not None else [
-        {"deviceId": device_id, "publicKey": "abc", "platform": platform,
-         "createdAtMs": created},
+        {"deviceId": device_id, "requestId": request_id, "publicKey": "abc",
+         "platform": platform, "createdAtMs": created},
     ]
     return json.dumps({"pending": entries, "paired": []})
 
@@ -169,6 +174,42 @@ class TestParseListOutput:
         assert e.platform == "Win32"
         assert e.created_at_ms == 1785915850624
 
+    def test_device_entry_request_id_extracted(self):
+        """v3.3: pending[].requestId (UUID-36) wird extrahiert – das ist die
+        approve/reject-ID (e2e-Beleg aee3a00: deviceId ist der 64er-Hash)."""
+        out = list_stdout([("oc2", "device", devices_json(DEVICE_UUID))])
+        e = discovery.parse_list_output(out, "prod")[0]
+        assert e.request_id == DEVICE_REQUEST_ID
+
+    def test_request_id_explicit_per_entry(self):
+        """v3.3: explizite requestId im pending[]-Eintrag schlaegt den Default."""
+        rid = "57570237-d1f4-4b89-bf89-64bc0b9ed2ec"  # e2e-Beleg (Run 31156554728)
+        out = list_stdout([("oc1", "device", json.dumps(
+            {"pending": [{"deviceId": DEVICE_HEX_64, "requestId": rid,
+                           "platform": "Linux"}], "paired": []}
+        ))])
+        e = discovery.parse_list_output(out, "dev")[0]
+        assert e.request_id == rid
+        assert e.entry_id == DEVICE_HEX_64
+
+    def test_request_id_missing_defaults_empty(self):
+        """v3.3: pending-Eintrag ohne requestId-Feld → "" (R04-konsistent)."""
+        out = list_stdout([("oc1", "device", json.dumps(
+            {"pending": [{"deviceId": DEVICE_UUID, "platform": "Linux"}],
+             "paired": []}
+        ))])
+        e = discovery.parse_list_output(out, "dev")[0]
+        assert e.request_id == ""
+
+    def test_telegram_entry_request_id_default_empty(self):
+        """v3.3: Telegram-pairing-requests haben kein requestId-Feld (ID-Feld
+        dort ist `code`) → request_id "". Konsistent zur Approve-Logik
+        (entry_matches_id matcht bei telegram `code`)."""
+        out = list_stdout([("oc1", "telegram", pairing_json(TG_CODE))])
+        e = discovery.parse_list_output(out, "dev")[0]
+        assert e.entry_id == TG_CODE
+        assert e.request_id == ""
+
     def test_mixed_both_types(self):
         out = list_stdout([
             ("oc1", "telegram", pairing_json(TG_CODE)),
@@ -219,6 +260,17 @@ class TestParseListOutput:
         ))])
         e = discovery.parse_list_output(out, "dev")[0]
         assert e.entry_id == "?"
+        assert e.request_id == ""
+
+    def test_pending_entry_to_dict_includes_request_id(self):
+        """v3.3: Listen-JSON-Schema enthaelt entries[].requestId (UUID-36)."""
+        out = list_stdout([("oc2", "device", devices_json(DEVICE_UUID))])
+        e = discovery.parse_list_output(out, "prod")[0]
+        d = discovery.pending_entry_to_dict(e)
+        assert d["requestId"] == DEVICE_REQUEST_ID
+        assert d["id"] == DEVICE_UUID
+        assert set(d) == {"instance", "target", "type", "id", "requestId",
+                          "platform", "createdAtMs", "vps_ip"}
 
 
 # ── run_list_discovery (§4.3) ──
@@ -327,10 +379,11 @@ class TestListResultToMarkdown:
             "status": "list_ok",
             "entries": [
                 {"instance": "oc1", "target": "dev", "type": "telegram",
-                 "id": TG_CODE, "platform": "", "createdAtMs": 1785900000000,
-                 "vps_ip": "100.64.0.1"},
+                 "id": TG_CODE, "requestId": "", "platform": "",
+                 "createdAtMs": 1785900000000, "vps_ip": "100.64.0.1"},
                 {"instance": "oc2", "target": "prod", "type": "device",
-                 "id": DEVICE_UUID, "platform": "Win32", "createdAtMs": 1785915850624,
+                 "id": DEVICE_UUID, "requestId": DEVICE_REQUEST_ID,
+                 "platform": "Win32", "createdAtMs": 1785915850624,
                  "vps_ip": "100.64.0.2"},
             ],
             "scanned": ["dev/oc1", "dev/oc2", "prod/oc1", "prod/oc2"],
@@ -339,13 +392,36 @@ class TestListResultToMarkdown:
         }
         md = summary.list_result_to_markdown(result)
         assert "## 📋 Pending-Requests — Übersicht" in md
-        assert "| # | Instanz | Typ | ID | Platform | Erstellt |" in md
+        assert "| # | Instanz | Typ | Request-ID | ID | Platform | Erstellt |" in md
         assert "| 1 | prod/oc2 | 📱 Device |" in md  # neueste zuerst (R03)
         assert "| 2 | dev/oc1 | ✈️ Telegram |" in md
         assert "Win32" in md
         assert "Discovery-Scan" in md
         assert "Nicht erreichbar" in md
         assert "Filter" in md and "type=both" in md
+
+    def test_request_id_column_full_guid(self):
+        """v3.3: requestId (UUID-36) wird VOLL gerendert (Owner-Auftrag „GUID
+        in der Liste") – bewusste Ausnahme zur ID-Kuerzung (ID-Spalte bleibt
+        gekuerzt); Telegram ohne requestId → "—"."""
+        result = {
+            "status": "list_ok",
+            "entries": [
+                {"instance": "oc2", "target": "prod", "type": "device",
+                 "id": DEVICE_HEX_64, "requestId": DEVICE_REQUEST_ID,
+                 "platform": "Linux", "createdAtMs": 1785915850624,
+                 "vps_ip": None},
+                {"instance": "oc1", "target": "dev", "type": "telegram",
+                 "id": TG_CODE, "requestId": "", "platform": "",
+                 "createdAtMs": 1000, "vps_ip": None},
+            ],
+            "scanned": [], "unreachable": [], "filters_applied": {},
+        }
+        md = summary.list_result_to_markdown(result)
+        dev_row = [l for l in md.splitlines() if l.startswith("| 1 |")][0]
+        assert DEVICE_REQUEST_ID in dev_row  # GUID voll in der Tabelle
+        tg_row = [l for l in md.splitlines() if l.startswith("| 2 |")][0]
+        assert "| — |" in tg_row  # Telegram: keine requestId → Darstellung —
 
     def test_sorted_desc_by_created_at(self):
         """R03: createdAtMs DESC (neueste zuerst); Sekundaerschluessel stabil."""
@@ -387,7 +463,7 @@ class TestListResultToMarkdown:
         }
         md = summary.list_result_to_markdown(result)
         assert "Keine offenen Requests" in md
-        assert "| — | — | — | — | — | — |" in md
+        assert "| — | — | — | — | — | — | — |" in md
         assert "vps-prod" in md
         assert "Nicht erreichbar" in md
 
@@ -430,7 +506,8 @@ class TestListResultToMarkdown:
             "status": "list_ok",
             "entries": [
                 {"instance": "oc1", "target": "dev", "type": "device",
-                 "id": DEVICE_HEX_64, "platform": "Linux", "createdAtMs": 1000,
+                 "id": DEVICE_HEX_64, "requestId": DEVICE_REQUEST_ID,
+                 "platform": "Linux", "createdAtMs": 1000,
                  "vps_ip": None},
             ],
             "scanned": [], "unreachable": [], "filters_applied": {},
@@ -439,6 +516,8 @@ class TestListResultToMarkdown:
         row = [l for l in md.splitlines() if l.startswith("| 1 |")][0]
         assert "…" in row
         assert DEVICE_HEX_64 not in row  # Voll-ID nur im JSON (Darstellung gekuerzt)
+        # v3.3: die requestId (36 Zeichen) wird dagegen VOLL angezeigt
+        assert DEVICE_REQUEST_ID in row
 
 
 # ── CLI: --list-only (approve.py main, §3 + R02/O3/Exit-Codes) ──
@@ -497,7 +576,8 @@ class TestListModeCli:
                 ]})
             else:
                 body = json.dumps({"pending": [
-                    {"deviceId": DEVICE_UUID, "platform": "Win32", "createdAtMs": 1785915850624},
+                    {"deviceId": DEVICE_UUID, "requestId": DEVICE_REQUEST_ID,
+                     "platform": "Win32", "createdAtMs": 1785915850624},
                 ], "paired": []})
             return type("P", (), {"returncode": 0, "stdout": body, "stderr": ""})()
 
@@ -508,6 +588,11 @@ class TestListModeCli:
         assert out["status"] == "list_ok"
         ids = {e["id"] for e in out["entries"]}
         assert ids == {TG_CODE, DEVICE_UUID}
+        # v3.3: requestId fließt ins Listen-JSON (device-Eintrag; Telegram "").
+        dev = [e for e in out["entries"] if e["type"] == "device"][0]
+        assert dev["requestId"] == DEVICE_REQUEST_ID
+        tg = [e for e in out["entries"] if e["type"] == "telegram"][0]
+        assert tg["requestId"] == ""
 
     def test_list_only_ssh_missing_credentials_exit_2(self, monkeypatch, capsys, tmp_path):
         """Exit 2 = Config-Fehler (fehlende Credentials) – kein SSH-Versuch."""

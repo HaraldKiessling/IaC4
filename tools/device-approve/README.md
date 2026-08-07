@@ -23,6 +23,19 @@ Requests über alle (gefilterten) Instanzen aggregiert (Telegram `requests[]`
 Markdown-Tabelle (Job-Summary) + JSON ausgegeben. KEIN Approve; Exit 0 auch
 bei leerer Liste (grün). Die JSON-Block-Generierung ist mit dem Approve-Modus
 geteilt (`_build_json_collection_block`, R01).
+**v3.3 – Listen-Modus + requestId (2026-08-07, Owner-Auftrag „die GUID soll
+in der Liste stehen“, e2e-Beleg aee3a00):** Pro pending Device-Eintrag wird
+zusätzlich `requestId` (UUID-36) ausgegeben – die ID, die
+`openclaw devices approve/reject` erwartet (pending[].deviceId ist der
+64er-PublicKey-Hash, NICHT die Approve-ID). JSON: `entries[].requestId`
+("" = nicht vorhanden, z.B. Telegram-pairing-requests ohne requestId-Feld;
+ID-Feld dort bleibt `code`). Job-Summary: neue Spalte „Request-ID“ mit der
+VOLLEN UUID (bewusste Ausnahme zur ID-Kürzung).
+**Ephemerität (wichtig vor approve/reject):** Die requestId wird pro
+Pairing-Versuch NEU vergeben (e2e-Beleg: nach jedem Client-Connect entsteht
+eine frische UUID; ein wiederholt neu pairender Client erzeugt laufend neue
+Requests). Zwischen Listen-Lesen und Approve kann sie sich also ändern – vor
+einem approve/reject IMMER frisch listen und die aktuelle requestId nehmen.
 **v3.2 – Reject-Modus (`--reject-only`, 2026-08-07, Diagnose-Folgeauftrag):**
 Statt zu approven wird die ID in derselben Ein-Job-Remote-Schleife gesucht
 und per `openclaw devices reject <ID>` abgelehnt (REJECT-BEGIN/END/FAILED-
