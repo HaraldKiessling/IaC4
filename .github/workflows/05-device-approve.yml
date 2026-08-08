@@ -1,157 +1,39 @@
 ---
-# 05 – Unified Freigabe: Telegram-Pairing + Device-Approve (ID-basiert)
-#   v3.0 (Ein-Job-Design, 2026-08-06 – Workflow-05-Performance-Optimierung,
-#   Review-Befunde R01-R08 aufgelöst):
-#   - EIN Job: Discovery + Approve in DERSELBEN SSH-Session (APPROVE-BEGIN/END-
-#     Marker, discovery.py v3.0). KEIN environment:-Gate, KEIN Required Reviewer
-#     (Owner-Entscheidung 2026-08-06 14:48: „Nein, kein Klick notwendig …“).
-#   - 1 SSH pro VPS statt pro Instanz: VPS-Gruppierung (group_by_vps) + Remote-
-#     Schleife über alle Instanzen (build_ein_job_remote_cmd); type=both fragt
-#     pairing + devices in DERSELBEN Session ab (R02).
-#   - Concurrency-Group `device-approve` (cancel-in-progress: false) verhindert
-#     parallele Approve-Runs (Doppel-Approve).
-#   - Inputs UNVERÄNDERT (R01/R04): `id` (Telegram-Bot-Payload
-#     client_payload.id!), `type`, `target`, `instance` (all|oc1…ocN).
-#   - Tailscale-Action v4.1.3 (R05); Auth via tools/telegram-approve-bot/
-#     auth_check.sh + discovery.py --validate-id (R07); kein jq auf den VPS
-#     (R08 – Remote-Match per grep, Verifikation in Python).
-#   - Ersetzt: v2.2 (Zwei-Job) – approve_step.py bleibt als Library erhalten
-#     (DEPRECATED für Workflow-Aufrufe, M3), wird aber nicht mehr vom Workflow
-#     aufgerufen (R03-E12).
+# 05 – Unified Freigabe: Telegram-Pairing + Device-Approve (v3.6)
 #
-#   v3.1 (Listen-Modus, 2026-08-06 – Design 05-workflow-listen-modus.md,
-#   Review-Befunde R01-R09 aufgelöst):
-#   - NEUER Input `mode` (approve|list, default approve). Bei mode=list wird
-#     KEINE Request-ID benötigt (`id` required: false): aggregiert über alle
-#     (gefilterten) Instanzen je VPS-SSH alle pending Requests
-#     (pairing requests[] + devices pending[]) → Job-Summary-Tabelle + JSON.
-#     KEIN Approve; Exit 0 auch bei leerer Liste (grün).
-#   - R01: JSON-Block-Generierung geteilt (discovery.py
-#     _build_json_collection_block) – build_ein_job_remote_cmd (Approve) und
-#     build_list_remote_cmd (List) nutzen dieselbe Quelle.
-#   - R02 Mapping mode→CLI: approve → --full-run --request-id $APPROVE_ID
-#     (--validate-id im Validate-Step); list → --list-only (OHNE --request-id;
-#     gefüllte `id` wird im Validate-Step NICHT validiert und NICHT in
-#     GITHUB_ENV geschrieben). type=auto wird im Listen-Modus zu 'both' (O3:
-#     keine ID zum Ableiten).
-#   - R06 Concurrency: Der Listen-Modus teilt die Concurrency-Group
-#     `device-approve` (cancel-in-progress: false) → serielle Ausführung. Ein
-#     List-Run wird hinter einem laufenden Approve-Run in die Queue gestellt –
-#     konservativ-korrekt (kein stale read), kann aber zu Wartezeiten führen.
-#   - R09 Timeout: identisch zum Approve-Modus – timeout-minutes: 15
-#     (Workflow), SSH_TIMEOUT=60s (Python). Worst-Case bei 5 unerreichbaren
-#     VPS: ~5×60s ≈ 5 Min. (List-Mode hat keinen Approve-Schritt → kürzer
-#     als Approve-Mode).
-#   - Auth-Gates UNVERÄNDERT: Whitelist (repository_dispatch, auth_check.sh),
-#     Tailscale-only SSH; --validate-id NUR im Approve-Modus.
+#   Ein Job, eine SSH-Session pro VPS: Discovery + Aktion laufen in derselben
+#   Session (1-SSH-pro-VPS-Optimierung, group_by_vps). Kein Environment-Gate,
+#   kein Required Reviewer (Owner-Entscheidung).
 #
-#   v3.2 (Reject-Modus, 2026-08-07 – Diagnose-Folgeauftrag):
-#   - Input `mode` erweitert um 'reject' (options: approve|list|reject).
-#     mode=reject analog zum approve-Pfad: ID wird validiert (--validate-id,
-#     Zwei-Format-Regex) und per Ein-Job-Remote-Schleife in der SSH-Session
-#     `openclaw devices reject <ID>` ausgeführt (REJECT-Marker, B2-Semantik,
-#     discovery.py action="reject"; approve.py --reject-only).
-#   - NUR device-Requests: die openclaw CLI hat kein 'pairing reject'
-#     (empirisch 2026-08-07) → reject mit abgeleitetem Typ != device bricht
-#     im Validate-Step ab (exit 1) und in approve.py (exit 2, defense in
-#     depth). ID-Formate unverändert (Pairing-Kurzcode 6-12 / Device 36-128
-#     Hex-mit-Dash) – gleiche Regex wie approve.
-#   - Exit-Code-Vertrag wie approve: 0 = rejected ODER not_found (grün),
-#     1 = error, 2 = Config. Concurrency-Group/Timeouts unverändert.
+#   Modi (Input `mode`):
+#     approve (Default) – pending-Request freigeben (ID-basiert)
+#     list             – alle pending Requests anzeigen (Diagnose, keine ID)
+#     reject           – pending-Request ablehnen (nur device)
+#     remove           – gepaartes Geraet entfernen (nur device)
+#     e2e              – kompletter Geraete-Lifecycle-Test (frischer Client)
 #
-#   v3.3 (E2E-Lifecycle, 2026-08-07 – Owner-Auftrag 06:12 „Geräte-Verbindung
-#   beantragen, GUID in Liste, approve, nutzen, löschen, nicht mehr nutzbar“):
-#   - Input `mode` erweitert um 'e2e' (options: approve|list|reject|e2e).
-#   - mode=e2e führt den kompletten Device-Pairing-Lifecycle in DIESEM Job aus
-#     (frischer openclaw-Client im Runner-Docker, eigene Identität in
-#     /tmp/e2e-<target>-<inst>, wss:// via Tailscale-Serve):
-#       1) Request erzeugen (1008 pairing required → UUID-requestId)
-#       2) List-Nachweis: UUID im pending[] von `devices list --json`
-#          (Feld requestId = UUID-36; deviceId = 64er-Public-Key-Hash –
-#          beantwortet die UUID-Format-Frage)
-#       3) Approve: `openclaw devices approve <UUID>` (SSH docker exec)
-#       4) Nutzbar: Client-Reconnect → health ok: true
-#       5) Löschen: `openclaw devices remove <deviceId>` (64-hex, paired)
-#       6) Nicht mehr nutzbar: Client-Reconnect → 1008/Fehler
-#       7) Cleanup: neuen pending Request per `devices reject` entfernen
-#   - Abbruch mit Befund (exit 1), wenn die UUID nicht gefunden wird.
-#   - id wird im E2E-Modus ignoriert (keine Validierung, wie Listen-Modus).
-#   - WICHTIG: approve/reject wirken nur auf pending (requestId=UUID-36),
-#     remove nur auf paired (deviceId=64-hex) – CLI-Fakten OpenClaw 2026.7.1.
+#   Input `scope` (nur mode=remove):
+#     device (Default) – genau ein Geraet per `id` (v3.5-Pfad, unveraendert)
+#     instance         – ALLE gepaarten Geraete der gefilterten Instanzen
+#                        entfernen („Instanz leeren“; max 50 Geraete pro Lauf,
+#                        Limit-Ueberschreitung → Exit 2 VOR jedem Remove;
+#                        kein Confirm-Gate – Owner-Entscheidung)
 #
-#   v3.4 (Review-Auflagen PR #110, 2026-08-07 – finaler Review, CHANGE REQUEST):
-#   - e2e-Step auf den 7-Schritte-Lifecycle reduziert (H1): Runner-seitige
-#     Pfad-Probe [0] (DNS/TLS/WS-Upgrade), Tailscale-apt-Update dev [0b],
-#     Falsches-Token-Test [1a] und Diagnose-v3.9-Block (docker default-vs-host-
-#     net, tun device, Gateway-Config-Dump) entfernt – reines Sandbox-Debugging
-#     der Transport-Untersuchung (Commits e74ee3f→5d75967). Abbruch mit Befund
-#     (exit 1) bleibt. Der Fix c215f5c (--network host im CLIENT-Alias) BLEIBT.
-#   - /tmp/instance-map-{full,}.txt entfaellt (H2): approve.py generiert die
-#     Map selbst via sot_parser (load_instance_map_from_ssot, root=.). Der
-#     SSoT-Step installiert nur noch pyyaml (Runner-Dependency).
-#   - Doku-Korrektur (H3): UUID-36 liegt im pending-Eintrag in Feld `requestId`
-#     (Feld `deviceId` = 64er-Public-Key-Hash) – konsistent zu d51107b.
-#   - Tailscale-apt-Update dev entfernt (H4): Infrastruktur-Patch gehoert in
-#     Bootstrap/SSoT, nicht in den Freigabe-Workflow.
+#   Exit-Code-Vertrag: 0 = Erfolg ODER not_found (gruen, Idempotenz),
+#   1 = Teilerfolg/Fehler, 2 = Validierungs-/Config-/Limit-Fehler.
 #
-#   v3.5 (Remove-Modus, 2026-08-07 – Owner-Auftrag 12:14 „mode=remove als
-#   Follow-up-Feature in Workflow 05“, Antwort „2 b“):
-#   - Input `mode` erweitert um 'remove' (options: approve|list|reject|remove|e2e).
-#     mode=remove entfernt ein GEPAARTES Geraet: ID wird validiert (--validate-id)
-#     und per Ein-Job-Remote-Schleife in der SSH-Session `openclaw devices remove
-#     <deviceId>` ausgefuehrt (REMOVE-Marker, B2-Semantik, discovery.py
-#     action="remove"; approve.py --remove-only).
-#   - ID-Unterschied zu approve/reject (CLI-Fakt OpenClaw 2026.7.1): remove
-#     matcht GEPAARTE Eintraege – Array `paired`, ID-Feld `deviceId` (64-hex
-#     Public-Key-Hash; paired-Eintraege haben KEINE requestId). e2e-Beleg:
-#     `devices remove <deviceId>` → 'Removed 587758f1…'. approve/reject wirken
-#     weiterhin nur auf pending (requestId=UUID-36).
-#   - NUR device: die openclaw CLI hat kein 'pairing remove' (empirisch
-#     2026-08-07) → remove mit abgeleitetem Typ != device bricht im
-#     Validate-Step ab (exit 1) und in approve.py (exit 2, defense in depth).
-#   - Exit-Code-Vertrag: 0 = removed ODER not_found (gruen), 1 = error,
-#     2 = Config. Concurrency-Group/Timeouts unveraendert.
-#   - Der standalone-Workflow 05-device-remove.yml (bb430e0, Owner-Auftrag
-#     2daff7a2) wird damit durch den etablierten Workflow-05-Pfad ersetzt –
-#     Revoke gepaarter Geraete laeuft kuenftig ueber mode=remove.
+#   Concurrency-Group `device-approve` (cancel-in-progress: false): Runs
+#   laufen seriell – kein Doppel-Approve, kein stale read.
 #
-#   v3.6 (Instanz-Remove, scope=instance, 2026-08-08 – Owner-Entscheidungen
-#   „Instanz leeren“: entfernt ALLE gepaarten Geraete der gefilterten
-#   Instanzen, NICHT „neuestes je Instanz“; KEIN Confirm-Gate; max 50 Geraete
-#   pro Lauf):
-#   - NEUER Input `scope` (device|instance, Default device). scope=device =
-#     bisheriger ID-basierter Pfad (100%% unveraendert, Rueckwaertskompatibilitaet).
-#   - mode=remove + scope=instance: entfernt ALLE gepaarten Geraete der via
-#     target/instance gefilterten Instanzen (z. B. target=prod, instance=all).
-#     KEINE id noetig – eine gesetzte id ist ein Konflikt (Validate-Step exit 1,
-#     approve.py exit 2). id leer + scope=instance: OK.
-#   - Validate-Step: scope=instance ueberspringt --validate-id (derived_type
-#     wird fix auf 'device' gesetzt – Remove ist immer device-only);
-#     scope=instance ist NUR mit mode=remove zulaessig (sonst exit 1).
-#   - approve.py --scope instance (zweiphasig): Phase 1 = Remove-Plan
-#     (collect_paired_devices), leer → not_found (Exit 0, Idempotenz: 2. Lauf
-#     auf leerer Instanz gruen); > 50 Geraete → Abbruch mit klarer
-#     Fehlermeldung (Exit 2) VOR jedem Remove. Phase 2 = run_instance_remove
-#     (DEV-REMOVE-Marker, B2-Semantik, Shell-Hard-Cap als Defense-in-Depth).
-#   - Exit-Code-Vertrag v3.6: 0 = alle entfernt ODER not_found (gruen),
-#     1 = Teilerfolg (einige fehlgeschlagen – failed im Summary gelistet),
-#     2 = Config/Limit. Concurrency-Group `device-approve` unveraendert.
-#   - Summary-JSON erweitert: scope, removed_count, per_instance
-#     ({"instance", "removed", "failed"}), failed-Details, limit_hit – die
-#     bestehenden Felder (status, id, found, scanned) bleiben fuer
-#     scope=device unveraendert.
+#   Ersetzt: v2.2 (Zwei-Job) und den standalone-Workflow 05-device-remove.yml
+#   (DEPRECATED – mode=remove in diesem Workflow nutzen). approve_step.py
+#   bleibt als Library erhalten, wird aber nicht mehr aufgerufen.
 #
-#   Secrets (Ist-Zustand, M2): TAILSCALE_OAUTH_CLIENT_ID /
-#   TAILSCALE_OAUTH_CLIENT_SECRET (Tailscale-Action v4.1.3, NICHT TS_OAUTH_*),
-#   VPS_USER, SSH_KEY, TELEGRAM_APPROVE_USERS (Whitelist für den Telegram-Pfad,
-#   M1: wird im Validate-Step als AUTHORIZED_USERS an auth_check.sh gereicht).
-#
-#   Sicherheits-Gates: Whitelist (repository_dispatch, auth_check.sh),
-#   Regex-Sperre je Typ (discovery.py --validate-id), Tailscale-only SSH,
-#   keine Secrets in Logs, Audit = GH Actions Run.
-#   Job-Outputs (m3): entfallen mit dem zweiten Job – kein externer Consumer
-#   (kein needs.discover); approve.py schreibt GITHUB_OUTPUT nur noch für
-#   Debug/Audit im Run-Log.
+#   Secrets: TAILSCALE_OAUTH_CLIENT_ID / TAILSCALE_OAUTH_CLIENT_SECRET
+#   (Tailscale-Action v4.1.3), VPS_USER, SSH_KEY, TELEGRAM_APPROVE_USERS
+#   (Whitelist Telegram-Pfad). Sicherheits-Gates: Whitelist
+#   (repository_dispatch, auth_check.sh), ID-Validierung + Typ-Ableitung
+#   (discovery.py --validate-id), Tailscale-only SSH, keine Secrets in Logs.
 name: "05 – Freigabe (Telegram-Pairing + Device-Approve, Ein-Job)"
 
 run-name: "${{ inputs.mode || 'approve' }} ${{ inputs.id || github.event.client_payload.id || '' }} (${{ inputs.scope || 'device' }})"
@@ -439,7 +321,7 @@ jobs:
           print(json.dumps(pending, indent=2))
           print(f"pending_count={len(pending)}")
           print(f"uuid_in_raw_json={'yes' if req in open('/tmp/e2e-devices-pending.json').read() else 'NO'}")
-          # v3.11 (Run 31156554728): Feldname ist requestId (UUID-36), NICHT
+          # Feldname ist requestId (UUID-36), NICHT
           # deviceId (64er-PublicKey-Hash). Beleg pending[0].requestId=UUID.
           match = [e for e in pending if e.get('requestId') == req]
           print(f"uuid_in_field_requestId={'yes' if match else 'NO'}")
@@ -481,7 +363,7 @@ jobs:
           printf '%s' "$OUT" | grep -q '"ok": true' || { echo "❌ [4] Verbindung NICHT nutzbar" >&2; exit 1; }
           echo "✅ [4] Verbindung nutzbar (health ok: true)"
           # ── 5) Löschen (remove paired deviceId) ──
-          # v3.11: deviceId stammt aus dem [2]-pending-Eintrag (64er-Hash, identisch
+          # deviceId stammt aus dem [2]-pending-Eintrag (64er-Hash, identisch
           # nach approve); Fallback: clientId-Scan im paired[] (cli|openclaw-cli).
           DEVICE_ID="$PENDING_DEVICE_ID"
           if [ -z "$DEVICE_ID" ]; then
