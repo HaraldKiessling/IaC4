@@ -80,6 +80,31 @@ v3.3.1 (Approve/Reject-Match auf requestId, 2026-08-07 – Bugfix nach
     bereits korrekt (v3.3). Validierung/Typ-Ableitung unveraendert
     (UUID-36 = device).
 
+v3.6 (Instanz-Remove, scope=instance, 2026-08-08 – Owner-Entscheidungen
+  „Instanz leeren“: entfernt ALLE gepaarten Geraete der gefilterten Instanzen,
+  NICHT „neuestes je Instanz“):
+  - build_instance_remove_remote_cmd(): Remote-Schleife je VPS – sammelt
+    devices list --json (JSON-Blöcke, gemeinsame
+    _build_json_collection_block), extrahiert ALLE deviceIds aus paired[]
+    (Array-Key via _action_array_key, KEIN jq – R08) und entfernt JEDE
+    deviceId per REMOVE_CMD_TEMPLATES[device] (`openclaw devices remove
+    <deviceId>`); je Geraet DEV-REMOVE-BEGIN/END/FAILED-Marker (B2-Semantik:
+    FOUND=1 erst nach Exit-Code 0).
+  - Sicherheits-Limit max_devices=50 (MAX_REMOVE_DEVICES): Shell-seitiger
+    Hard-Cap (COUNT, DEV-REMOVE-LIMIT-Marker) als Defense-in-Depth; der
+    eigentliche Abbruch (Exit 2 VOR jedem Remove) macht approve.py anhand
+    des Phasen-1-Plans (collect_paired_devices + parse_paired_output).
+  - parse_paired_output(): liest paired[]-Eintraege (deviceId/platform/
+    clientId) aus den JSON-Blöcken – Basis des Remove-Plans.
+  - parse_instance_remove_output(): parst DEV-REMOVE-*-Marker → removed/-
+    failed-Listen (instanz, deviceId, Output) + limit_hit + scanned.
+  - run_instance_remove()/collect_paired_devices(): VPS-Gruppierung wie
+    run_discovery (1 SSH pro VPS); UNREACHABLE-Semantik unveraendert.
+  - build_instance_remove_result_json(): Schema erweitert (scope, removed_count,
+    per_instance, failed, limit_hit, unreachable) – bestehende Felder
+    (status, id, found, scanned) bleiben fuer scope=device unveraendert.
+  - Der ID-basierte Remove-Pfad (action="remove", v3.5) bleibt unangetastet.
+
 Empirisch (Sandbox, OpenClaw 2026.7.1, 2026-08-06):
   - `openclaw pairing list telegram --json` → {"channel": "telegram", "requests": []}
   - `openclaw devices list --json` → {"pending": [...], "paired": [...]}
@@ -151,6 +176,13 @@ REMOVE_CMD_TEMPLATES = {
     "device": "sudo docker exec openclaw-{instance} openclaw devices remove {request_id}",
 }
 
+# v3.6 (Instanz-Remove, scope=instance): Sicherheits-Limit – max. 50 Geraete
+# pro Lauf (Owner-Entscheidung 2026-08-08: „max 50 Geräte pro Lauf, darüber
+# Abbruch mit klarer Fehlermeldung (Exit 2) statt Massen-Remove“). Wird in
+# approve.py (Phase-1-Plan) UND als Shell-Hard-Cap im Remote-Skript
+# (build_instance_remove_remote_cmd, Defense-in-Depth) durchgesetzt.
+MAX_REMOVE_DEVICES = 50
+
 # Remote-Marker (v3.0): Label = Instanz [:Typ] – der Typ-Suffix macht type=both
 # in einer SSH-Session eindeutig parsebar (R02).
 _LABEL_RE = r"oc[1-9][0-9]*(?::(?:telegram|device))?"
@@ -182,6 +214,16 @@ REMOVE_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 REMOVE_FAILED_RE = re.compile(rf"---REMOVE-FAILED:(?P<label>{_LABEL_RE})---")
+# v3.6 (Instanz-Remove): Geraete-Marker mit deviceId-Suffix im Label
+# (`<inst>:<deviceId>` – ein Block je Geraet in der Instanz-Remove-Schleife).
+# Disjunkt zu den Einzel-REMOVE-* (die ein `<inst>:device`-Label tragen).
+_DEV_LABEL_RE = r"oc[1-9][0-9]*:[0-9a-fA-F-]{36,128}"
+DEV_REMOVE_BLOCK_RE = re.compile(
+    rf"---DEV-REMOVE-BEGIN:(?P<label>{_DEV_LABEL_RE})---\n(?P<body>.*?)---DEV-REMOVE-END:(?P=label)---",
+    re.DOTALL,
+)
+DEV_REMOVE_FAILED_RE = re.compile(rf"---DEV-REMOVE-FAILED:(?P<label>{_DEV_LABEL_RE})---")
+DEV_REMOVE_LIMIT_RE = re.compile(rf"---DEV-REMOVE-LIMIT:(?P<label>{_LABEL_RE})---")
 FOUND_RE = re.compile(r"---FOUND:(?P<found>[01])---")
 
 API_TIMEOUT = 30
@@ -832,6 +874,259 @@ def run_list_discovery(
     )
 
 
+# ── Instanz-Remove (v3.6, scope=instance): ALLE gepaarten Geraete ──
+
+
+@dataclass
+class PairedDevice:
+    """Ein einzelner gepaarter Eintrag aus der Listen-Discovery (v3.6).
+
+    Basis des Remove-Plans fuer scope=instance: `openclaw devices list --json`
+    → paired[] (Feld `deviceId` = 64-hex Public-Key-Hash; CLI-Fakt
+    OpenClaw 2026.7.1).
+    """
+
+    instance: str  # oc1, oc2, ...
+    target: str  # dev, prod
+    vps_ip: Optional[str]
+    device_id: str  # 64-hex deviceId aus paired[]
+    platform: str = ""  # R04-Konvention: "" = Wahrheit
+    client_id: str = ""
+
+
+@dataclass
+class InstanceRemoveResult:
+    """Ergebnis der Instanz-Remove-Schleife (v3.6).
+
+    removed: (instance, device_id) je erfolgreich entferntem Geraet.
+    failed: (instance, device_id, output) je fehlgeschlagenem Geraet
+            (DEV-REMOVE-FAILED-Marker, B2-Semantik).
+    limit_hit: Shell-Hard-Cap (MAX_REMOVE_DEVICES) hat gegriffen
+               (Defense-in-Depth; der geplante Abbruch passiert vorher in
+               approve.py anhand des Phase-1-Plans).
+    """
+
+    removed: List[Tuple[str, str]] = field(default_factory=list)
+    failed: List[Tuple[str, str, str]] = field(default_factory=list)
+    limit_hit: bool = False
+    scanned: List[str] = field(default_factory=list)  # "target/instance"
+    unreachable: List[str] = field(default_factory=list)  # VPS-Hostnames
+
+
+def parse_paired_output(stdout: str, target: str) -> List[PairedDevice]:
+    """Parst JSON-Blöcke → Liste ALLER gepaarten Geraete (paired[]).
+
+    v3.6 (scope=instance): Basis des Remove-Plans – nutzt dieselben
+    JSON_BLOCK_RE-Marker wie der Listen-/Approve-Modus (R01). Nur
+    device-Blöcke tragen ein paired[] (Telegram hat kein paired-Array,
+    CLI-Fakt 2026.7.1) → telegram-Blöcke werden uebersprungen. Defensiv
+    (R07): leere/defekte Blöcke und kaputtes JSON werden uebersprungen.
+    """
+    devices: List[PairedDevice] = []
+    for blk in JSON_BLOCK_RE.finditer(stdout or ""):
+        label = blk.group("label")
+        instance, block_typ = _split_label(label)
+        if block_typ != "device":
+            continue  # nur devices haben paired[] (kein telegram paired)
+        body = blk.group("body").strip()
+        if not body:
+            continue  # fail-safe: Instanz down / leere Quelle
+        try:
+            data = json.loads(body)
+        except (json.JSONDecodeError, TypeError):
+            continue  # fail-safe: defekte Ausgabe ueberspringen
+        for entry in data.get("paired") or []:
+            devices.append(PairedDevice(
+                instance=instance,
+                target=target,
+                vps_ip=None,  # wird vom Aufrufer (collect_paired_devices) gesetzt
+                device_id=entry.get("deviceId") or "",
+                platform=entry.get("platform", "") or "",
+                client_id=entry.get("clientId", "") or "",
+            ))
+    return devices
+
+
+def build_instance_remove_remote_cmd(
+    instances: List[str],
+    max_devices: int = MAX_REMOVE_DEVICES,
+) -> str:
+    """Baut das Instanz-Remove-Remote-Shell-Template (1 SSH pro VPS, v3.6).
+
+    Pro Instanz:
+      - JSON-Block der Device-Quelle (devices list --json, gemeinsame
+        Block-Generierung _build_json_collection_block – R01)
+      - ALLE deviceIds aus dem paired[]-Array extrahieren (Array-Key via
+        _action_array_key("device", "remove"), KEIN jq – R08)
+      - JEDE deviceId per REMOVE_CMD_TEMPLATES[device]
+        (`openclaw devices remove <deviceId>`) entfernen – je Geraet
+        DEV-REMOVE-BEGIN/END/FAILED-Marker; B2-Semantik: FOUND=1 erst nach
+        Exit-Code 0, FAILED-Marker bei Fehler (kein `|| true` um den Remove).
+      - Shell-Hard-Cap max_devices (Defense-in-Depth): COUNTER, bei
+        Ueberschreitung DEV-REMOVE-LIMIT-Marker + break.
+
+    Raises:
+        ValueError: leere Instanzliste oder ungueltige Instanz (R05:
+                    Defense-in-Depth, identisch zu build_ein_job_remote_cmd).
+    """
+    if not instances:
+        raise ValueError("Keine Instanzen fuer die Remote-Schleife uebergeben.")
+    for inst in instances:
+        validate_instance(inst)
+
+    array_key = _action_array_key("device", "remove")  # "paired"
+    remove_tmpl = REMOVE_CMD_TEMPLATES["device"]
+    lines = ["FOUND=0", "COUNT=0", "for inst in " + " ".join(instances) + "; do"]
+    for src_typ, list_tmpl, _approve_tmpl in _source_specs("device"):
+        var = _source_var("device", src_typ)
+        lines.extend(_build_json_collection_block(src_typ, list_tmpl, var))
+    # paired[]-Array extrahieren (wie Einzel-Remove, aber OHNE ID-Filter –
+    # ALLE Eintraege) und jede deviceId einzeln entfernen (kein jq, R08).
+    lines.append(
+        f"  PAIRED=$(printf '%s' \"${{{var}}}\" | tr -d '\\n' | "
+        f"sed -n 's/.*\"{array_key}\"[[:space:]]*:[[:space:]]*\\[\\([^]]*\\)\\].*/\\1/p')"
+    )
+    lines.append(
+        "  for did in $(printf '%s' \"$PAIRED\" | "
+        "grep -oE '\"deviceId\"[[:space:]]*:[[:space:]]*\"[0-9a-fA-F-]+\"' | "
+        "sed -E 's/.*\"([0-9a-fA-F-]+)\"/\\1/'); do"
+    )
+    lines.append("    COUNT=$((COUNT+1))")
+    lines.append(f'    if [ "$COUNT" -gt {max_devices} ]; then')
+    lines.append('      echo "---DEV-REMOVE-LIMIT:${inst}:device---"')
+    lines.append("      break")
+    lines.append("    fi")
+    action_cmd = remove_tmpl.format(instance="${inst}", request_id="$did")
+    lines.append('    echo "---DEV-REMOVE-BEGIN:${inst}:$did---"')
+    # B2-Semantik (wie Einzel-Remove): KEIN `|| true`; FOUND=1 erst nach
+    # Exit-Code 0; DEV-REMOVE-FAILED-Marker bei Fehler (Geraet in failed).
+    lines.append(f"    if {action_cmd} 2>&1; then")
+    lines.append('      echo "---DEV-REMOVE-END:${inst}:$did---"')
+    lines.append("      FOUND=1")
+    lines.append("    else")
+    lines.append('      echo "---DEV-REMOVE-END:${inst}:$did---"')
+    lines.append('      echo "---DEV-REMOVE-FAILED:${inst}:$did---"')
+    lines.append("    fi")
+    lines.append("  done")
+    lines.append("done")
+    lines.append('echo "---FOUND:${FOUND}---"')
+    return "\n".join(lines) + "\n"
+
+
+def parse_instance_remove_output(
+    stdout: str,
+    target: str,
+) -> InstanceRemoveResult:
+    """Parst die Instanz-Remove-Ausgabe (JSON-Blöcke + DEV-REMOVE-Marker).
+
+    v3.6 (scope=instance):
+      - DEV-REMOVE-BEGIN/END-Marker (Label `<inst>:<deviceId>`) → removed;
+        gefolgt vom DEV-REMOVE-FAILED-Marker gleichen Labels → failed
+        (B2-Semantik, Output bleibt sichtbar)
+      - DEV-REMOVE-LIMIT-Marker → limit_hit (Shell-Hard-Cap, Defense-in-Depth)
+      - JSON-Blöcke → scanned (target/instance, dedupliziert)
+
+    Returns:
+        InstanceRemoveResult (leer = kein Geraet gefunden → not_found).
+    """
+    stdout = stdout or ""
+    result = InstanceRemoveResult()
+    for blk in JSON_BLOCK_RE.finditer(stdout):
+        label = blk.group("label")
+        instance, block_typ = _split_label(label)
+        result.scanned.append(f"{target}/{instance}" if target else instance)
+    failed_labels = {m.group("label") for m in DEV_REMOVE_FAILED_RE.finditer(stdout)}
+    for blk in DEV_REMOVE_BLOCK_RE.finditer(stdout):
+        label = blk.group("label")
+        instance, _, device_id = label.partition(":")
+        body = blk.group("body").strip()
+        if label in failed_labels:
+            result.failed.append((instance, device_id, body))
+        else:
+            result.removed.append((instance, device_id))
+    result.limit_hit = bool(DEV_REMOVE_LIMIT_RE.search(stdout))
+    result.scanned = _dedupe(result.scanned)
+    return result
+
+
+def collect_paired_devices(
+    instance_map: List[Tuple[str, str]],
+    derived_type: str = "device",
+    *,
+    resolve_ip: Optional[Callable[[str], Optional[str]]] = None,
+    run_remote: Optional[Callable[[str, str], str]] = None,
+    log: Optional[Callable[[str], None]] = None,
+) -> Tuple[List[PairedDevice], List[str], List[str]]:
+    """Phase 1 (v3.6): Remove-Plan – ALLE gepaarten Geraete sammeln.
+
+    Gleiche VPS-Gruppierung (group_by_vps) und 1-SSH-pro-VPS-Optimierung wie
+    run_discovery; baut nur den PLAN (KEIN Remove): build_list_remote_cmd +
+    parse_paired_output. approve.py entscheidet anhand des Plans: leer →
+    not_found (Exit 0), > MAX_REMOVE_DEVICES → Abbruch (Exit 2) VOR jedem
+    Remove, sonst Phase 2 (run_instance_remove).
+
+    Returns:
+        (devices, scanned, unreachable)
+    """
+    log = log or (lambda _msg: None)
+    devices: List[PairedDevice] = []
+    scanned: List[str] = []
+    unreachable: List[str] = []
+
+    for target, instances in group_by_vps(instance_map).items():
+        node = node_for_target(target)
+        ip = resolve_ip(node) if resolve_ip else None
+        if not ip:
+            unreachable.append(node)
+            log(f"⚠️  VPS {node} nicht erreichbar, ueberspringe")
+            continue
+        remote_cmd = build_list_remote_cmd(derived_type, instances)
+        log(f"🔍 SSH {node} ({target}): {', '.join(instances)} – Sammle gepaarte Geraete")
+        stdout = run_remote(ip, remote_cmd) if run_remote else ""
+        for dev in parse_paired_output(stdout, target):
+            dev.vps_ip = ip
+            devices.append(dev)
+        scanned.extend(f"{target}/{inst}" for inst in instances)
+
+    return devices, scanned, unreachable
+
+
+def run_instance_remove(
+    instance_map: List[Tuple[str, str]],
+    *,
+    resolve_ip: Optional[Callable[[str], Optional[str]]] = None,
+    run_remote: Optional[Callable[[str, str], str]] = None,
+    log: Optional[Callable[[str], None]] = None,
+    max_devices: int = MAX_REMOVE_DEVICES,
+) -> InstanceRemoveResult:
+    """Phase 2 (v3.6): Instanz-Remove ueber alle VPS (1 SSH pro VPS).
+
+    Fuehrt build_instance_remove_remote_cmd je VPS-Gruppe aus und aggregiert
+    removed/failed/limit_hit/scanned/unreachable. UNREACHABLE-Semantik wie
+    run_discovery (VPS down → ueberspringen, unreachable-Liste).
+    """
+    log = log or (lambda _msg: None)
+    result = InstanceRemoveResult()
+
+    for target, instances in group_by_vps(instance_map).items():
+        node = node_for_target(target)
+        ip = resolve_ip(node) if resolve_ip else None
+        if not ip:
+            result.unreachable.append(node)
+            log(f"⚠️  VPS {node} nicht erreichbar, ueberspringe")
+            continue
+        remote_cmd = build_instance_remove_remote_cmd(instances, max_devices=max_devices)
+        log(f"🗑️  SSH {node} ({target}): {', '.join(instances)} – Entferne ALLE gepaarten Geraete")
+        stdout = run_remote(ip, remote_cmd) if run_remote else ""
+        parsed = parse_instance_remove_output(stdout, target)
+        result.removed.extend(parsed.removed)
+        result.failed.extend(parsed.failed)
+        result.limit_hit = result.limit_hit or parsed.limit_hit
+        result.scanned.extend(parsed.scanned)
+    result.scanned = _dedupe(result.scanned)
+    return result
+
+
 
 def _dedupe(items: List[str]) -> List[str]:
     seen = set()
@@ -1096,6 +1391,48 @@ def build_list_result_json(
         "entries": [pending_entry_to_dict(e) for e in entries],
         "scanned": scanned,
         "unreachable": unreachable,
+        "filters_applied": filters_applied,
+    }
+
+
+def build_instance_remove_result_json(
+    status: str,
+    *,
+    removed_count: int,
+    per_instance: List[dict],
+    failed: List[dict],
+    scanned: List[str],
+    filters_applied: dict,
+    unreachable: Optional[List[str]] = None,
+    limit_hit: bool = False,
+    request_id: str = "",
+) -> dict:
+    """Rueckgabe-Schema des Instanz-Remove (v3.6, scope=instance).
+
+    Erweiterung zum Minor-#7-Schema (Owner-Entscheidung 2026-08-08):
+    removed_count (Anzahl entfernt), per_instance-Aufschluesselung
+    ({"instance": …, "removed": n, "failed": n}), failed-Details
+    ({"instance": …, "device_id": …, "output": …}) und limit_hit
+    (Shell-Hard-Cap gegriffen). Die bestehenden Felder (status, id, found,
+    scanned, filters_applied) bleiben erhalten – fuer scope=device unveraendert.
+
+    status ∈ {removed, partial, error, not_found}:
+      removed    = alle entfernt (Exit 0)
+      partial    = einige entfernt, einige fehlgeschlagen (Exit 1)
+      error      = keines entfernt + Fehler ODER limit_hit (Exit 1/2)
+      not_found  = keine gepaarten Geraete gefunden (Exit 0)
+    """
+    return {
+        "status": status,
+        "id": request_id,
+        "scope": "instance",
+        "removed_count": removed_count,
+        "per_instance": per_instance,
+        "failed": failed,
+        "limit_hit": limit_hit,
+        "found": [],
+        "scanned": scanned,
+        "unreachable": unreachable or [],
         "filters_applied": filters_applied,
     }
 

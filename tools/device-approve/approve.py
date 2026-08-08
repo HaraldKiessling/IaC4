@@ -29,6 +29,19 @@ Modi:
      Ein-Job-Remove (Workflow mode=remove); schliesst --list-only/
      --discover-only/--reject-only aus. Exit-Code-Vertrag: 0 = removed ODER
      not_found (gruen), 1 = error, 2 = config.
+  7. --scope device|instance (NEU, v3.6): Remove-Scope – mit
+     --remove-only --scope instance werden ALLE gepaarten Geraete der
+     gefilterten Instanzen entfernt („Instanz leeren“, gesteuert durch
+     --target-filter/--instance-filter; Owner-Entscheidung 2026-08-08).
+     ZWEIPHASIG: Phase 1 = Remove-Plan (collect_paired_devices +
+     parse_paired_output), dann Max-Limit-Check (MAX_REMOVE_DEVICES=50,
+     darueber Exit 2 VOR jedem Remove), Phase 2 = run_instance_remove
+     (build_instance_remove_remote_cmd, DEV-REMOVE-Marker). Exit-Code-
+     Vertrag v3.6: 0 = alle entfernt ODER not_found (gruen), 1 = Teilerfolg
+     (einige fehlgeschlagen, failed im Summary), 2 = Config/Limit. scope=
+     device (Default) = unveraenderter ID-basierter Pfad (v3.5-Verhalten
+     100%% erhalten). --scope instance schliesst --request-id aus
+     (Konflikt → Exit 2) und ist nur mit --remove-only zulaessig.
 
 --summary: JSON auf stdout + Markdown direkt in $GITHUB_STEP_SUMMARY via
 File-Open (Review Major #3, Δ7).
@@ -90,19 +103,30 @@ def _load_sibling_module(filename: str, unique_name: str):
 
 
 discovery = _load_sibling_module("discovery.py", "device_approve.discovery")
-from summary import list_result_to_markdown, result_to_markdown  # type: ignore[import-untyped]
+from summary import (  # type: ignore[import-untyped]
+    instance_remove_to_markdown,
+    list_result_to_markdown,
+    result_to_markdown,
+)
 
 DiscoveryResult = discovery.DiscoveryResult
+InstanceRemoveResult = discovery.InstanceRemoveResult
+PairedDevice = discovery.PairedDevice
 RequestNotFoundError = discovery.RequestNotFoundError
 PendingEntry = discovery.PendingEntry
+MAX_REMOVE_DEVICES = discovery.MAX_REMOVE_DEVICES
+build_instance_remove_result_json = discovery.build_instance_remove_result_json
 build_list_result_json = discovery.build_list_result_json
 build_result_json = discovery.build_result_json
+collect_paired_devices = discovery.collect_paired_devices
 derive_type = discovery.derive_type
 fetch_tailscale_token = discovery.fetch_tailscale_token
 filter_instance_map = discovery.filter_instance_map
 parse_entries = discovery.parse_entries
+parse_paired_output = discovery.parse_paired_output
 resolve_vps_ip = discovery.resolve_vps_ip
 run_discovery = discovery.run_discovery
+run_instance_remove = discovery.run_instance_remove
 run_list_discovery = discovery.run_list_discovery
 run_remote_ssh = discovery.run_remote_ssh
 validate_and_classify_id = discovery.validate_and_classify_id
@@ -326,6 +350,128 @@ def run_local_remove(
     return proc.returncode
 
 
+def run_local_instance_remove(
+    *,
+    runner=None,
+    log: Optional[Callable[[str], None]] = None,
+    timeout: int = LOCAL_TIMEOUT,
+    max_devices: int = MAX_REMOVE_DEVICES,
+) -> Tuple[dict, int]:
+    """Lokaler Instanz-Remove (v3.6, scope=instance) auf dem Gateway.
+
+    Leert die gepaarten Geraete der Gateway-Instanz (`openclaw devices list
+    --json` → paired[], dann je deviceId `openclaw devices remove
+    <deviceId>`). Gleiche Exit-/Status-Semantik wie der SSH-Pfad:
+      - keine gepaarten Geraete → status not_found, Exit 0 (Idempotenz)
+      - Plan > max_devices → status error, Exit 2 (Abbruch VOR jedem Remove)
+      - alle entfernt → status removed, Exit 0
+      - Teilerfolg → status partial, Exit 1; alles fehlgeschlagen → error, 1
+
+    Returns:
+        (result_json, exit_code)
+    """
+    log = log or (lambda _msg: None)
+    cmd_list = _local_list_cmd("device")
+    log(f"🔍 Lokale Discovery (device): {' '.join(cmd_list)}")
+    try:
+        proc = (runner or subprocess.run)(  # noqa: S603 – keine Shell
+            cmd_list, capture_output=True, text=True, timeout=timeout
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        log(f"⚠️  openclaw CLI nicht verfuegbar/Timeout: {exc}")
+        return build_instance_remove_result_json(
+            status="error",
+            removed_count=0,
+            per_instance=[],
+            failed=[],
+            scanned=[],
+            filters_applied={},
+            unreachable=["local"],
+        ), 1
+    if proc.returncode != 0:
+        log(f"⚠️  devices list fehlgeschlagen (rc={proc.returncode}) – Abbruch")
+        return build_instance_remove_result_json(
+            status="error",
+            removed_count=0,
+            per_instance=[],
+            failed=[],
+            scanned=[],
+            filters_applied={},
+        ), 1
+    try:
+        data = json.loads(proc.stdout) if proc.stdout.strip() else {}
+    except json.JSONDecodeError as exc:
+        log(f"⚠️  JSON-Parse-Fehler lokal: {exc}")
+        return build_instance_remove_result_json(
+            status="error",
+            removed_count=0,
+            per_instance=[],
+            failed=[],
+            scanned=[],
+            filters_applied={},
+        ), 1
+
+    devices = [
+        {"device_id": e.get("deviceId") or "",
+         "platform": e.get("platform", "") or ""}
+        for e in (data.get("paired") or [])
+        if e.get("deviceId")
+    ]
+    if not devices:
+        # Idempotenz (Owner-Entscheidung 2026-08-08): 2. Lauf auf leerer
+        # Instanz = not_found / 0 entfernt, Exit 0 (gruen).
+        return build_instance_remove_result_json(
+            status="not_found",
+            removed_count=0,
+            per_instance=[{"instance": "local", "removed": 0, "failed": 0}],
+            failed=[],
+            scanned=["local/local"],
+            filters_applied={},
+        ), 0
+    if len(devices) > max_devices:
+        # Sicherheits-Limit: Abbruch VOR jedem Remove (Owner-Entscheidung).
+        return build_instance_remove_result_json(
+            status="error",
+            removed_count=0,
+            per_instance=[{"instance": "local", "removed": 0, "failed": 0}],
+            failed=[],
+            scanned=["local/local"],
+            filters_applied={},
+            limit_hit=True,
+        ), 2
+
+    removed: List[Tuple[str, str]] = []
+    failed: List[Tuple[str, str, str]] = []
+    for dev in devices:
+        did = dev["device_id"]
+        log(f"🗑️  Lokaler Remove: openclaw devices remove {did[:12]}…")
+        rc = run_local_remove(did, "device", runner=runner, timeout=timeout)
+        if rc == 0:
+            removed.append(("local", did))
+        else:
+            failed.append(("local", did, f"remove rc={rc}"))
+
+    if failed and removed:
+        status = "partial"
+    elif failed:
+        status = "error"
+    else:
+        status = "removed"
+    per_instance = [{
+        "instance": "local",
+        "removed": len(removed),
+        "failed": len(failed),
+    }]
+    return build_instance_remove_result_json(
+        status=status,
+        removed_count=len(removed),
+        per_instance=per_instance,
+        failed=[{"instance": i, "device_id": d, "output": o} for i, d, o in failed],
+        scanned=["local/local"],
+        filters_applied={},
+    ), (0 if status == "removed" else 1)
+
+
 def run_local_list_discovery(
     derived_type: str,
     *,
@@ -420,6 +566,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "B2-Semantik). NUR device – die openclaw CLI hat kein 'pairing remove'. "
                          "Schliesst --list-only/--discover-only/--reject-only aus; "
                          "--full-run --remove-only = Ein-Job-Remove (Workflow mode=remove)")
+    ap.add_argument("--scope", default=None,
+                    choices=["device", "instance"],
+                    help="Remove-Scope (v3.6): device (Default) = genau ein Geraet per "
+                         "--request-id (bisheriger Pfad); instance = ALLE gepaarten Geraete "
+                         "der gefilterten Instanzen entfernen (nur mit --remove-only; "
+                         "--request-id muss leer sein; Max-Limit "
+                         f"{MAX_REMOVE_DEVICES} Geraete pro Lauf)")
     ap.add_argument("--full-run", action="store_true",
                     help="Ein-Job: Discovery + Approve in einem Aufruf (Workflow-Standard v3.0)")
     ap.add_argument("--summary", action="store_true", help="Markdown-Summary in $GITHUB_STEP_SUMMARY")
@@ -445,6 +598,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     type_f = opts.type_filter or os.environ.get("APPROVE_TYPE", "auto")
     target_f = opts.target_filter or os.environ.get("APPROVE_TARGET", "both")
     inst_f = opts.instance_filter or os.environ.get("APPROVE_INSTANCE", "all")
+    scope = opts.scope or os.environ.get("APPROVE_SCOPE", "device")
     vps_user = opts.vps_user or os.environ.get("VPS_USER", "")
     ssh_key = opts.ssh_key or os.environ.get("SSH_KEY_PATH", "")
     ts_tailnet = opts.ts_tailnet or os.environ.get("TS_TAILNET", "")
@@ -453,6 +607,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     inst_map_path = opts.instance_map or os.environ.get("INSTANCE_MAP", "")
     ssot_root = opts.ssot_root or os.environ.get("SSOT_ROOT", ".")
     is_local = opts.local or os.environ.get("APPROVE_LOCAL", "") == "1"
+
+    # ── v3.6 (scope=instance): Validierung ──
+    # Nur im Remove-Modus zulaessig; --request-id muss leer sein (Konflikt:
+    # scope=instance entfernt ALLE gepaarten Geraete der gefilterten
+    # Instanzen – Owner-Entscheidung 2026-08-08, KEINE id). scope=device
+    # (Default) = bisheriger Pfad, 100%% unveraendert.
+    if scope == "instance":
+        if not opts.remove_only:
+            print("❌ scope=instance ist nur im Remove-Modus (--remove-only) zulaessig.",
+                  file=sys.stderr)
+            return 2
+        if rid:
+            print("❌ Konflikt: scope=instance entfernt ALLE gepaarten Geraete der "
+                  f"gefilterten Instanzen – --request-id '{rid}' darf NICHT gesetzt sein.",
+                  file=sys.stderr)
+            return 2
 
     # ── Listen-Modus (--list-only, v3.1): KEINE Request-ID noetig ──
     # R02 (Review Listen-Modus): Mapping mode=list → --list-only; eine evtl.
@@ -482,39 +652,54 @@ def main(argv: Optional[List[str]] = None) -> int:
         derived_type = type_f
         filters = {"type": derived_type, "target": target_f, "instance": inst_f}
     else:
-        # ── Approve-/Reject-Modus-Validierung (unverändert, v2.2: Fail-Fast) ──
-        if not rid:
-            print("❌ Keine Request-ID – --request-id oder APPROVE_ID setzen.", file=sys.stderr)
-            return 2
-        try:
-            validate_type(type_f)
-        except ValueError as exc:
-            print(f"❌ {exc}", file=sys.stderr)
-            return 2
-        valid, derived_type, err = validate_and_classify_id(rid, type_f)
-        if not valid:
-            print(f"❌ {err}", file=sys.stderr)
-            return 2
-
-        # v3.2/v3.4 (Reject-/Remove-Modus): NUR device – die openclaw CLI hat
-        # weder 'pairing reject' noch 'pairing remove' (empirisch 2026-08-07).
-        # Fail-Fast VOR dem SSH-Aufbau.
-        if (opts.reject_only or opts.remove_only) and derived_type != "device":
-            aktion_name = "Reject" if opts.reject_only else "Remove"
-            aktion_flag = "reject" if opts.reject_only else "remove"
-            print(f"❌ {aktion_name}-Modus unterstuetzt nur device-Requests – die openclaw CLI "
-                  f"hat kein 'pairing {aktion_flag}' (nur `openclaw devices {aktion_flag} <ID>`).",
-                  file=sys.stderr)
-            return 2
-
-        if inst_f != "all":
+        if scope == "instance":
+            # v3.6 (scope=instance): KEINE id noetig (leer erlaubt); der
+            # Remove ist immer device-only (kein 'pairing remove' in der
+            # openclaw CLI). Konflikt id+scope=instance wurde oben bereits
+            # abgefangen (Exit 2).
+            derived_type = "device"
+            if inst_f != "all":
+                try:
+                    validate_instance(inst_f)
+                except ValueError as exc:
+                    print(f"❌ {exc}", file=sys.stderr)
+                    return 2
+            filters = {"type": derived_type, "target": target_f,
+                       "instance": inst_f, "scope": scope}
+        else:
+            # ── Approve-/Reject-/Remove-Modus-Validierung (unverändert, v2.2: Fail-Fast) ──
+            if not rid:
+                print("❌ Keine Request-ID – --request-id oder APPROVE_ID setzen.", file=sys.stderr)
+                return 2
             try:
-                validate_instance(inst_f)
+                validate_type(type_f)
             except ValueError as exc:
                 print(f"❌ {exc}", file=sys.stderr)
                 return 2
+            valid, derived_type, err = validate_and_classify_id(rid, type_f)
+            if not valid:
+                print(f"❌ {err}", file=sys.stderr)
+                return 2
 
-        filters = {"type": derived_type, "target": target_f, "instance": inst_f}
+            # v3.2/v3.4 (Reject-/Remove-Modus): NUR device – die openclaw CLI hat
+            # weder 'pairing reject' noch 'pairing remove' (empirisch 2026-08-07).
+            # Fail-Fast VOR dem SSH-Aufbau.
+            if (opts.reject_only or opts.remove_only) and derived_type != "device":
+                aktion_name = "Reject" if opts.reject_only else "Remove"
+                aktion_flag = "reject" if opts.reject_only else "remove"
+                print(f"❌ {aktion_name}-Modus unterstuetzt nur device-Requests – die openclaw CLI "
+                      f"hat kein 'pairing {aktion_flag}' (nur `openclaw devices {aktion_flag} <ID>`).",
+                      file=sys.stderr)
+                return 2
+
+            if inst_f != "all":
+                try:
+                    validate_instance(inst_f)
+                except ValueError as exc:
+                    print(f"❌ {exc}", file=sys.stderr)
+                    return 2
+
+            filters = {"type": derived_type, "target": target_f, "instance": inst_f}
 
     def log(msg: str) -> None:
         print(msg, file=sys.stderr)
@@ -522,11 +707,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     def write_summary(result: dict) -> None:
         # v3.1: Listen-Modus → list_result_to_markdown (Tabellen-Schema),
         # Approve-/Discovery-Modus → result_to_markdown (Minor #7-Schema).
-        md = (
-            list_result_to_markdown(result)
-            if result.get("status") == "list_ok"
-            else result_to_markdown(result)
-        )
+        # v3.6: scope=instance → instance_remove_to_markdown (removed_count /
+        # per_instance / failed-Details).
+        if result.get("scope") == "instance":
+            md = instance_remove_to_markdown(result)
+        elif result.get("status") == "list_ok":
+            md = list_result_to_markdown(result)
+        else:
+            md = result_to_markdown(result)
         sm = os.environ.get("GITHUB_STEP_SUMMARY", "")
         if sm:
             # Δ7 / Major #3: File-Open, KEIN >>-Redirect
@@ -600,6 +788,169 @@ def main(argv: Optional[List[str]] = None) -> int:
         # Exit-Code-Vertrag Listen-Modus: 0 = Liste erstellt (auch leer), 1 =
         # Infrastruktur-Fehler, 2 = Config-Fehler – leere Liste ist gruen.
         return emit(result, 0)
+
+    # ── Instanz-Remove (v3.6, --remove-only --scope instance) ──
+    # „Instanz leeren“: entfernt ALLE gepaarten Geraete der gefilterten
+    # Instanzen (target/instance) – ZWEIPHASIG:
+    #   Phase 1: Remove-Plan sammeln (collect_paired_devices) → leer =
+    #            not_found (Exit 0, Idempotenz); > MAX_REMOVE_DEVICES =
+    #            Abbruch mit klarer Fehlermeldung (Exit 2) VOR jedem Remove.
+    #   Phase 2: run_instance_remove (DEV-REMOVE-Marker, B2-Semantik).
+    # Exit-Code-Vertrag: 0 = alle entfernt ODER not_found (gruen),
+    # 1 = Teilerfolg/Fehler (failed im Summary), 2 = Config/Limit.
+    if opts.remove_only and scope == "instance":
+        if is_local:
+            result, rc = run_local_instance_remove(log=log)
+            result["filters_applied"] = filters
+            return emit(result, rc)
+
+        if inst_map_path:
+            instance_map = load_instance_map_from_file(inst_map_path)
+        else:
+            instance_map = load_instance_map_from_ssot(ssot_root)
+
+        filtered_map = filter_instance_map(
+            instance_map, target_filter=target_f, instance_filter=inst_f
+        )
+        if not filtered_map:
+            print("❌ Keine Instanzen nach Filter (target/instance) uebrig.", file=sys.stderr)
+            return 2
+
+        if not all([vps_user, ssh_key, ts_tailnet, ts_cid, ts_csec]):
+            print(
+                "❌ SSH-Modus benoetigt VPS_USER, SSH_KEY_PATH, TS_TAILNET, "
+                "TS_CLIENT_ID, TS_CLIENT_SECRET (env oder --flags).",
+                file=sys.stderr,
+            )
+            return 2
+
+        token = fetch_tailscale_token(ts_cid, ts_csec)
+
+        def resolve_ip(node: str) -> Optional[str]:
+            return resolve_vps_ip(ts_tailnet, token, node)
+
+        def run_remote(ip: str, remote_cmd: str) -> str:
+            return run_remote_ssh(ip, vps_user, ssh_key, remote_cmd)
+
+        # Phase 1: Remove-Plan (KEIN Remove)
+        plan, scanned, unreachable = collect_paired_devices(
+            filtered_map,
+            derived_type="device",
+            resolve_ip=resolve_ip,
+            run_remote=run_remote,
+            log=log,
+        )
+        if not plan:
+            # Idempotenz: 2. Lauf auf leerer Instanz = not_found / 0 entfernt
+            # (Exit 0, gruen – Owner-Entscheidung 2026-08-08).
+            result = build_instance_remove_result_json(
+                status="not_found",
+                removed_count=0,
+                per_instance=[
+                    {"instance": name, "removed": 0, "failed": 0}
+                    for name, _t in filtered_map
+                ],
+                failed=[],
+                scanned=scanned,
+                filters_applied=filters,
+                unreachable=unreachable,
+            )
+            return emit(result, 0)
+
+        if len(plan) > MAX_REMOVE_DEVICES:
+            # Sicherheits-Limit (Owner-Entscheidung): max 50 Geraete pro Lauf,
+            # darueber Abbruch VOR jedem Remove – kein Massen-Remove.
+            per_inst = {name: 0 for name, _t in filtered_map}
+            for dev in plan:
+                per_inst[dev.instance] = per_inst.get(dev.instance, 0) + 1
+            msg = (f"❌ Sicherheits-Limit erreicht: {len(plan)} gepaarte Geraete gefunden, "
+                   f"max. {MAX_REMOVE_DEVICES} pro Lauf erlaubt. Abbruch VOR jedem Remove – "
+                   f"Instanz(en) enger filtern (target/instance).")
+            print(msg, file=sys.stderr)
+            result = build_instance_remove_result_json(
+                status="error",
+                removed_count=0,
+                per_instance=[
+                    {"instance": name, "removed": 0, "failed": 0,
+                     "geplant": per_inst.get(name, 0)}
+                    for name, _t in filtered_map
+                ],
+                failed=[],
+                scanned=scanned,
+                filters_applied=filters,
+                unreachable=unreachable,
+                limit_hit=True,
+            )
+            return emit(result, 2)
+
+        # Phase 2: Instanz-Remove (alle Geraete des Plans)
+        res = run_instance_remove(
+            filtered_map,
+            resolve_ip=resolve_ip,
+            run_remote=run_remote,
+            log=log,
+            max_devices=MAX_REMOVE_DEVICES,
+        )
+
+        removed_count = len(res.removed)
+        failed_count = len(res.failed)
+        per_instance = []
+        for name, _t in filtered_map:
+            per_instance.append({
+                "instance": name,
+                "removed": sum(1 for i, _d in res.removed if i == name),
+                "failed": sum(1 for i, _d, _o in res.failed if i == name),
+            })
+        failed_details = [
+            {"instance": i, "device_id": d, "output": o}
+            for i, d, o in res.failed
+        ]
+
+        if res.limit_hit:
+            # Defense-in-Depth: Shell-Hard-Cap gegriffen (zwischen Phase 1
+            # und 2 nachgepaarte Geraete) – Teilerfolg melden, Exit 2.
+            result = build_instance_remove_result_json(
+                status="error",
+                removed_count=removed_count,
+                per_instance=per_instance,
+                failed=failed_details,
+                scanned=res.scanned or scanned,
+                filters_applied=filters,
+                unreachable=res.unreachable or unreachable,
+                limit_hit=True,
+            )
+            print("❌ Sicherheits-Limit (max 50) waehrend des Laufs ueberschritten – "
+                  "Remove-Schleife abgebrochen (siehe JSON).", file=sys.stderr)
+            return emit(result, 2)
+
+        if removed_count == 0 and failed_count == 0:
+            # Zwischen Phase 1 und 2 entfernte Geraete (Race) – Ergebnis ist
+            # idempotent: 0 entfernt, kein Fehler.
+            status = "not_found"
+            rc = 0
+        elif removed_count > 0 and failed_count == 0:
+            status = "removed"
+            rc = 0
+        elif removed_count > 0 and failed_count > 0:
+            status = "partial"
+            rc = 1
+        else:  # removed_count == 0 and failed_count > 0
+            status = "error"
+            rc = 1
+
+        result = build_instance_remove_result_json(
+            status=status,
+            removed_count=removed_count,
+            per_instance=per_instance,
+            failed=failed_details,
+            scanned=res.scanned or scanned,
+            filters_applied=filters,
+            unreachable=res.unreachable or unreachable,
+        )
+        if rc == 1:
+            print("❌ Teilerfolg/Fehler – fehlgeschlagene Geraete im Summary/JSON "
+                  f"({failed_count} von {removed_count + failed_count}).", file=sys.stderr)
+        return emit(result, rc)
 
     # ── Lokaler Modus ──
     if is_local:

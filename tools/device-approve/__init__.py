@@ -1,21 +1,25 @@
-"""Device-Approve v3.5.0 – Unified ID-basierte Freigabe/Ablehnung/Entfernung (Ein-Job-Fast-Path).
+"""Device-Approve v3.6.0 – Unified ID-basierte Freigabe/Ablehnung/Entfernung (Ein-Job-Fast-Path).
 
-Package `tools/device-approve` (Design 05 v3.0/v3.1/v3.2/v3.3/v3.5, Workflow-05-Optimierung,
+Package `tools/device-approve` (Design 05 v3.0/v3.1/v3.2/v3.3/v3.5/v3.6, Workflow-05-Optimierung,
 Review R01-R08 aufgelöst):
-- discovery.py    – Ein-Job-Kern v3.0/v3.2/v3.5 (group_by_vps, build_ein_job_remote_cmd,
+- discovery.py    – Ein-Job-Kern v3.0/v3.2/v3.5/v3.6 (group_by_vps, build_ein_job_remote_cmd,
                     parse_ein_job_output, run_remote_ssh, run_discovery;
                     1 SSH pro VPS, Approve/Reject/Remove in der Session, kein jq;
                     v3.2: REJECT-Marker + REJECT_CMD_TEMPLATES, action-Param;
                     v3.5: REMOVE-Marker + REMOVE_CMD_TEMPLATES, remove matcht
-                    paired[].deviceId=64-hex statt pending[].requestId)
+                    paired[].deviceId=64-hex statt pending[].requestId;
+                    v3.6: build_instance_remove_remote_cmd + parse_paired_output +
+                    collect_paired_devices/run_instance_remove (scope=instance,
+                    MAX_REMOVE_DEVICES=50))
 - approve_step.py – Approve-only-Library (typ-spezifisch: pairing approve
                     telegram <CODE> vs. devices approve <ID>; wird vom
                     Workflow NICHT mehr aufgerufen – R03-E12)
 - approve.py      – CLI-Fassade (--full-run Ein-Job, --discover-only,
                     --list-only v3.1, --reject-only v3.2, --remove-only v3.5,
-                    --summary, --local)
+                    --scope device|instance v3.6, --summary, --local)
 - summary.py      – Markdown-Summary aus einheitlichem JSON-Schema (Minor #7;
-                    v3.2: "rejected"-Status; v3.5: "removed"-Status)
+                    v3.2: "rejected"-Status; v3.5: "removed"-Status;
+                    v3.6: instance_remove_to_markdown + "partial"-Status)
 
 v3.2 (Reject-Modus, 2026-08-07): `openclaw devices reject <ID>` per SSH
 (docker exec im Instanz-Container); NUR device-Requests (kein 'pairing
@@ -29,6 +33,18 @@ paired-Eintraege haben KEINE requestId, CLI-Fakt 2026.7.1, e2e-Beleg
 'Removed 587758f1…'). NUR device (kein 'pairing remove' in der openclaw CLI
 – empirisch 2026-08-07: `openclaw pairing` kennt nur approve|list|help).
 Exit-Code-Vertrag: 0 = removed ODER not_found (gruen), 1 = error, 2 = config.
+
+v3.6 (Instanz-Remove, scope=instance, 2026-08-08 – Owner-Entscheidungen
+„Instanz leeren“, „max 50 Geraete pro Lauf“, „kein Confirm-Gate“):
+`--remove-only --scope instance` entfernt ALLE gepaarten Geraete der
+gefilterten Instanzen (target/instance) – zweiphasig: Phase 1 = Remove-Plan
+(collect_paired_devices), leer → not_found (Exit 0, Idempotenz), > 50 →
+Abbruch (Exit 2) VOR jedem Remove; Phase 2 = run_instance_remove
+(DEV-REMOVE-Marker, B2-Semantik, Shell-Hard-Cap als Defense-in-Depth).
+Exit-Code-Vertrag v3.6: 0 = alle entfernt ODER not_found (gruen),
+1 = Teilerfolg (failed im Summary), 2 = Config/Limit. scope=device
+(Default) = ID-basierter Pfad 100%% unveraendert. Summary-JSON erweitert:
+scope, removed_count, per_instance, failed, limit_hit.
 
 v3.3 (Listen-Modus + requestId, 2026-08-07 – Owner-Auftrag „GUID soll in der
 Liste stehen"): pro pending device-Eintrag wird AUCH `requestId` (UUID-36)
@@ -51,4 +67,4 @@ Import in Scripts (if __name__ == "__main__"):
   from discovery import ...
 """
 
-__version__ = "3.5.0"
+__version__ = "3.6.0"

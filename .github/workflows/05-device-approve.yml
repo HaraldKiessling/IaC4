@@ -115,6 +115,32 @@
 #     2daff7a2) wird damit durch den etablierten Workflow-05-Pfad ersetzt –
 #     Revoke gepaarter Geraete laeuft kuenftig ueber mode=remove.
 #
+#   v3.6 (Instanz-Remove, scope=instance, 2026-08-08 – Owner-Entscheidungen
+#   „Instanz leeren“: entfernt ALLE gepaarten Geraete der gefilterten
+#   Instanzen, NICHT „neuestes je Instanz“; KEIN Confirm-Gate; max 50 Geraete
+#   pro Lauf):
+#   - NEUER Input `scope` (device|instance, Default device). scope=device =
+#     bisheriger ID-basierter Pfad (100%% unveraendert, Rueckwaertskompatibilitaet).
+#   - mode=remove + scope=instance: entfernt ALLE gepaarten Geraete der via
+#     target/instance gefilterten Instanzen (z. B. target=prod, instance=all).
+#     KEINE id noetig – eine gesetzte id ist ein Konflikt (Validate-Step exit 1,
+#     approve.py exit 2). id leer + scope=instance: OK.
+#   - Validate-Step: scope=instance ueberspringt --validate-id (derived_type
+#     wird fix auf 'device' gesetzt – Remove ist immer device-only);
+#     scope=instance ist NUR mit mode=remove zulaessig (sonst exit 1).
+#   - approve.py --scope instance (zweiphasig): Phase 1 = Remove-Plan
+#     (collect_paired_devices), leer → not_found (Exit 0, Idempotenz: 2. Lauf
+#     auf leerer Instanz gruen); > 50 Geraete → Abbruch mit klarer
+#     Fehlermeldung (Exit 2) VOR jedem Remove. Phase 2 = run_instance_remove
+#     (DEV-REMOVE-Marker, B2-Semantik, Shell-Hard-Cap als Defense-in-Depth).
+#   - Exit-Code-Vertrag v3.6: 0 = alle entfernt ODER not_found (gruen),
+#     1 = Teilerfolg (einige fehlgeschlagen – failed im Summary gelistet),
+#     2 = Config/Limit. Concurrency-Group `device-approve` unveraendert.
+#   - Summary-JSON erweitert: scope, removed_count, per_instance
+#     ({"instance", "removed", "failed"}), failed-Details, limit_hit – die
+#     bestehenden Felder (status, id, found, scanned) bleiben fuer
+#     scope=device unveraendert.
+#
 #   Secrets (Ist-Zustand, M2): TAILSCALE_OAUTH_CLIENT_ID /
 #   TAILSCALE_OAUTH_CLIENT_SECRET (Tailscale-Action v4.1.3, NICHT TS_OAUTH_*),
 #   VPS_USER, SSH_KEY, TELEGRAM_APPROVE_USERS (Whitelist für den Telegram-Pfad,
@@ -128,7 +154,7 @@
 #   Debug/Audit im Run-Log.
 name: "05 – Freigabe (Telegram-Pairing + Device-Approve, Ein-Job)"
 
-run-name: "${{ inputs.mode || 'approve' }} ${{ inputs.id || github.event.client_payload.id || '' }}"
+run-name: "${{ inputs.mode || 'approve' }} ${{ inputs.id || github.event.client_payload.id || '' }} (${{ inputs.scope || 'device' }})"
 
 on:
   workflow_dispatch:
@@ -139,6 +165,12 @@ on:
         default: 'approve'
         type: choice
         options: [approve, list, reject, remove, e2e]
+      scope:
+        description: 'Remove-Scope: device = ein Geraet per id (Default); instance = ALLE gepaarten Geraete der gefilterten Instanzen (nur mode=remove, max 50)'
+        required: false
+        default: 'device'
+        type: choice
+        options: [device, instance]
       id:
         description: 'Request-ID (Pairing-Code QVDCXJEM ODER Device-ID 9df47d69…) – nur bei mode=approve|reject|remove'
         required: false
@@ -206,6 +238,7 @@ jobs:
           INPUT_TARGET: ${{ github.event.inputs.target || github.event.client_payload.target || 'both' }}
           INPUT_INSTANCE: ${{ github.event.inputs.instance || github.event.client_payload.instance || 'all' }}
           INPUT_MODE: ${{ inputs.mode || 'approve' }}
+          INPUT_SCOPE: ${{ inputs.scope || 'device' }}
           TG_USER_ID: ${{ github.event.client_payload.telegram_user_id || '' }}
           AUTHORIZED_USERS: ${{ secrets.TELEGRAM_APPROVE_USERS }}
         run: |
@@ -232,6 +265,13 @@ jobs:
             fi
           fi
 
+          # v3.6: scope=instance ist NUR mit mode=remove zulaessig (entfernt
+          # ALLE gepaarten Geraete der gefilterten Instanzen – „Instanz leeren“)
+          if [ "$INPUT_SCOPE" = "instance" ] && [ "$INPUT_MODE" != "remove" ]; then
+            echo "❌ scope=instance ist nur mit mode=remove zulaessig (entfernt ALLE gepaarten Geraete der gefilterten Instanzen)." >&2
+            exit 1
+          fi
+
           if [ "$INPUT_MODE" = "list" ] || [ "$INPUT_MODE" = "e2e" ]; then
             # ── Listen-Modus (v3.1, R02) / E2E-Modus (v3.3) ──
             # id wird ignoriert: NICHT validieren, NICHT in GITHUB_ENV schreiben,
@@ -251,21 +291,33 @@ jobs:
               echo "📋 Listen-Modus: id='${INPUT_ID:-}' ignoriert (keine Validierung, R02), type=$LIST_TYPE"
             fi
           else
-            # ── Approve-/Reject-/Remove-Modus (v3.2/v3.5) ──
-            # ID-Validierung + Typ-Ableitung (Zwei-Format-Regex, keine Shell)
-            DERIVED_TYPE=$(python3 tools/device-approve/discovery.py \
-              --validate-id "$INPUT_ID" --type "$INPUT_TYPE")
+            # ── Approve-/Reject-/Remove-Modus (v3.2/v3.5/v3.6) ──
+            # v3.6 (scope=instance): KEINE id noetig (leer erlaubt); eine
+            # gesetzte id ist ein KONFLIKT (exit 1 – scope=instance entfernt
+            # ALLE gepaarten Geraete). derived_type wird fix auf 'device'
+            # gesetzt (Remove ist immer device-only – kein 'pairing remove').
+            if [ "$INPUT_MODE" = "remove" ] && [ "$INPUT_SCOPE" = "instance" ]; then
+              if [ -n "$INPUT_ID" ]; then
+                echo "❌ Konflikt: scope=instance entfernt ALLE gepaarten Geraete – 'id' darf bei scope=instance NICHT gesetzt sein." >&2
+                exit 1
+              fi
+              DERIVED_TYPE="device"
+            else
+              # ID-Validierung + Typ-Ableitung (Zwei-Format-Regex, keine Shell)
+              DERIVED_TYPE=$(python3 tools/device-approve/discovery.py \
+                --validate-id "$INPUT_ID" --type "$INPUT_TYPE")
 
-            # v3.2/v3.5 (Reject-/Remove-Modus): NUR device-Requests – die
-            # openclaw CLI hat weder 'pairing reject' noch 'pairing remove'
-            # (empirisch 2026-08-07; nur `openclaw devices reject/remove <ID>`).
-            if [ "$INPUT_MODE" = "reject" ] && [ "$DERIVED_TYPE" != "device" ]; then
-              echo "❌ Reject-Modus: nur device-Requests unterstuetzt (kein 'pairing reject' in der openclaw CLI)." >&2
-              exit 1
-            fi
-            if [ "$INPUT_MODE" = "remove" ] && [ "$DERIVED_TYPE" != "device" ]; then
-              echo "❌ Remove-Modus: nur device-Eintraege unterstuetzt (kein 'pairing remove' in der openclaw CLI)." >&2
-              exit 1
+              # v3.2/v3.5 (Reject-/Remove-Modus): NUR device-Requests – die
+              # openclaw CLI hat weder 'pairing reject' noch 'pairing remove'
+              # (empirisch 2026-08-07; nur `openclaw devices reject/remove <ID>`).
+              if [ "$INPUT_MODE" = "reject" ] && [ "$DERIVED_TYPE" != "device" ]; then
+                echo "❌ Reject-Modus: nur device-Requests unterstuetzt (kein 'pairing reject' in der openclaw CLI)." >&2
+                exit 1
+              fi
+              if [ "$INPUT_MODE" = "remove" ] && [ "$DERIVED_TYPE" != "device" ]; then
+                echo "❌ Remove-Modus: nur device-Eintraege unterstuetzt (kein 'pairing remove' in der openclaw CLI)." >&2
+                exit 1
+              fi
             fi
 
             {
@@ -273,8 +325,9 @@ jobs:
               echo "DERIVED_TYPE=$DERIVED_TYPE"
               echo "APPROVE_TARGET=$INPUT_TARGET"
               echo "APPROVE_INSTANCE=$INPUT_INSTANCE"
+              echo "APPROVE_SCOPE=$INPUT_SCOPE"
             } >> "$GITHUB_ENV"
-            echo "✅ Eingaben validiert (mode=$INPUT_MODE, id=$INPUT_ID, derived_type=$DERIVED_TYPE, target=$INPUT_TARGET, instance=$INPUT_INSTANCE)"
+            echo "✅ Eingaben validiert (mode=$INPUT_MODE scope=$INPUT_SCOPE id=$INPUT_ID type=$DERIVED_TYPE target=$INPUT_TARGET inst=$INPUT_INSTANCE)"
           fi
 
       # SSoT-Mapping (v3.4/H2): approve.py generiert die Instanz-Map selbst
@@ -525,11 +578,12 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## 🚀 Discovery + Aktion (Approve/Reject/Remove, Ein-Job, v3.0/v3.2/v3.5)"
+            echo "## 🚀 Discovery + Aktion (Approve/Reject/Remove, Ein-Job, v3.0/v3.2/v3.5/v3.6)"
             echo ""
             echo "| Feld | Wert |"
             echo "|------|------|"
             echo "| **Modus** | $INPUT_MODE |"
+            echo "| **Scope** | ${APPROVE_SCOPE:-device} |"
             echo "| **ID** | \`$APPROVE_ID\` |"
             echo "| **Target** | $APPROVE_TARGET |"
             echo "| **Typ** | $DERIVED_TYPE |"
@@ -539,12 +593,16 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           # v3.2/v3.5: mode=reject → --reject-only; mode=remove → --remove-only
-          # (Ein-Job-Reject/-Remove)
+          # (Ein-Job-Reject/-Remove). v3.6: mode=remove + scope=instance →
+          # zusaetzlich --scope instance (Instanz-Remove, alle gepaarten Geraete).
           ARGS=(--full-run)
           if [ "$INPUT_MODE" = "reject" ]; then
             ARGS+=(--reject-only)
           elif [ "$INPUT_MODE" = "remove" ]; then
             ARGS+=(--remove-only)
+            if [ "$APPROVE_SCOPE" = "instance" ]; then
+              ARGS+=(--scope instance)
+            fi
           fi
 
           python3 tools/device-approve/approve.py "${ARGS[@]}" \

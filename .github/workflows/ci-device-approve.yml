@@ -8,7 +8,7 @@ name: "CI – Freigabe (Statik + Unit)"
 
 on:
   push:
-    branches: [session-20260806/device-approve-telegram, session-20260807/device-reject, session-20260807/device-remove]
+    branches: [session-20260806/device-approve-telegram, session-20260807/device-reject, session-20260807/device-remove, session-20260808/device-remove-scope]
     paths:
       - '.github/workflows/05-device-approve.yml'
       - '.github/workflows/ci-device-approve.yml'
