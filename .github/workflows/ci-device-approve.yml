@@ -3,12 +3,12 @@
 #   Automatisiert die lokale Validierung aus Design 05 v3.0:
 #   actionlint + shellcheck + pytest + bash -n für Workflow 05 (v3, Ein-Job),
 #   tools/device-approve (v3.0), tools/telegram-approve-bot und Tests.
-#   Läuft auf dem session-Branch (push) und bei PRs.
+#   Läuft auf main (push) und bei PRs.
 name: "CI – Freigabe (Statik + Unit)"
 
 on:
   push:
-    branches: [session-20260806/device-approve-telegram, session-20260807/device-reject, session-20260807/device-remove, session-20260808/device-remove-scope]
+    branches: [main]
     paths:
       - '.github/workflows/05-device-approve.yml'
       - '.github/workflows/ci-device-approve.yml'

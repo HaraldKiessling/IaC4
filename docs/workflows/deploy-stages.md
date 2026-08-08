@@ -64,5 +64,5 @@ aus dem Node-Hostnamen (`vps-dev`) auf – ein `VPS_DEV_HOST`-Secret ist dafür 
 4. `03-baseline-deploy.yml`            → Phase 1 (via Tailscale-IP 🔒)
 5. Danach: weitere Services via Tailscale (04-service-deploy; OpenClaw-Instanz-Deployment
    via `04-service-deploy` playbook=openclaw, deployed 2026-08-01 – siehe
-   `docs/plans/iac4-migration.md`; Workflow 05 = Freigabe (Telegram-Pairing +
-   Device-Approve, v2.2 – siehe `docs/plans/issue-device-approve-telegram.md`)
+   `docs/plans/iac4-migration.md`; Workflow 05 = Freigabe + Geräte-Verwaltung
+   (Telegram-Pairing + Device-Approve, v3.6 – siehe `tools/device-approve/README.md`)
