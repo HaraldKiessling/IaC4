@@ -18,6 +18,11 @@ VOLL gerendert (bewusste Ausnahme zur ID-Kuerzung); Telegram ohne
 requestId-Feld → "—" (Darstellung, JSON bleibt "").
 v3.4 (2026-08-07): Remove-Modus – status "removed" → Header "✅ Device-
 Remove — Erfolgreich" / Status-Label "✅ Entfernt (removed)".
+v3.6 (2026-08-08): Instanz-Remove (scope=instance) –
+instance_remove_to_markdown() rendert removed_count, per_instance-
+Aufschluesselung und failed-Details (Owner-Entscheidung: Teilerfolg Exit 1,
+Fehlgeschlagene im Summary listen); status "partial" → Header "⚠️ … —
+Teilweise entfernt".
 
 v2.2: Status-Ueberschrift typ-spezifisch – found[0].type == "telegram" →
 "Telegram-Pairing-Freigabe", sonst "Device-Freigabe" (Δ7, Design §3e).
@@ -94,6 +99,7 @@ def status_header(status: str, result: Optional[dict] = None) -> str:
         "approved": f"## ✅ {label}-Freigabe — Erfolgreich",
         "rejected": f"## ✅ {label}-Reject — Erfolgreich",  # v3.2: Reject-Modus
         "removed": f"## ✅ {label}-Remove — Erfolgreich",  # v3.4: Remove-Modus
+        "partial": f"## ⚠️ {label}-Remove — Teilweise entfernt",  # v3.6: Instanz-Remove Teilerfolg
         "found": f"## ✅ {label}-Freigabe — Gefunden (Discovery)",
         # not_found ist kein Fehler (Owner-Vereinbarung 15:06, gruener Run)
         "not_found": f"## 🔎 {label}-Freigabe — Kein Treffer",
@@ -120,6 +126,7 @@ def result_to_markdown(result: dict) -> str:
         "approved": "✅ Freigegeben",
         "rejected": "✅ Abgelehnt (rejected)",  # v3.2: Reject-Modus
         "removed": "✅ Entfernt (removed)",  # v3.4: Remove-Modus
+        "partial": "⚠️ Teilweise entfernt (partial)",  # v3.6: Instanz-Remove
         "found": "✅ Gefunden",
         "not_found": "🔎 Nicht gefunden",
         "error": "❌ Fehler",
@@ -144,6 +151,101 @@ def result_to_markdown(result: dict) -> str:
         lines.append(f"**Discovery-Scan:** {count} Instanz(en) geprueft — {scan_list}")
 
     # Filter
+    if filters:
+        filter_parts = [f"{k}={v}" for k, v in filters.items()]
+        lines.append(f"**Filter:** {' | '.join(filter_parts)}")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _fmt_device_id(device_id: str) -> str:
+    """deviceId in der Tabelle: lang (>24 Zeichen, 64-hex) gekuerzt.
+
+    Darstellung nur – die Voll-ID steht im JSON-Output (Run-Log).
+    """
+    if len(device_id) > 24:
+        return f"`{device_id[:24]}…`"
+    return f"`{device_id}`"
+
+
+def instance_remove_to_markdown(result: dict) -> str:
+    """Instanz-Remove-Ergebnis (v3.6, scope=instance) → Markdown (Job-Summary).
+
+    Erwartetes Eingabe-Schema (build_instance_remove_result_json):
+    {
+      "status": "removed|partial|error|not_found",
+      "scope": "instance",
+      "removed_count": n,
+      "per_instance": [{"instance": "oc1", "removed": n, "failed": n}],
+      "failed": [{"instance": "oc1", "device_id": "…", "output": "…"}],
+      "limit_hit": false,
+      "scanned": ["prod/oc1", ...],
+      "unreachable": [...],
+      "filters_applied": {...}
+    }
+    Owner-Entscheidungen (2026-08-08): Teilerfolg → Exit 1, Fehlgeschlagene
+    werden VOLL im Summary gelistet (deviceId gekuerzt in der Tabelle, Voll-ID
+    im JSON).
+    """
+    status = result.get("status", "unknown")
+    removed_count = result.get("removed_count", 0)
+    per_instance = result.get("per_instance") or []
+    failed = result.get("failed") or []
+    scanned = result.get("scanned") or []
+    unreachable = result.get("unreachable") or []
+    filters = result.get("filters_applied") or {}
+    limit_hit = result.get("limit_hit", False)
+
+    header = {
+        "removed": "## 🗑️ Device-Remove (Instanz) — Alle entfernt",
+        "partial": "## ⚠️ Device-Remove (Instanz) — Teilweise entfernt",
+        "error": "## ❌ Device-Remove (Instanz) — Fehler",
+        "not_found": "## 🔎 Device-Remove (Instanz) — Keine gepaarten Geraete",
+    }.get(status, f"## ℹ️ Device-Remove (Instanz) — {status}")
+    lines = [header, ""]
+
+    lines.append("| Feld | Wert |")
+    lines.append("|------|------|")
+    lines.append(f"| **Scope** | `instance` |")
+    lines.append(f"| **Entfernt** | {removed_count} |")
+    lines.append(f"| **Fehlgeschlagen** | {len(failed)} |")
+    if limit_hit:
+        lines.append("| **Limit** | ⛔ Sicherheits-Limit (max 50) erreicht/ueberschritten |")
+    lines.append("")
+
+    if per_instance:
+        lines.append("**Pro Instanz:**")
+        lines.append("")
+        lines.append("| Instanz | Entfernt | Fehlgeschlagen |")
+        lines.append("|---------|----------|----------------|")
+        for entry in per_instance:
+            lines.append(
+                f"| {entry.get('instance', '?')} | {entry.get('removed', 0)} "
+                f"| {entry.get('failed', 0)} |"
+            )
+        lines.append("")
+
+    if failed:
+        lines.append("**Fehlgeschlagene Geraete:**")
+        lines.append("")
+        lines.append("| Instanz | Device-ID | Output |")
+        lines.append("|---------|-----------|--------|")
+        for entry in failed:
+            output = (entry.get("output") or "").replace("|", "\\|")[:200]
+            lines.append(
+                f"| {entry.get('instance', '?')} "
+                f"| {_fmt_device_id(entry.get('device_id', ''))} "
+                f"| `{output}` |"
+            )
+        lines.append("")
+
+    if scanned:
+        count = len(scanned)
+        scan_list = ", ".join(f"`{s}`" for s in sorted(set(scanned)))
+        lines.append(f"**Discovery-Scan:** {count} Instanz(en) geprueft — {scan_list}")
+    if unreachable:
+        lines.append(f"**Nicht erreichbar:** {', '.join(unreachable)}")
     if filters:
         filter_parts = [f"{k}={v}" for k, v in filters.items()]
         lines.append(f"**Filter:** {' | '.join(filter_parts)}")

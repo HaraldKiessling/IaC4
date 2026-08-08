@@ -103,3 +103,30 @@ $APPROVE_ID` → Ein-Job-Remote-Schleife matcht Array `paired` + Feld
 `deviceId` (nicht pending/requestId) und führt `openclaw devices remove
 <deviceId>` in der SSH-Session aus (REMOVE-Marker, B2-Semantik).
 Exit-Code-Vertrag: 0 = removed ODER not_found (grün), 1 = error, 2 = config.
+
+## Instanz-Remove (v3.6, `mode: remove` + `scope: instance`) – „Instanz leeren“
+
+**Owner-Entscheidungen (2026-08-08):** Entfernt ALLE gepaarten Geräte der
+gefilterten Instanzen (z. B. `target=prod`, `instance=all`) – NICHT
+„neuestes je Instanz“. **Kein Confirm-Gate** (bewusst keine confirm-Pflicht).
+**Sicherheits-Limit:** max 50 Geräte pro Lauf (`MAX_REMOVE_DEVICES=50`),
+darüber Abbruch mit klarer Fehlermeldung (Exit 2) VOR jedem Remove.
+
+**Ablauf (Workflow 05, zweiphasig in approve.py):**
+
+| Phase | Kommando | Ergebnis |
+|---|---|---|
+| 1 Plan | `collect_paired_devices` (build_list_remote_cmd + parse_paired_output) | Remove-Plan über ALLE paired[]-Einträge der gefilterten Instanzen; leer → `not_found` (Exit 0, Idempotenz); > 50 → Exit 2 VOR jedem Remove |
+| 2 Remove | `run_instance_remove` (build_instance_remove_remote_cmd: pro Gerät `openclaw devices remove <deviceId>`, DEV-REMOVE-BEGIN/END/FAILED-Marker, B2-Semantik; Shell-Hard-Cap als Defense-in-Depth) | alle entfernt → Exit 0; Teilerfolg → Exit 1 (Fehlgeschlagene im Summary); Limit-Marker → Exit 2 |
+
+**Exit-Code-Vertrag v3.6:** 0 = alle entfernt ODER not_found (grün),
+1 = Teilerfolg (failed im Summary), 2 = Config/Limit. Konflikt
+`id` + `scope=instance` → Fehler (Validate-Step exit 1 / approve.py exit 2).
+scope=device (Default) = ID-basierter v3.5-Pfad, 100 % unverändert
+(Rückwärtskompatibilität). Summary-JSON erweitert: `scope`, `removed_count`,
+`per_instance`, `failed`, `limit_hit`.
+
+**Live-Nachweis:** Ein nicht-destruktiver `mode=list`-Run auf dem Branch
+verifiziert die Discovery (paired[]-Bestand); ein echter
+`mode=remove scope=instance`-Lauf (destruktiv) wartet auf separate
+Owner-Freigabe.

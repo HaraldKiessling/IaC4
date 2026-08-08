@@ -1,4 +1,4 @@
-# Device-Approve v3.5.0 – Ein-Job-Fast-Path (Lokale Testanleitung)
+# Device-Approve v3.6.0 – Ein-Job-Fast-Path (Lokale Testanleitung)
 
 Package `tools/device-approve/` (Design 05 v3.0, Workflow-05-Performance-Optimierung)
 – Unified ID-basierte Freigabe (Telegram-Pairing + Device-Approve) als
@@ -65,6 +65,25 @@ pending (requestId=UUID-36). **NUR device:** kein `pairing remove` in der
 CLI → `derived_type != device` ⇒ Exit 2 in approve.py, ValueError im
 Remote-Builder, Abbruch im Workflow-Validate-Step. Exit-Code-Vertrag:
 0 = removed ODER not_found (gruen), 1 = error, 2 = config.
+**v3.6 – Instanz-Remove (`--scope instance`, 2026-08-08, Owner-Entscheidungen
+„Instanz leeren“ / „max 50 Geraete pro Lauf“ / „kein Confirm-Gate“):**
+`--remove-only --scope instance` entfernt ALLE gepaarten Geraete der
+gefilterten Instanzen („Instanz leeren“, z. B. target=prod, instance=all).
+**Zweiphasig:** Phase 1 = Remove-Plan (`collect_paired_devices` +
+`parse_paired_output`): keine Geraete → `not_found` (Exit 0 – Idempotenz,
+2. Lauf auf leerer Instanz ist gruen); mehr als `MAX_REMOVE_DEVICES` (50) →
+Abbruch mit klarer Fehlermeldung (Exit 2) VOR jedem Remove (kein
+Massen-Remove). Phase 2 = `run_instance_remove` (`build_instance_remove_
+remote_cmd`, DEV-REMOVE-Marker je Geraet, B2-Semantik, Shell-Hard-Cap als
+Defense-in-Depth). **Exit-Code-Vertrag v3.6:** 0 = alle entfernt ODER
+not_found (gruen), 1 = Teilerfolg (einige fehlgeschlagen – Fehlgeschlagene
+im Summary/JSON gelistet), 2 = Config/Limit. **Konflikt:** `--scope
+instance` + `--request-id` ⇒ Exit 2 (id muss leer sein); `--scope instance`
+ist nur mit `--remove-only` zulaessig. **Rueckwaertskompatibilitaet:**
+scope=device (Default) = ID-basierter v3.5-Pfad, 100% unveraendert.
+Summary-JSON erweitert: `scope`, `removed_count`, `per_instance`
+({"instance", "removed", "failed"}), `failed`-Details, `limit_hit` –
+bestehende Felder (status, id, found, scanned) bleiben fuer scope=device.
 
 ## Schnellstart (lokaler Modus)
 
@@ -93,6 +112,7 @@ python3 tools/device-approve/approve.py --discover-only
 | `APPROVE_TYPE` | — | `auto` | `auto` (aus Format ableiten), `telegram`, `device`, `both` |
 | `APPROVE_TARGET` | — | `both` | Target-Filter: `dev`, `prod`, `both` |
 | `APPROVE_INSTANCE` | — | `all` | Instanz-Filter: `all` oder `oc1`...`ocN` |
+| `APPROVE_SCOPE` | — | `device` | Remove-Scope (v3.6): `device` oder `instance` |
 | `APPROVE_LOCAL` | — | `0` | `1` = lokaler Modus ohne SSH |
 | `VPS_USER` | SSH | — | SSH-User (z.B. `deploy-user`) |
 | `SSH_KEY_PATH` | SSH | — | Pfad zum SSH-Key |
@@ -127,6 +147,11 @@ python3 tools/device-approve/approve.py --help
                           remove <deviceId>` entfernen (REMOVE-Marker, B2-Semantik).
                           NUR device (kein 'pairing remove' in der CLI); schliesst
                           --list-only/--discover-only/--reject-only aus
+  --scope {device,instance}  Remove-Scope (v3.6): device (Default) = genau ein
+                          Geraet per --request-id (bisheriger Pfad); instance =
+                          ALLE gepaarten Geraete der gefilterten Instanzen
+                          entfernen (nur mit --remove-only; --request-id muss leer
+                          sein; max 50 Geraete pro Lauf)
   --summary               Markdown-Summary in $GITHUB_STEP_SUMMARY
   --local                 Lokaler Modus ohne SSH (env APPROVE_LOCAL=1)
   --vps-user, --ssh-key, --ts-tailnet, --ts-client-id, --ts-client-secret
@@ -165,6 +190,7 @@ python3 tools/device-approve/approve.py --list-only --local
 | `list` | `--list-only` | **NICHT übergeben** – wird ignoriert (Warning, keine Validierung) |
 | `reject` (v3.2) | `--full-run --reject-only --request-id $APPROVE_ID` | required, validiert (`--validate-id`); nur device |
 | `remove` (v3.5) | `--full-run --remove-only --request-id $APPROVE_ID` | required, validiert (`--validate-id`); nur device; matcht paired[].deviceId (64-hex) |
+| `remove` + `scope=instance` (v3.6) | `--full-run --remove-only --scope instance` | **NICHT übergeben** – muss leer sein (Konflikt sonst: Exit 2); derived_type fix `device`; entfernt ALLE gepaarten Geraete der gefilterten Instanzen |
 
 `--list-only` schließt `--full-run`/`--discover-only` aus (argparse-Fehler,
 Exit 2). `--list-only` + `--request-id` → Warning auf stderr, ID wird nie
@@ -296,6 +322,61 @@ python3 tools/device-approve/approve.py --remove-only --local --request-id "$DEV
 | device | `openclaw devices remove <deviceId>` |
 | telegram | — (CLI-seitig kein paired-Array / kein `pairing remove`) |
 
+## Instanz-Remove (v3.6, `--scope instance`) – „Instanz leeren“
+
+Entfernt ALLE gepaarten Geraete der gefilterten Instanzen (z. B. alle
+Geraete auf prod/oc1+oc2). **Kein Confirm-Gate** (Owner-Entscheidung
+2026-08-08 – bewusst keine confirm-Pflicht). Workflow-Input `mode: remove`
++ `scope: instance` (Workflow 05) bzw. CLI:
+
+```bash
+# SSH: alle gepaarten Geraete auf prod entfernen (Instanz-Map via sot_parser)
+python3 tools/device-approve/approve.py --full-run --remove-only --scope instance \
+  --type-filter device --target-filter prod --instance-filter all \
+  --vps-user "$VPS_USER" --ssh-key ~/.ssh/id_ed25519 \
+  --ts-tailnet "$TS_TAILNET" --ts-client-id "$TS_CLIENT_ID" \
+  --ts-client-secret "$TS_CLIENT_SECRET" --summary
+
+# Lokal (Gateway, kein TS-SSH noetig)
+python3 tools/device-approve/approve.py --remove-only --scope instance --local
+```
+
+### Instanz-Remove-Regeln (verbindlich, Owner-Entscheidungen 2026-08-08)
+
+- **Alle, nicht „neuestes je Instanz“:** Es werden ALLE gepaarten Geraete der
+  gefilterten Instanzen entfernt (target/instance-Steuerung).
+- **Kein Confirm-Gate:** bewusst keine confirm-Pflicht im Workflow.
+- **Sicherheits-Limit:** max 50 Geraete pro Lauf (`MAX_REMOVE_DEVICES=50`).
+  Darueber: Abbruch mit klarer Fehlermeldung (Exit 2) VOR jedem Remove
+  (kein Massen-Remove); zusaetzlich Shell-Hard-Cap im Remote-Skript
+  (Defense-in-Depth gegen zwischenzeitlich nachgepaarte Geraete).
+- **Keine id:** `--request-id` muss leer sein (Konflikt → Exit 2);
+  `--scope instance` ist nur mit `--remove-only` zulaessig (Exit 2).
+- **Exit-Code-Vertrag v3.6:**
+  - 0 = alle entfernt (`status: removed`) ODER keine gepaarten Geraete
+    gefunden (`status: not_found` – Idempotenz: 2. Lauf auf leerer Instanz
+    ist gruen)
+  - 1 = Teilerfolg (`status: partial` – einige entfernt, einige
+    fehlgeschlagen; Fehlgeschlagene werden im Summary/JSON gelistet) bzw.
+    `status: error` (keines entfernt + Fehler)
+  - 2 = Config-/Limit-Fehler (`status: error` + `limit_hit: true`)
+
+### Instanz-Remove-JSON-Schema (v3.6, Erweiterung des Minor-#7-Schemas)
+
+```json
+{"status": "removed|partial|error|not_found", "id": "", "scope": "instance",
+ "removed_count": 3,
+ "per_instance": [{"instance": "oc1", "removed": 2, "failed": 0},
+                   {"instance": "oc2", "removed": 1, "failed": 1}],
+ "failed": [{"instance": "oc2", "device_id": "9df47d69…", "output": "…"}],
+ "limit_hit": false, "found": [],
+ "scanned": ["prod/oc1", "prod/oc2"], "unreachable": [],
+ "filters_applied": {"type": "device", "target": "prod", "instance": "all", "scope": "instance"}}
+```
+
+Fuer `scope=device` bleibt das Rueckgabe-Schema unveraendert (status, id,
+found, scanned, filters_applied).
+
 ## Discovery-Quellen (Δ1, empirisch verifiziert 2026-08-06)
 
 | Typ | Quelle (SSH: docker exec) | Lokal (openclaw CLI) | ID-Feld |
@@ -400,8 +481,8 @@ python3 -m pytest tests/device-approve/ -v
 |---|---|
 | `discovery.py` | Ein-Job-Kern v3.0 (group_by_vps, build_ein_job_remote_cmd, parse_ein_job_output, run_remote_ssh, run_discovery, --validate-id, --approve) |
 | `approve_step.py` | Approve-only-Library (typ-spezifisch; NICHT mehr vom Workflow aufgerufen, R03-E12) |
-| `approve.py` | CLI-Fassade (--full-run Ein-Job, --discover-only, --list-only v3.1, --reject-only v3.2, --remove-only v3.5, --summary, --local) |
-| `summary.py` | Markdown-Summary-Generator (Minor #7 + list_result_to_markdown v3.1) |
+| `approve.py` | CLI-Fassade (--full-run Ein-Job, --discover-only, --list-only v3.1, --reject-only v3.2, --remove-only v3.5, --scope device\|instance v3.6, --summary, --local) |
+| `summary.py` | Markdown-Summary-Generator (Minor #7 + list_result_to_markdown v3.1 + instance_remove_to_markdown v3.6) |
 
 ## Rueckgabe-Schema
 
