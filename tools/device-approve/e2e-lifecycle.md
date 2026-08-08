@@ -20,6 +20,23 @@ Kern-Unterschied: `approve`/`reject` wirken auf **pending** (UUID-36),
 sich zwischen Listen-Lesen und Aktion ändern – vor approve/reject immer
 frisch listen.
 
+## Telegram-Pairing – Nachweis & Grenzen (2026-08-08)
+
+Telegram-Pairing (Kurzcode) funktioniert und wurde live belegt:
+[Run 31111747440](https://github.com/HaraldKiessling/IaC4/actions/runs/31111747440)
+(06.08.2026, 14:38 UTC, success, `id=TY522VMZ`, type=telegram, prod/oc2,
+`status: approved` via `openclaw pairing approve telegram TY522VMZ`).
+
+Grenze: Ein **bestehendes** Telegram-Pairing kann nicht gezielt entfernt
+werden – `openclaw pairing` kennt nur `approve | list` (kein remove/revoke,
+empirisch OpenClaw 2026.7.1); `reject`/`remove` in Workflow 05 sind strikt
+Geräte-only (Hard-Gate `05-device-approve.yml:198-201`). Approved Sender
+liegen in SQLite (`channel_pairing_allow_entries`); `openclaw channels remove
+--channel telegram` würde den ganzen Bot-Account löschen. Für die Abnahme
+eines frischen Telegram-Pairings ist daher ein neuer, frischer OC nötig
+(evtl. genügt ein OC Clean – prüfen):
+[Issue #119](https://github.com/HaraldKiessling/IaC4/issues/119).
+
 ## Harness
 
 Reproduzierbarer Lauf: **Workflow 05, `mode: e2e`** (workflow_dispatch:
