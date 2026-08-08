@@ -34,6 +34,35 @@ ausgeführt – auch auf prod (Owner-Entscheidung: kein Environment-Gate).
 kein `pairing reject`/`pairing remove` (empirisch, OpenClaw 2026.7.1).
 Telegram-Pairing-Codes sind daher nicht reject-/remove-bar.
 
+## Telegram-Pairing (aktueller Stand)
+
+**Was funktioniert:** Das Pairing eines Telegram-Clients über den Kurzcode.
+Workflow 05 (`mode=approve`, `type=telegram`) gibt einen pending Pairing-Request
+mit `openclaw pairing approve telegram <CODE>` frei – live belegt:
+[Run 31111747440](https://github.com/HaraldKiessling/IaC4/actions/runs/31111747440)
+(06.08.2026, 14:38 UTC, success, `id=TY522VMZ`, prod/oc2, `status=approved`).
+
+**Was NICHT möglich ist:** Ein gezieltes Unpairing/Reject/Remove eines
+bestehenden Telegram-Pairings.
+
+- `openclaw pairing` kennt nur `approve | list` – kein `remove`/`reject`/`revoke`
+  (empirisch geprüft, OpenClaw 2026.7.1)
+- `reject`/`remove` im Workflow sind strikt Geräte-only
+  (`openclaw devices reject/remove`, `tools/device-approve/discovery.py:175-179`);
+  Hard-Gate in `05-device-approve.yml:198-201`: `mode=remove` + Typ ≠ `device` →
+  Abbruch. `scope=instance` entfernt nur gepaarte **Geräte**, keine Telegram-Pairings
+- Approved Telegram-Sender liegen in SQLite
+  (`channel_pairing_allow_entries`, `~/.openclaw/state/openclaw.sqlite`) – kein
+  CLI-Kommando zum Entfernen dokumentiert
+- `openclaw channels remove --channel telegram` würde den **ganzen Bot-Account**
+  löschen – kein gezieltes Unpairing
+
+**Konsequenz für die Abnahme:** Für einen frischen Telegram-Pairing-Test
+(Abnahme) wird ein **neuer, frischer OC** benötigt (Instanz ohne bestehendes
+Telegram-Pairing). Notiz: Evtl. reicht ein **OC Clean** (Instance-Cleanup)
+dafür auch aus – prüfen. Siehe
+[Issue #119](https://github.com/HaraldKiessling/IaC4/issues/119).
+
 ## Inputs (Workflow 05)
 
 | Input | Default | Bedeutung |
