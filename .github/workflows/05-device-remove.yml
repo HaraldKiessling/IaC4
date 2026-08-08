@@ -1,4 +1,6 @@
 ---
+# DEPRECATED – use mode=remove in 05-device-approve.yml (v3.6+) instead
+#
 # 05 – Device Remove (Revoke) – Eigenständiger Revoke-Workflow
 #   Etabliertes Muster: Tailscale-Join → SSH → docker exec openclaw CLI
 #   (identisch zu Workflow 05 e2e-Modus, aber nur list+remove-Schritte).
