@@ -31,6 +31,7 @@ import glob
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -135,8 +136,12 @@ def vps_ip(target: str, tailnet: str, client_id: str, client_secret: str) -> str
 # ── Remote-Kommandos (NUR read-only) ──
 
 def docker_exec(name: str, port: int, args: List[str]) -> str:
+    # Jedes Arg wird gequotet (shlex.quote): die Kommandozeile wird als
+    # Remote-Shell-String ausgefuehrt – unquotete Interpolation mit Sonder-
+    # zeichen (Quotes/Leerzeichen) wuerde die Remote-Shell brechen (gleiches
+    # Muster wie der sh -lc-Defekt in build_context_cmd).
     return "sudo docker exec openclaw-{0} openclaw {1}".format(
-        name, " ".join(args)
+        name, " ".join(shlex.quote(a) for a in args)
     )
 
 
@@ -164,7 +169,13 @@ def build_context_cmd(name: str, port: int) -> str:
         "while read -r f; do echo '==FILE== ' \"$f\"; tail -c "
         f"{TRANSCRIPT_TAIL_BYTES} \"$f\"; done"
     )
-    return f"sudo docker exec openclaw-{name} sh -lc '{inner}'"
+    # shlex.quote macht das gesamte innere Kommando zu EINEM Shell-Wort und
+    # escaped innere einfache Quotes (\'\"\'\"\'), damit das aeussere
+    # sh -lc-Wrapping nicht vorzeitig terminiert wird. Vorher: naive
+    # '...{inner}...'-Interpolation -> Remote-Shell brach ab mit
+    # 'Syntax error: end of file unexpected (expecting "done")' (rc=2),
+    # genau im context-Modus (Kernmetrik #113 H1/H2).
+    return f"sudo docker exec openclaw-{name} sh -lc {shlex.quote(inner)}"
 
 
 def ssh_host(user: str, ip: str) -> str:

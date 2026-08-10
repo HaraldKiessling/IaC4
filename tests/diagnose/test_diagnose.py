@@ -5,6 +5,7 @@ Kein SSH/Tailscale in diesen Tests – nur reine Funktionen (Unit-Level).
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -164,6 +165,60 @@ def test_build_context_cmd_bounded_and_read_only():
     assert "find /home/node/.openclaw" in c
     assert "tail -c 300000" in c
     assert ".deleted" in c  # Archiv-Dateien ausgeschlossen
+
+
+def test_build_context_cmd_shlc_quotes_balanced():
+    """Regression: inneres Kommando enthaelt einfache Quotes ('*.jsonl',
+    '*session*', '*.deleted.*', '==FILE== '), die das aeussere sh -lc-Wrapping
+    NICHT vorzeitig terminieren duerfen. Vor dem Fix brach die Remote-Shell ab
+    mit 'Syntax error: end of file unexpected (expecting \"done\")' (rc=2).
+
+    Pruefungen:
+      1) shlex.split der Gesamt-Kommandozeile -> sh -lc-Argument ist EIN Wort
+      2) das innere Kommando ist selbst parsebar (sh -n, nur Syntax, kein Run)
+      3) ==FILE==-Marker und find-Pattern bleiben erhalten (Semantik)
+    """
+    c = diagnose.build_context_cmd("oc1", 18789)
+    # 1) Gesamtzeile als Shell-Wortliste: keine unbalancierten Quotes
+    parts = shlex.split(c)
+    assert parts[:6] == ["sudo", "docker", "exec", "openclaw-oc1", "sh", "-lc"]
+    inner = parts[6]
+    assert len(parts) == 7, "sh -lc-Argument muss ein einzelnes Shell-Wort sein"
+    # 2) inneres Kommando syntaktisch valide (sh -n parst, fuehrt nicht aus)
+    r = subprocess.run(["sh", "-n", "-c", inner], capture_output=True, text=True)
+    assert r.returncode == 0, f"inneres Kommando nicht parsebar: {r.stderr}"
+    # 3) Semantik unveraendert: Marker + Quoting-Pattern noch vorhanden
+    assert "==FILE== " in inner
+    assert "'*.jsonl'" in inner and "'*session*'" in inner
+    assert "'*.deleted.*'" in inner
+    assert "while read -r f; do" in inner and "done" in inner
+
+
+def test_build_context_cmd_quote_roundtrip():
+    """Round-trip: shlex.split(inner) liefert exakt die gewollten Tokens."""
+    inner = shlex.split(diagnose.build_context_cmd("oc1", 18789))[6]
+    tokens = shlex.split(inner)
+    assert tokens[0:6] == ["find", "/home/node/.openclaw", "-name",
+                           "*.jsonl", "-path", "*session*"]
+    assert "==FILE== " in tokens  # echo-Argument mit Marker
+    assert any(t.startswith("$f") for t in tokens)  # "$f"; -> '$f;' (posix-split)
+    assert "done" == tokens[-1]
+
+
+def test_all_remote_cmds_parse_with_sh_n():
+    """Alle gebauten Remote-Kommandozeilen sind syntaktisch valide Shell
+    (sh -n): deckt auch das docker_exec-Quoting-Haertung ab (gleiches Muster
+    wie der sh -lc-Defekt)."""
+    cmds = [
+        *diagnose.build_health_cmds("oc1", 18789),
+        diagnose.build_sessions_cmd("oc2", 18790),
+        diagnose.build_usage_cmd("oc1", 18789, 7),
+        diagnose.build_context_cmd("oc2", 18790),
+    ]
+    assert cmds
+    for c in cmds:
+        r = subprocess.run(["sh", "-n", "-c", c], capture_output=True, text=True)
+        assert r.returncode == 0, f"Nicht parsebar: {c!r} -> {r.stderr}"
 
 
 def test_commands_never_mutating():
