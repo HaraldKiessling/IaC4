@@ -11,17 +11,23 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/05-device-approve.yml'
+      - '.github/workflows/06-diagnose.yml'
       - '.github/workflows/ci-device-approve.yml'
       - 'tools/device-approve/**'
       - 'tools/telegram-approve-bot/**'
+      - 'tools/diagnose/**'
       - 'tests/device-approve/**'
+      - 'tests/diagnose/**'
   pull_request:
     paths:
       - '.github/workflows/05-device-approve.yml'
+      - '.github/workflows/06-diagnose.yml'
       - '.github/workflows/ci-device-approve.yml'
       - 'tools/device-approve/**'
       - 'tools/telegram-approve-bot/**'
+      - 'tools/diagnose/**'
       - 'tests/device-approve/**'
+      - 'tests/diagnose/**'
 
 permissions:
   contents: read
@@ -32,10 +38,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: actionlint – Workflow 05 (v3) + CI selbst
+      - name: actionlint – Workflow 05 (v3) + 06 (Diagnose) + CI selbst
         uses: docker://rhysd/actionlint:1.7.12
         with:
-          args: .github/workflows/05-device-approve.yml .github/workflows/ci-device-approve.yml
+          args: .github/workflows/05-device-approve.yml .github/workflows/06-diagnose.yml .github/workflows/ci-device-approve.yml
 
   shellcheck:
     name: "shellcheck (Shell-Skripte)"
@@ -49,7 +55,7 @@ jobs:
           shellcheck tools/telegram-approve-bot/auth_check.sh tests/device-approve/test_auth_check.sh
 
   pytest:
-    name: "pytest (device-approve v3.0 + Bot/SSoT-Parser)"
+    name: "pytest (device-approve v3.0 + Bot/SSoT-Parser + Diagnose 06)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,8 +64,8 @@ jobs:
           python-version: '3.12'
       - name: Abhängigkeiten
         run: python -m pip install --quiet pyyaml pytest requests
-      - name: pytest – tests/device-approve/
-        run: python -m pytest -v tests/device-approve/
+      - name: pytest – tests/device-approve/ + tests/diagnose/
+        run: python -m pytest -v tests/device-approve/ tests/diagnose/
 
   bash-syntax:
     name: "bash -n (Syntax)"
