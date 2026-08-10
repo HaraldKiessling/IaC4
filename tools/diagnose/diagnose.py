@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Diagnose-Workflow 06 – read-only Issue-#113-Metriken auf OpenClaw-Instanzen.
 
-Liest per SSH (deploy-user via Tailscale) read-only Metriken aus den
-Instanz-Containern (docker exec openclaw-<name> openclaw ...) – Workflow 06
+Liest per SSH (user@ip, deploy-user via Tailscale, --vps-user) read-only Metriken
+aus den Instanz-Containern (docker exec openclaw-<name> openclaw ...) – Workflow 06
 (.github/workflows/06-diagnose.yml) ruft dieses CLI mit den Workflow-Inputs auf.
 
 Modi (--mode):
@@ -46,8 +46,9 @@ except ImportError:  # pragma: no cover - Workflow installiert pyyaml vorab
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context_metrics import compute_metrics  # noqa: E402
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 DEFAULT_GLOB = "ansible/group_vars/vps-*.yml"
+DEFAULT_VPS_USER = "deploy-user"  # SSoT: ansible_user in ansible/inventories/*/hosts.yml
 VALID_MODES = ("health", "sessions", "context", "tokens", "all")
 VALID_TARGETS = ("dev", "prod", "both")
 SSH_OPTS = [
@@ -164,6 +165,16 @@ def build_context_cmd(name: str, port: int) -> str:
         f"{TRANSCRIPT_TAIL_BYTES} \"$f\"; done"
     )
     return f"sudo docker exec openclaw-{name} sh -lc '{inner}'"
+
+
+def ssh_host(user: str, ip: str) -> str:
+    """SSH-Ziel als 'user@ip'.
+
+    Der User ist Pflicht: ohne 'user@' faellt ssh auf den Lokaluser des
+    Runners zurueck ('runner') statt auf den deploy-user des VPS ->
+    'Permission denied (publickey,password)' (rc=255).
+    """
+    return f"{user}@{ip}"
 
 
 def run_ssh(
@@ -321,7 +332,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--target", default="dev", help="dev|prod|both")
     ap.add_argument("--instance", default="all", help="all|oc1|oc2|…")
     ap.add_argument("--days", type=int, default=7, help="Usage-Fenster (Tage)")
-    ap.add_argument("--vps-user", required=True)
+    ap.add_argument(
+        "--vps-user",
+        default=DEFAULT_VPS_USER,
+        help=("SSH-User auf dem VPS (Default: "
+              f"{DEFAULT_VPS_USER}, SSoT ansible/inventories)"),
+    )
     ap.add_argument("--ssh-key", required=True)
     ap.add_argument("--ts-tailnet", required=True)
     ap.add_argument("--ts-client-id", required=True)
@@ -332,6 +348,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     validate_mode(args.mode)
     validate_instance(args.instance)
+    if not args.vps_user:
+        sys.stderr.write("--vps-user darf nicht leer sein (SSH braucht user@ip)\n")
+        return 2
     if args.target not in VALID_TARGETS:
         sys.stderr.write(f"Ungueltiges Target: '{args.target}'\n")
         return 2
@@ -355,7 +374,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     infra_failures = 0
     for target, insts in by_target.items():
         try:
-            host = vps_ip(target, args.ts_tailnet, args.ts_client_id, args.ts_client_secret)
+            host = ssh_host(
+                args.vps_user,
+                vps_ip(target, args.ts_tailnet, args.ts_client_id, args.ts_client_secret),
+            )
         except Exception as e:  # noqa: BLE001 - Infrastrukturfehler melden, nicht werfen
             infra_failures += 1
             for inst in insts:

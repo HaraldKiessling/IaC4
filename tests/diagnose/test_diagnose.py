@@ -96,6 +96,58 @@ def test_build_health_cmds_read_only():
         assert "--json" in c
 
 
+def test_ssh_host_joins_user_and_ip():
+    """SSH-Ziel ist 'user@ip' (Regression: vorher nur nackte IP -> ssh fiel auf
+    den Runner-Lokaluser 'runner' zurueck -> Permission denied, rc=255)."""
+    assert diagnose.ssh_host("deploy-user", "100.64.0.1") == "deploy-user@100.64.0.1"
+    assert diagnose.ssh_host("root", "100.64.0.2") == "root@100.64.0.2"
+    assert "@" in diagnose.ssh_host("deploy-user", "100.64.0.1")
+
+
+def test_default_vps_user_matches_inventory_sot():
+    """Default --vps-user = deploy-user (SSoT: ansible_user in Inventaren)."""
+    assert diagnose.DEFAULT_VPS_USER == "deploy-user"
+
+
+def _run_main_health(monkeypatch, root, extra_args):
+    """CLI-Durchlauf (Modus health) mit gemockter Tailscale-IP + run_ssh.
+    Liefert (rc, liste_der_ssh_hosts)."""
+    hosts = []
+    monkeypatch.setattr(diagnose, "vps_ip", lambda *a, **k: "100.64.0.1")
+    monkeypatch.setattr(
+        diagnose, "run_ssh",
+        lambda ssh, host, cmd, timeout=60: hosts.append(host) or (0, "{}", ""),
+    )
+    args = ["--mode", "health", "--target", "dev", "--instance", "oc1",
+            "--ssh-key", "/tmp/id", "--ts-tailnet", "t", "--ts-client-id", "i",
+            "--ts-client-secret", "s", "--repo-root", root] + extra_args
+    rc = diagnose.main(args)
+    return rc, hosts
+
+
+def test_main_ssh_host_uses_vps_user(monkeypatch, root):
+    """Regression: jede SSH-Invokation zielt auf 'user@ip' (expliziter User)."""
+    rc, hosts = _run_main_health(monkeypatch, root, ["--vps-user", "deploy-user"])
+    assert rc == 0
+    assert hosts, "run_ssh wurde nicht aufgerufen"
+    assert all(h == "deploy-user@100.64.0.1" for h in hosts)
+
+
+def test_main_ssh_host_default_user(monkeypatch, root):
+    """Regression: ohne --vps-user greift der Default deploy-user (SSoT)."""
+    rc, hosts = _run_main_health(monkeypatch, root, [])
+    assert rc == 0
+    assert hosts
+    assert all(h == "deploy-user@100.64.0.1" for h in hosts)
+
+
+def test_main_rejects_empty_vps_user(monkeypatch, root):
+    """Leerer --vps-user ist ein Config-Fehler (Exit 2, kein '@ip'-SSH)."""
+    rc, hosts = _run_main_health(monkeypatch, root, ["--vps-user", ""])
+    assert rc == 2
+    assert hosts == []
+
+
 def test_build_sessions_cmd_read_only():
     c = diagnose.build_sessions_cmd("oc2", 18790)
     assert c == "sudo docker exec openclaw-oc2 openclaw sessions --all-agents --json"
