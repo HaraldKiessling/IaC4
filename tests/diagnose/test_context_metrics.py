@@ -53,6 +53,74 @@ def test_find_usage_variants():
     assert find_usage({"type": "text"}) is None
 
 
+def test_find_usage_openclaw_trajectory():
+    """Regression: realer OpenClaw-Trajectory-Record (v2026.7.1) traegt den
+    Usage-Block unter data.usage (input/output/cacheRead/reasoningTokens).
+    Vor dem Fix: None -> alle Token-Metriken 0 trotz echter Daten."""
+    rec = {
+        "type": "model.completed",
+        "data": {"usage": {"input": 10, "output": 5, "cacheRead": 8,
+                             "reasoningTokens": 2, "total": 23}},
+    }
+    assert find_usage(rec) == {"input": 10, "output": 5, "cacheRead": 8,
+                               "reasoningTokens": 2, "total": 23}
+    assert find_usage({"type": "model.completed", "data": {}}) is None
+
+
+def test_cache_tokens_openclaw_trajectory():
+    usage = {"input": 1000, "output": 50, "cacheRead": 900, "cacheWrite": 100}
+    assert cache_tokens(usage) == (900, 100)
+
+
+def test_compute_metrics_openclaw_trajectory():
+    """Regression: Trajectory-Format (data.usage + data.assistantTexts) wird
+    vollstaendig ausgewertet – Token-, Cache-, Reasoning- und H1/H2-Werte."""
+    block = "K" * 200  # >= MIN_BLOCK_CHARS, 2x wiederholt -> H1/H2 sichtbar
+    lines = [
+        json.dumps({"type": "model.completed", "data": {
+            "usage": {"input": 1000, "output": 200, "cacheRead": 800,
+                       "reasoningTokens": 50, "total": 2000},
+            "assistantTexts": [block],
+            "finalPromptText": "Frage 1",
+        }}),
+        json.dumps({"type": "model.completed", "data": {
+            "usage": {"input": 1200, "output": 250, "cacheRead": 950,
+                       "reasoningTokens": 60, "total": 2400},
+            "assistantTexts": [block],
+            "finalPromptText": "Frage 2",
+        }}),
+        json.dumps({"type": "prompt.submitted", "data": {"prompt": "Hallo"}}),
+    ]
+    m = compute_metrics("\n".join(lines))
+    assert m["turns_with_usage"] == 2
+    assert m["input_tokens"] == 2200
+    assert m["output_tokens"] == 450
+    assert m["reasoning_tokens"] == 110
+    assert m["cache_hit_tokens"] == 1750
+    assert m["cache_miss_tokens"] == 0
+    assert m["cache_hit_ratio"] == 1.0
+    # 200er-Block 2x -> 1 distinct repeated, 200 Bytes extra (H1/H2)
+    assert m["repeated_blocks"]["distinct_repeated"] == 1
+    assert m["repeated_blocks"]["repeated_bytes_wasted"] == 200
+    # Text-Turns: 2x model.completed (assistantTexts + finalPromptText je
+    # ein Block-Sample) + 1x prompt.submitted (data.prompt)
+    assert m["context_chars_per_turn"]["turns_sampled"] == 3
+
+
+def test_context_metrics_trajectory_no_double_count_snapshot():
+    """messagesSnapshot (akkumulierter Kontext) wird NICHT als Turn-Text
+    gezaehlt – nur assistantTexts/finalPromptText/prompt."""
+    rec = json.dumps({"type": "model.completed", "data": {
+        "usage": {"input": 1, "output": 1, "cacheRead": 1, "total": 3},
+        "assistantTexts": ["kurz"],
+        "messagesSnapshot": [{"role": "user", "content": "X" * 500}],
+    }})
+    m = compute_metrics(rec)
+    curve = m["context_chars_per_turn"]
+    assert curve["turns_sampled"] == 1
+    assert curve["last_turn_chars"] < 100  # nur "kurz" (4 Zeichen), nicht 500
+
+
 def test_cache_tokens_deepseek():
     usage = _deepseek_usage(hit=900, miss=100, inp=1000, out=50)
     hit, miss = cache_tokens(usage)

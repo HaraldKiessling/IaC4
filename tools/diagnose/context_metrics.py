@@ -48,13 +48,23 @@ def _first(d: Dict[str, Any], keys: Tuple[str, ...], default: Any = None) -> Any
 
 
 def find_usage(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Usage-Block eines model-run-Records (Top-Level oder usage-Subobjekt)."""
+    """Usage-Block eines model-run-Records (Top-Level, Subobjekt oder
+    OpenClaw-Trajectory 'data.usage')."""
     if isinstance(record.get("usage"), dict):
         return record["usage"]
     for key in ("modelRun", "completion", "run"):
         sub = record.get(key)
         if isinstance(sub, dict) and isinstance(sub.get("usage"), dict):
             return sub["usage"]
+    # OpenClaw-Trajectory (real beobachtet, Gateway 2026.7.1):
+    #   {"type": "model.completed",
+    #    "data": {"usage": {"input": …, "output": …, "cacheRead": …,
+    #                        "reasoningTokens": …, "total": …}}}
+    # Ohne diesen Zweig meldet das Tool 0 Tokens, obwohl echte Usage-Daten
+    # im Transkript stehen (Verifikation: lokale Trajectory-Transkripte).
+    data = record.get("data")
+    if isinstance(data, dict) and isinstance(data.get("usage"), dict):
+        return data["usage"]
     # flach: Record IST der Usage-Block
     if "input_tokens" in record or "output_tokens" in record:
         return record
@@ -62,12 +72,14 @@ def find_usage(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def cache_tokens(usage: Dict[str, Any]) -> Tuple[int, int]:
-    """(cache_hit, cache_miss) – DeepSeek- und OpenAI-Feldnamen."""
+    """(cache_hit, cache_miss) – DeepSeek-, OpenAI- und OpenClaw-Feldnamen."""
     details = usage.get("input_tokens_details") or {}
     if not isinstance(details, dict):
         details = {}
-    hit = usage.get("prompt_cache_hit_tokens", details.get("cacheReadTokens", 0)) or 0
-    miss = usage.get("prompt_cache_miss_tokens", details.get("cacheWriteTokens", 0)) or 0
+    hit = usage.get("prompt_cache_hit_tokens",
+                    details.get("cacheReadTokens", usage.get("cacheRead", 0))) or 0
+    miss = usage.get("prompt_cache_miss_tokens",
+                     details.get("cacheWriteTokens", usage.get("cacheWrite", 0))) or 0
     try:
         return int(hit), int(miss)
     except (TypeError, ValueError):
@@ -100,7 +112,7 @@ def record_is_error(record: Dict[str, Any]) -> bool:
 
 
 def text_blocks(record: Dict[str, Any]) -> List[str]:
-    """Text-Bloecke eines Records (Nachrichten-/Tool-Text)."""
+    """Text-Bloecke eines Records (Nachrichten-/Tool-Text, OpenClaw-Trajectory)."""
     blocks: List[str] = []
     for key in ("text", "content", "result", "output", "transcript"):
         val = record.get(key)
@@ -120,6 +132,20 @@ def text_blocks(record: Dict[str, Any]) -> List[str]:
             val = msg.get(key)
             if isinstance(val, str) and val.strip():
                 blocks.append(val)
+    # OpenClaw-Trajectory (2026.7.1): Modell-Ausgaben und Prompt-Texte liegen
+    # unter data.* – messagesSnapshot ist der akkumulierte Kontext (kein
+    # Turn-Text) und wird bewusst NICHT gezaehlt.
+    data = record.get("data")
+    if isinstance(data, dict):
+        val = data.get("assistantTexts")
+        if isinstance(val, list):
+            for item in val:
+                if isinstance(item, str) and item.strip():
+                    blocks.append(item)
+        for key in ("finalPromptText", "prompt"):
+            val = data.get(key)
+            if isinstance(val, str) and val.strip():
+                blocks.append(val)
     return blocks
 
 
@@ -135,6 +161,7 @@ def compute_metrics(
     turns = 0
     input_tokens = 0
     output_tokens = 0
+    reasoning_tokens = 0
     cache_hit = 0
     cache_miss = 0
     latencies: List[float] = []
@@ -148,8 +175,11 @@ def compute_metrics(
         usage = find_usage(rec)
         if usage:
             turns += 1
-            input_tokens += int(usage.get("input_tokens", 0) or 0)
-            output_tokens += int(usage.get("output_tokens", 0) or 0)
+            input_tokens += int(usage.get("input_tokens", usage.get("input", 0)) or 0)
+            output_tokens += int(usage.get("output_tokens", usage.get("output", 0)) or 0)
+            reasoning_tokens += int(
+                usage.get("reasoningTokens", usage.get("reasoning_tokens", 0)) or 0
+            )
             hit, miss = cache_tokens(usage)
             cache_hit += hit
             cache_miss += miss
@@ -184,6 +214,7 @@ def compute_metrics(
         "turns_with_usage": turns,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
+        "reasoning_tokens": reasoning_tokens,
         "cache_hit_tokens": cache_hit,
         "cache_miss_tokens": cache_miss,
         "cache_hit_ratio": round(cache_hit / cache_total, 4) if cache_total else None,
