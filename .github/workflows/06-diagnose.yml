@@ -1,0 +1,138 @@
+---
+# 06 – Read-only Diagnose (Issue #113): Kontext-/Token-/Cache-Metriken
+#
+#   Read-only-Diagnose-Workflow (Baseline-Evidence Phase 11, Vorschlag 1):
+#   holt per SSH (Tailscale, bestehendes Muster aus 05) read-only Metriken aus
+#   den Instanz-Containern und wertet sie lokal aus (tools/diagnose/diagnose.py
+#   + context_metrics.py). SSoT der Instanzen: ansible/group_vars/vps-*.yml.
+#
+#   Modi (Input `mode`):
+#     health   – Gateway-Health (gateway health/status, read-only)
+#     sessions – aktive/gelistete Sessions (sessions --all-agents --json)
+#     context  – Kontext-Metriken aus Transkript-JSONL (bounded geholt):
+#                Input/Output-Tokens, Cache-Hit-Anteil (cacheRead), Kontext-
+#                Groesse je Turn, wiederholte Bloecke (Issue-#113-H1/H2),
+#                Workspace-Einblendungen, Fehler/Latenz
+#     tokens   – Usage-Totals (gateway usage-cost) + Transkript-Usage
+#     all      – health + sessions + context + tokens (Default)
+#
+#   Exit-Code-Vertrag (wie 05): 0 = Erfolg (auch „leer/nicht messbar“ – gruen,
+#   Idempotenz), 1 = Infrastruktur-/Auth-/SSH-Fehler, 2 = Validierungs-/
+#   Config-Fehler. NIE schreibend: nur read-only-Kommandos (kein approve/
+#   reject/remove/delete/clean, keine Gateway-Config-Aenderung).
+#
+#   Concurrency-Group `diagnose` – GETRENNT von `device-approve` (kein
+#   Blockieren der Freigabe-Kette; Diagnose-Runs seriell untereinander,
+#   cancel-in-progress: false).
+#
+#   Secrets: TAILSCALE_OAUTH_CLIENT_ID / TAILSCALE_OAUTH_CLIENT_SECRET
+#   (Tailscale-Action v4.1.3), TAILSCALE_TAILNET, VPS_USER, SSH_KEY.
+#   KEINE Secrets in Logs: das Skript gibt nur Aggregate/JSON aus und
+#   referenziert Secrets ausschliesslich als Env-Variablen (nie echo).
+name: "06 – Read-only Diagnose (Issue #113)"
+
+run-name: "diagnose ${{ inputs.mode || 'all' }} (${{ inputs.target || 'dev' }}/${{ inputs.instance || 'all' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Modus (health | sessions | context | tokens | all)'
+        required: false
+        default: 'all'
+        type: choice
+        options: [health, sessions, context, tokens, all]
+      target:
+        description: 'Ziel-VPS (dev | prod | both)'
+        required: false
+        default: 'dev'
+        type: choice
+        options: [dev, prod, both]
+      instance:
+        description: 'OC-Instanz (all = alle, oder oc1…ocN)'
+        required: false
+        default: 'all'
+        type: string
+      days:
+        description: 'Usage-Fenster in Tagen (Modus tokens, 1-365)'
+        required: false
+        default: '7'
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnose
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: "Diagnose ${{ inputs.mode || 'all' }} (${{ inputs.target || 'dev' }}/${{ inputs.instance || 'all' }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+      TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+      TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python-Abhaengigkeit (SSoT-Parser + CLI): pyyaml (wie 05/CI)
+      - name: Python-Dependency pyyaml installieren
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+
+      - name: Connect Runner to Tailnet
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: SSH-Key vorbereiten
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      # ★ Read-only-Diagnose: 1 SSH pro VPS (Tailscale-API, vps-<target>/
+      # -1-Fallback), docker exec openclaw-<name> openclaw <read-only>.
+      # Exit-Code-Vertrag: 0 = Erfolg (auch leer/nicht messbar), 1 = Infra/
+      # Auth/SSH, 2 = Validierung/Config. --summary schreibt die Markdown-
+      # Tabelle in die Job-Summary (GITHUB_STEP_SUMMARY), JSON auf stdout.
+      - name: Read-only Diagnose ausfuehren
+        env:
+          INPUT_MODE: ${{ inputs.mode || 'all' }}
+          INPUT_TARGET: ${{ inputs.target || 'dev' }}
+          INPUT_INSTANCE: ${{ inputs.instance || 'all' }}
+          INPUT_DAYS: ${{ inputs.days || '7' }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## 🔍 Read-only Diagnose (Issue #113)"
+            echo ""
+            echo "| Feld | Wert |"
+            echo "|------|------|"
+            echo "| **Modus** | $INPUT_MODE |"
+            echo "| **Target** | $INPUT_TARGET |"
+            echo "| **Instanz** | $INPUT_INSTANCE |"
+            echo "| **Usage-Tage** | $INPUT_DAYS |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          python3 tools/diagnose/diagnose.py \
+            --mode "$INPUT_MODE" \
+            --target "$INPUT_TARGET" \
+            --instance "$INPUT_INSTANCE" \
+            --days "$INPUT_DAYS" \
+            --vps-user "$VPS_USER" \
+            --ssh-key ~/.ssh/id_ed25519 \
+            --ts-tailnet "$TS_TAILNET" \
+            --ts-client-id "$TS_CLIENT_ID" \
+            --ts-client-secret "$TS_CLIENT_SECRET" \
+            --repo-root . \
+            --summary
