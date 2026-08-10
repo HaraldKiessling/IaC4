@@ -34,6 +34,9 @@
         "maxConcurrent": 4,
         "maxSpawnDepth": 1,
         "runTimeoutSeconds": 900
+      },
+      "params": {
+        "cacheRetention": "medium"
       }
     }
   },
