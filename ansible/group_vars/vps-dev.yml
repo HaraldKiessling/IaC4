@@ -45,13 +45,6 @@ openclaw_instances:
       maxChildrenPerAgent: 5
       maxConcurrent: 4               # Konstante (identisch OC2/OC3)
       runTimeoutSeconds: 900         # Konstante (identisch OC2/OC3)
-    # Issue #113 (2026-08-09): DeepSeek Prompt-Caching aktivieren – cacheRetention
-    # short|medium|long; Input-Cache-Hits ~Faktor 50 guenstiger (0,0028 vs 0,14 $/M,
-    # scripts/benchmark/.env.example). OC1 = Single-Agent, kurze Sessions: context_pruning
-    # BEWUSST aus ({}, rendert keinen Key) – Architekt-Empfehlung (kein Bloat zu erwarten).
-    agent_params:
-      cacheRetention: "medium"
-    context_pruning: {}               # aus (OC1: Single-Agent, kurze Sessions)
   - name: oc2
     enabled: true
     port: 18790
@@ -96,20 +89,6 @@ openclaw_instances:
     # einzige Benchmark-Variable = Modell-Mix. Deny nur Control-Plane-Tools, die
     # OpenClaw Sub-Agents ohnehin via SUBAGENT_TOOL_DENY_ALWAYS sperrt (prod-unschädlich).
     subagents_tools_deny: ["cron", "gateway"]
-    # Issue #113 (2026-08-09): DeepSeek cacheRetention (medium) + contextPruning
-    # (cache-ttl, ttl 5m, softTrim 0.3 / hardClear 0.5, min 50k Tool-Chars, letzte 3
-    # Assistent-Turns geschuetzt). Pruning ist in-memory-only (Transkript auf Platte
-    # unveraendert, docs.openclaw.ai/concepts/session-pruning) – senkt Kontext-Bloat
-    # durch alte Tool-Ergebnisse und verbessert die Prompt-Cache-Ausnutzung.
-    agent_params:
-      cacheRetention: "medium"
-    context_pruning:
-      mode: "cache-ttl"
-      ttl: "5m"
-      softTrimRatio: 0.3
-      hardClearRatio: 0.5
-      minPrunableToolChars: 50000
-      keepLastAssistants: 3
     # Design 06 (PR #83): Per-Agent-Workspaces + Rollen-AGENTS.md
     # Tool-Scoping revidiert (14:45): Orchestrator braucht volle Tools als Pass-Through
     # (Vererbung an Kinder); Steuerung via AGENTS.md-Mandat (weich).
@@ -160,16 +139,3 @@ openclaw_instances:
     # braucht volle Tools als Pass-Through; Steuerung via AGENTS.md-Mandat (weich).
     agent_workspaces: true
     subagents_tools_deny: ["cron", "gateway"]
-    # Issue #113 (2026-08-09): identisch zu OC2 (Team-Instanz, 4 Agents) –
-    # cacheRetention medium + contextPruning cache-ttl. OC3 ist in dev aktiv
-    # (enabled: true); Deploy-Scope der Phase-11-Folgeschritte = oc1+oc2, die
-    # OC3-Konfiguration greift erst beim naechsten OC3-Deploy (deklarativ, inert).
-    agent_params:
-      cacheRetention: "medium"
-    context_pruning:
-      mode: "cache-ttl"
-      ttl: "5m"
-      softTrimRatio: 0.3
-      hardClearRatio: 0.5
-      minPrunableToolChars: 50000
-      keepLastAssistants: 3

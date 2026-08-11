@@ -101,28 +101,6 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             if oc.get('subagents_tools_deny'):
                 assert d['tools']['subagents']['tools']['deny'] == oc['subagents_tools_deny'], \
                     f"{oc['name']}: tools.subagents.deny falsch"
-            # Issue #113 (2026-08-09): agents.defaults.params (Provider-Params, z.B.
-            # DeepSeek cacheRetention) + contextPruning – bedingtes Rendering:
-            # gesetzt (nicht leer) => exakt gerendert; nicht gesetzt/leer {} => KEIN Key
-            # (Byte-Identitaet fuer prod + Instanzen ohne Feld). "params" ist Sibling
-            # von "model" (OpenClaw-Schema, docs.openclaw.ai/gateway/config-agents) –
-            # Guard gegen falsches Verschachteln in model.params (Strict-Validation).
-            ap = oc.get('agent_params') or {}
-            cp = oc.get('context_pruning') or {}
-            defaults = d['agents']['defaults']
-            if ap:
-                assert defaults.get('params') == ap, \
-                    f"{oc['name']}: defaults.params != agent_params"
-                if 'model' in defaults:
-                    assert 'params' not in defaults['model'], \
-                        f"{oc['name']}: params fälschlich in model verschachtelt (Schema-Verstoß)"
-            else:
-                assert 'params' not in defaults, f"{oc['name']}: params-Key unerwartet (Byte-Identität verletzt)"
-            if cp:
-                assert defaults.get('contextPruning') == cp, \
-                    f"{oc['name']}: defaults.contextPruning != context_pruning"
-            else:
-                assert 'contextPruning' not in defaults, f"{oc['name']}: contextPruning-Key unerwartet (Byte-Identität verletzt)"
             e2 = jinja2.Environment()
             e2.globals['lookup'] = fake_lookup
             yaml.safe_load(e2.from_string(COMPOSE).render(

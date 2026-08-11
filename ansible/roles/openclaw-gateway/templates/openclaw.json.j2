@@ -40,22 +40,6 @@
 {% if subagents_defaults %},
       "subagents": {{ subagents_defaults | tojson }}
 {% endif %}
-{# Issue #113 (2026-08-09): Kontext-Optimierung – Provider-Params (DeepSeek
-   cacheRetention: short|medium|long, Prompt-Caching-Faktor ~50) + contextPruning
-   (mode cache-ttl; leeres {} = kein Rendering, mode "off" = explizit aus).
-   Abweichung von der Architekt-Spec (dokumentiert, Evidenz docs.openclaw.ai/
-   gateway/config-agents): "params" ist SIBLING von "model" unter agents.defaults
-   ("global default provider parameters", Beispiel { cacheRetention: "long" });
-   NICHT model.params – OpenClaw validiert strikt (unbekannte Keys in model
-   verweigern den Gateway-Start). contextPruning-Felder laut /concepts/session-pruning. #}
-{% set agent_params = oc.agent_params | default({}, true) %}
-{% set oc_ctx_pruning = oc.context_pruning | default({}, true) %}
-{% if agent_params %},
-      "params": {{ agent_params | tojson }}
-{% endif %}
-{% if oc_ctx_pruning %},
-      "contextPruning": {{ oc_ctx_pruning | tojson }}
-{% endif %}
     }
 {% if oc.agents | length > 0 %},
     "list": [
