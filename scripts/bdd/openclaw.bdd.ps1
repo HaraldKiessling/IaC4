@@ -1,8 +1,8 @@
 #!/usr/bin/env pwsh
 # Feature: OpenClaw-Gateways (Phase 2e, ADR-025 revidiert) – Docker-Container, Multi-Instanz
 # Verifiziert: Health je Instanz via HTTPS (TS-Serve-TLS), Ports von außen dicht,
-# openclaw.json je Instanz (SSoT), Instanz-Liste (DEV: OC1-OC3 aktiv; PROD: OC3 disabled,
-# Design 01-oc2-oc3-benchmark – Instanzen je Target via run-all.ps1/Workflow gesteuert),
+# openclaw.json je Instanz (SSoT), Instanz-Liste (DEV+PROD: OC1-OC3 aktiv; seit 2026-08-11
+# auch PROD-OC3 freigeschaltet, Harald-Freigabe – DisabledInstances via run-all.ps1 steuerbar),
 # O5: Ressourcen-Kovariate (docker stats, V5/Design 01 Kap. 6.3).
 # MagicDNS fehlt auf GH-Runnern -> --resolve auf die Tailscale-IP (VpsIp).
 param(
@@ -78,12 +78,12 @@ foreach ($inst in $Instances.Split(',')) {
     Then-True "openclaw.json existiert und ist valides JSON" ($r.Output -match 'OK') $r.Output
 }
 
-# ── O4: Nicht aktive Instanz nicht deployed (Default leer; PROD: oc3) ──
+# ── O4: Nicht aktive Instanz nicht deployed (Default leer; steuerbar via DisabledInstances) ──
 if (-not [string]::IsNullOrWhiteSpace($DisabledInstances)) {
 foreach ($inst in $DisabledInstances.Split(',')) {
     $inst = $inst.Trim()
     Write-Host "`nScenario: Instanz $inst – nicht deployed (geplant)" -ForegroundColor Yellow
-    Given "enabled=false in openclaw_instances (PROD: oc3 bleibt disabled bis Benchmark-Abschluss, Design 01-oc2-oc3-benchmark Kap. 4.4)"
+    Given "enabled=false in openclaw_instances (via DisabledInstances-Parameter steuerbar)"
     $r = Invoke-SSH "sudo docker ps --filter name=^openclaw-$inst$ --format '{{.Names}}'" $VpsUser $VpsIp $SshKeyPath
     When "docker ps fuer openclaw-$inst abgefragt wird"
     Then-True "Kein Container openclaw-$inst" ($r.Output -notmatch 'openclaw') $r.Output

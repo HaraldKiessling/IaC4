@@ -100,7 +100,7 @@ Ziel: Jede Phase des Deploy-Modells (0→2e→3) bekommt Feature-Skripte, die de
 | O1 | Health je aktiver Instanz via HTTPS (TS-Serve-TLS) | Runner → `https://<fqdn>:<port>/health` → HTTP 200 + Body `"ok"` (oc1:18789, oc2:18790) |
 | O2 | Gateway-Ports von außen dicht | Runner → `http://<Public-IP>:18789/18790/18791` → kein HTTP-Response |
 | O3 | `openclaw.json` (SSoT) je Instanz vorhanden + JSON-valid | Existenz + `python3 -m json.tool` (Exit 0) |
-| O4 | Geplante Instanz nicht deployed | `docker ps` → kein Container `openclaw-oc3` (enabled=false) |
+| O4 | Nicht aktive Instanz nicht deployed | `docker ps` → kein Container (steuerbar via DisabledInstances; seit 2026-08-11 keine disabled Instanz auf DEV/PROD) |
 
 ### Geplant (sobald Services deployt sind)
 - **OpenClaw:** Agents erreichbar (Deep-Dive, über O1 hinaus)

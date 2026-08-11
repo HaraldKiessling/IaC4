@@ -38,3 +38,4 @@ build/
 
 # Temp
 /tmp/
+node_modules

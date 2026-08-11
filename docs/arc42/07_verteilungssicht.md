@@ -15,7 +15,7 @@
     ├── Container: code-server  → Port 8443 (via Traefik)
     ├── Container: openclaw-oc1 → Port 18789 (localhost-only, TS-Serve-TLS) – Default-Gateway
     ├── Container: openclaw-oc2 → Port 18790 (localhost-only, TS-Serve-TLS) – DevOps (4 Agents)
-    └── Container: openclaw-oc3 → Port 18791 (geplant, enabled=false)
+    └── Container: openclaw-oc3 → Port 18791 (aktiv, Best-Practice-Referenz – Design 01-oc2-oc3-benchmark)
 ```
 
 ## Netzwerk-Security (nach SSH-Transition)
@@ -26,7 +26,7 @@
 | Qdrant | localhost + Tailscale | Tailscale ACL |
 | Code-Server | Tailscale (Traefik-Route) | Traefik-ForwardAuth |
 | OpenClaw OC1/OC2 | Tailscale via Serve-TLS (18789/18790) | Gateway-Token + Tailscale ACL |
-| OpenClaw OC3 | DEV: aktiv (Best-Practice-Referenz, Benchmark – Design 01-oc2-oc3-benchmark); PROD: geplant (disabled bis Benchmark-Abschluss) | Port 18791 |
+| OpenClaw OC3 | DEV: aktiv (Best-Practice-Referenz, Benchmark – Design 01-oc2-oc3-benchmark); PROD: aktiv seit 2026-08-11 (Harald-Freigabe) | Port 18791 |
 
 ## SSH-Transition (zeitlich)
 | Phase | SSH-Zugriff | Via | Dauer |
