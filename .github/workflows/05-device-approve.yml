@@ -388,7 +388,7 @@ jobs:
             -e OPENCLAW_STATE_DIR=/tmp/e2e \
             -e OPENCLAW_GATEWAY_URL="wss://${E2E_HOST}:${E2E_PORT}" \
             -e OPENCLAW_GATEWAY_TOKEN="$GW_TOKEN" \
-            "$OPENCLAW_IMAGE" agent --message "Echo-Test OC3 PROD: antworte mit genau OC3_OK" --json 2>&1)
+            "$OPENCLAW_IMAGE" agent --agent orchestrator --message "Echo-Test OC3 PROD: antworte mit genau OC3_OK" --json 2>&1)
           CHAT_RC=$?
           set -e
           echo "RC: $CHAT_RC"
