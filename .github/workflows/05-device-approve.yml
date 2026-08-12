@@ -251,7 +251,14 @@ jobs:
       - name: "Device E2E Lifecycle (Request→List→Approve→Nutzbar→Delete→Nicht-nutzbar)"
         if: ${{ inputs.mode == 'e2e' }}
         env:
-          GW_TOKEN: ${{ inputs.target == 'dev' && secrets.DEV_OC1_GATEWAY_TOKEN || secrets.PROD_OC1_GATEWAY_TOKEN }}
+          # Instanz-spezifische Gateway-Tokens (Fix 2026-08-12): vorher war GW_TOKEN
+          # hart auf OC1 codiert – E2E für oc2/oc3 nutzte das falsche Secret.
+          GW_TOKEN_DEV_OC1: ${{ secrets.DEV_OC1_GATEWAY_TOKEN }}
+          GW_TOKEN_DEV_OC2: ${{ secrets.DEV_OC2_GATEWAY_TOKEN }}
+          GW_TOKEN_DEV_OC3: ${{ secrets.DEV_OC3_GATEWAY_TOKEN }}
+          GW_TOKEN_PROD_OC1: ${{ secrets.PROD_OC1_GATEWAY_TOKEN }}
+          GW_TOKEN_PROD_OC2: ${{ secrets.PROD_OC2_GATEWAY_TOKEN }}
+          GW_TOKEN_PROD_OC3: ${{ secrets.PROD_OC3_GATEWAY_TOKEN }}
           OPENCLAW_IMAGE: "ghcr.io/openclaw/openclaw:2026.7.1"   # Pin (ADR-017)
         run: |
           set -euo pipefail
@@ -261,6 +268,13 @@ jobs:
             oc3) E2E_PORT=18791 ;;
             *) echo "❌ Unbekannte Instanz: $APPROVE_INSTANCE" >&2; exit 2 ;;
           esac
+          # Instanz-spezifisches Gateway-Token auflösen (Fix 2026-08-12)
+          GW_TOKEN_VAR="GW_TOKEN_$(echo "${APPROVE_TARGET}" | tr '[:lower:]' '[:upper:]')_$(echo "${APPROVE_INSTANCE}" | tr '[:lower:]' '[:upper:]')"
+          GW_TOKEN="${!GW_TOKEN_VAR:-}"
+          if [ -z "$GW_TOKEN" ]; then
+            echo "❌ Kein Gateway-Token für ${APPROVE_TARGET}/${APPROVE_INSTANCE} (Secret ${GW_TOKEN_VAR} fehlt/leer)" >&2
+            exit 2
+          fi
           E2E_HOST="vps-${APPROVE_TARGET}.${TS_TAILNET}"
           STATE_DIR="/tmp/e2e-${APPROVE_TARGET}-${APPROVE_INSTANCE}"
           # VPS-IP via Tailscale-API (etabliertes Muster, vps-<target>/-1-Fallback)
@@ -362,6 +376,28 @@ jobs:
           printf '%s\n' "$OUT"
           printf '%s' "$OUT" | grep -q '"ok": true' || { echo "❌ [4] Verbindung NICHT nutzbar" >&2; exit 1; }
           echo "✅ [4] Verbindung nutzbar (health ok: true)"
+          # ── 4b) ECHTER MESSAGE-AUSTAUSCH (Fix 2026-08-12 v2): Default-Mechanik wie Benchmark ──
+          # KEIN neuer API-Endpoint (Chat Completions bleibt per Default deaktiviert, Harald-Entscheid).
+          # Benchmark-Mechanik (iac4-design/03-benchmark-durchfuehrung.md §2):
+          #   OPENCLAW_GATEWAY_URL + OPENCLAW_GATEWAY_TOKEN als Env + openclaw agent --json
+          #   (docs/gateway/remote.md) – Token kommt NIE in Prozess-Args (ps-sicher).
+          echo "=== [4b] Message-Austausch (openclaw agent via Env, Default-Mechanik) ==="
+          set +e
+          CHAT_OUT=$(docker run --rm --network host --entrypoint openclaw -u root \
+            -v "$STATE_DIR:/tmp/e2e" \
+            -e OPENCLAW_STATE_DIR=/tmp/e2e \
+            -e OPENCLAW_GATEWAY_URL="wss://${E2E_HOST}:${E2E_PORT}" \
+            -e OPENCLAW_GATEWAY_TOKEN="$GW_TOKEN" \
+            "$OPENCLAW_IMAGE" agent --agent orchestrator --message "Echo-Test OC3 PROD: antworte mit genau OC3_OK" --json 2>&1)
+          CHAT_RC=$?
+          set -e
+          echo "RC: $CHAT_RC"
+          printf '%s' "$CHAT_OUT" | head -c 600; echo
+          if [ "$CHAT_RC" -eq 0 ] && printf '%s' "$CHAT_OUT" | grep -qi 'OC3_OK'; then
+            echo "✅ [4b] Message-Austausch erfolgreich (Antwort enthaelt OC3_OK)"
+          else
+            echo "⚠️ [4b] Keine explizite Antwort erkannt (rc=$CHAT_RC) – health ok bleibt der harte Beweis"
+          fi
           # ── 5) Löschen (remove paired deviceId) ──
           # deviceId stammt aus dem [2]-pending-Eintrag (64er-Hash, identisch
           # nach approve); Fallback: clientId-Scan im paired[] (cli|openclaw-cli).
