@@ -33,12 +33,39 @@ openclaw_instances:
     gh_token_env: "PROD_OC2_GH_TOKEN"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
   - name: oc3
-    enabled: false
+    enabled: true
     port: 18791
-    label: "OC3 – Future Purpose (geplant)"
+    label: "OC3 – Best-Practice-Referenz (4 Agents, Modell-Mix – Design 01-oc2-oc3-benchmark)"
     llm_provider: deepseek
     websearch_api_key_env: "PROD_OC3_WEBSEARCH_API_KEY"
     gateway_token_env: "PROD_OC3_GATEWAY_TOKEN"
     telegram_bot_token_env: "PROD_OC3_TELEGRAM_BOT_TOKEN"
     gh_token_env: "PROD_OC3_GH_TOKEN"
-    agents: []
+    agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
+    agent_models:
+      Orchestrator:
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+      Architect:
+        primary: "deepseek/deepseek-v4-pro"
+        fallbacks: ["deepseek/deepseek-v4-flash"]
+      "Engineer Pro":
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro"]
+      Reviewer:
+        primary: "deepseek/deepseek-v4-pro"
+        fallbacks: ["deepseek/deepseek-v4-flash"]
+    agent_thinking:
+      Orchestrator: "medium"
+      Architect: "high"
+      "Engineer Pro": "medium"
+      Reviewer: "high"
+    subagents_defaults:
+      delegationMode: "prefer"
+      maxSpawnDepth: 2
+      maxChildrenPerAgent: 5
+      maxConcurrent: 4
+      runTimeoutSeconds: 900
+    subagents_allow_agents: ["orchestrator", "architect", "engineer-pro", "reviewer"]
+    agent_workspaces: true
+    subagents_tools_deny: ["cron", "gateway"]
