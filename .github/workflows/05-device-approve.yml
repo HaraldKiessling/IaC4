@@ -376,21 +376,27 @@ jobs:
           printf '%s\n' "$OUT"
           printf '%s' "$OUT" | grep -q '"ok": true' || { echo "❌ [4] Verbindung NICHT nutzbar" >&2; exit 1; }
           echo "✅ [4] Verbindung nutzbar (health ok: true)"
-          # ── 4b) ECHTER MESSAGE-AUSTAUSCH (Fix 2026-08-12): Chat-Turn via Gateway-Token ──
-          # Sends a real agent message over wss:// with the instance-specific gateway token
-          # and verifies the gateway delivers a reply (proves token works for chat, not only health).
-          echo "=== [4b] Message-Austausch (echter Chat-Turn) ==="
+          # ── 4b) ECHTER MESSAGE-AUSTAUSCH (Fix 2026-08-12): Chat-Turn via HTTP-API ──
+          # openclaw terminal (TUI) erzwingt Local-Mode und verbietet --url/--token (CLI 2026.7.1).
+          # Korrekter Weg: OpenAI-kompatible HTTP-API /v1/chat/completions mit Bearer-Token
+          # (docs.openclaw.ai/gateway/openai-http-api) – dieselbe Oberfläche wie der
+          # Gateway-Token-Verify-Job (GET /v1/models → 200). Beweist, dass der Token
+          # echte Chat-Messages trägt, nicht nur health.
+          echo "=== [4b] Message-Austausch (echter Chat-Turn via HTTP-API) ==="
           set +e
-          CHAT_OUT=$(CLIENT terminal --url "wss://${E2E_HOST}:${E2E_PORT}" --token "$GW_TOKEN" \
-            --message "Echo-Test OC3 PROD: antworte mit OC3_OK" --session "e2e-${APPROVE_TARGET}-${APPROVE_INSTANCE}" \
-            --deliver --timeout-ms 90000 2>&1)
+          CHAT_OUT=$(curl -sk --max-time 120 \
+            -H "Authorization: Bearer $GW_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"model":"openclaw/default","user":"e2e:'"${APPROVE_TARGET}"'-'"${APPROVE_INSTANCE}"'","messages":[{"role":"user","content":"Echo-Test OC3 PROD: antworte mit genau OC3_OK"}]}' \
+            "https://${E2E_HOST}:${E2E_PORT}/v1/chat/completions" 2>&1)
           CHAT_RC=$?
           set -e
-          printf '%s\n' "$CHAT_OUT" | tail -20
-          if [ "$CHAT_RC" -eq 0 ] && printf '%s' "$CHAT_OUT" | grep -qiE 'OC3_OK|assistant|reply' ; then
-            echo "✅ [4b] Message-Austausch erfolgreich (Antwort empfangen)"
+          echo "HTTP-RC: $CHAT_RC"
+          printf '%s' "$CHAT_OUT" | head -c 500; echo
+          if [ "$CHAT_RC" -eq 0 ] && printf '%s' "$CHAT_OUT" | grep -qi 'OC3_OK'; then
+            echo "✅ [4b] Message-Austausch erfolgreich (Antwort enthaelt OC3_OK)"
           else
-            echo "⚠️ [4b] Keine explizite Antwort erkannt (rc=$CHAT_RC) – Session/Turn trotzdem ausgeführt, health ok bleibt der harte Beweis"
+            echo "⚠️ [4b] Keine explizite Antwort erkannt (rc=$CHAT_RC) – health ok bleibt der harte Beweis"
           fi
           # ── 5) Löschen (remove paired deviceId) ──
           # deviceId stammt aus dem [2]-pending-Eintrag (64er-Hash, identisch
