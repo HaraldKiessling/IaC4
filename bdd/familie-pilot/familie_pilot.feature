@@ -1,41 +1,43 @@
 # language: de
-# BDD-Feature: Familien-Instanz auf oc1 (dev) — Pilot (GH Issue #126)
-# Referenz-Konzept: iac4-pilot/konzept-pilot-oc1-dev.md
+# BDD-Feature: Familien-Instanz auf oc4 (dev) — Pilot (GH Issue #126)
+# Referenz-Konzept: iac4-pilot/konzept-pilot-oc1-dev.md (Dateiname historisch, Zielinstanz oc4)
 # Syntax: Feature/Scenario/Given/When/Then — deutsch, technisch umsetzbar.
-# Jedes Szenario bildet genau ein Abnahmekriterium (K1–K8) aus #126 ab.
-# Szenario-Anzahl: 14 (K1: 1, K2: 2, K3: 3, K4: 2, K5: 2, K6: 2, K7: 1, K8: 1).
-# Hinweis: Die Personen-Namen "harald"/"anna" sind Platzhalter (Beispielwerte); solange
-# Q3 (Pilot-Personen) offen ist, werden sie nach Klärung durch die echten Namen ersetzt.
+# Jedes Szenario bildet genau ein Abnahmekriterium (K1–K9) aus #126 ab.
+# Szenario-Anzahl: 15 (K1: 1, K2: 2, K3: 3, K4: 2, K5: 2, K6: 2, K7: 1, K8: 1, K9: 1).
+# Hinweis: Die Personen-Namen "harald"/"anna" sind Platzhalter (Beispielwerte). Q3 ist
+# beantwortet (Personen + BotFather-Tokens nachlieferbar); die Platzhalter werden nach
+# Klärung der echten Namen ersetzt.
 
-Funktionalität: Familien-Instanz auf oc1 (dev)
-  Als Betreiber (Harald) möchte ich EINE OpenClaw-Instanz (oc1, dev) betreiben,
+Funktionalität: Familien-Instanz auf oc4 (dev)
+  Als Betreiber (Harald) möchte ich EINE OpenClaw-Instanz (oc4, dev) betreiben,
   die mehrere Familienmitglieder mit geteilten LLM-Keys, getrenntem Speicher
   und je einem eigenen Telegram-Bot versorgt, damit die Familie gemeinsam
   Infrastruktur nutzt, aber getrennt arbeitet.
+  (Die bestehende Instanz oc1 bleibt als Vanilla-/Benchmark-Baseline unangetastet.)
 
   Hintergrund:
-    Angenommen die Instanz "oc1" ist per Feature-Branch "feature/pilot-familie-oc1-dev"
+    Angenommen die Instanz "oc4" ist per Feature-Branch "feature/pilot-familie-oc4-dev"
     auf dem dev-VPS "vps-dev.tailcfea8a.ts.net" deployt
-    Und das Gateway ist über Tailscale Serve unter Port 18789 erreichbar
+    Und das Gateway ist über Tailscale Serve unter Port 18792 erreichbar
     Und die Personen "harald" und "anna" sind als Agents in "agents.list" konfiguriert
     Und die Telegram-Accounts "harald" und "anna" existieren in "channels.telegram.accounts"
 
   # ---------------------------------------------------------------------------
-  # K1: Instanz läuft auf oc1 (dev), Gateway erreichbar
+  # K1: Instanz läuft auf oc4 (dev), Gateway erreichbar
   # ---------------------------------------------------------------------------
-  Szenario: Gateway der Familien-Instanz ist auf oc1 erreichbar
-    Angenommen der Docker-Container "openclaw-oc1" läuft auf "vps-dev.tailcfea8a.ts.net"
-    Wenn ich den Health-Endpunkt "https://vps-dev.tailcfea8a.ts.net:18789/health" aufrufe
+  Szenario: Gateway der Familien-Instanz ist auf oc4 erreichbar
+    Angenommen der Docker-Container "openclaw-oc4" läuft auf "vps-dev.tailcfea8a.ts.net"
+    Wenn ich den Health-Endpunkt "https://vps-dev.tailcfea8a.ts.net:18792/health" aufrufe
     Dann ist der HTTP-Status 200
-    Und der Container-Status von "openclaw-oc1" ist "healthy"
-    Und "tailscale serve status" enthält eine Route "18789 → localhost:18789"
+    Und der Container-Status von "openclaw-oc4" ist "healthy"
+    Und "tailscale serve status" enthält eine Route "18792 → localhost:18792"
 
   # ---------------------------------------------------------------------------
   # K2: ≥2 Personen je eigener Bot, geroutet auf eigene Persona
   # ---------------------------------------------------------------------------
   Szenario: Jeder Personen-Bot routet auf die eigene Agent-Persona
-    Angenommen der Telegram-Bot für "harald" hat den Token aus "DEV_OC1_TELEGRAM_BOT_HARALD"
-    Und der Telegram-Bot für "anna" hat den Token aus "DEV_OC1_TELEGRAM_BOT_ANNA"
+    Angenommen der Telegram-Bot für "harald" hat den Token aus "DEV_OC4_TELEGRAM_BOT_HARALD"
+    Und der Telegram-Bot für "anna" hat den Token aus "DEV_OC4_TELEGRAM_BOT_ANNA"
     Wenn eine DM an den Bot von "harald" gesendet wird
     Dann wird die Nachricht an den Agent "harald" geroutet
     Und die Antwort trägt die Identity von Agent "harald"
@@ -79,14 +81,14 @@ Funktionalität: Familien-Instanz auf oc1 (dev)
   # ---------------------------------------------------------------------------
   Szenario: Beide Agents lösen denselben geteilten Provider-Key auf
     Angenommen "models.providers.deepseek.apiKey" ist als SecretRef "${DEV_DEEPSEEK_API_KEY}" konfiguriert
-    Und die Container-Umgebung von "openclaw-oc1" enthält "DEV_DEEPSEEK_API_KEY"
+    Und die Container-Umgebung von "openclaw-oc4" enthält "DEV_DEEPSEEK_API_KEY"
     Wenn Agent "harald" einen LLM-Call über den Provider "deepseek" ausführt
     Dann ist der Call erfolgreich (HTTP 200 des Providers)
     Und im Config-Dump von "openclaw.json" erscheint kein Plaintext-API-Key
 
   Szenario: SecretRef wird zur Laufzeit aufgelöst und nicht persistiert
-    Angenommen das gerenderte "openclaw.json" von oc1 enthält nur den SecretRef "${DEV_DEEPSEEK_API_KEY}"
-    Und die Container-Umgebung von "openclaw-oc1" enthält "DEV_DEEPSEEK_API_KEY"
+    Angenommen das gerenderte "openclaw.json" von oc4 enthält nur den SecretRef "${DEV_DEEPSEEK_API_KEY}"
+    Und die Container-Umgebung von "openclaw-oc4" enthält "DEV_DEEPSEEK_API_KEY"
     Wenn der Gateway-Prozess startet oder reloadt
     Dann wird der SecretRef "${DEV_DEEPSEEK_API_KEY}" aus der Prozess-Umgebung aufgelöst
     Und ein Reload erfolgt als "atomic swap" (belegtes Verhalten laut secrets.md)
@@ -98,7 +100,7 @@ Funktionalität: Familien-Instanz auf oc1 (dev)
   # K5: Secrets liegen nicht in Git
   # ---------------------------------------------------------------------------
   Szenario: Keine Secret-Werte im committeten Repository
-    Angenommen der Feature-Branch "feature/pilot-familie-oc1-dev" ist gepusht
+    Angenommen der Feature-Branch "feature/pilot-familie-oc4-dev" ist gepusht
     Wenn ich den Branch auf Secret-Muster durchsuche ("sk-", Bot-Token-Format, API-Keys)
     Dann gibt es keinen Treffer für echte Secret-Werte
     Und die Datei ".env" ist via ".gitignore" ausgeschlossen
@@ -108,7 +110,7 @@ Funktionalität: Familien-Instanz auf oc1 (dev)
     Angenommen der CI-Workflow "ci.yml" läuft auf dem Feature-Branch
     Wenn ein Secret-Scan (gitleaks oder äquivalent) ausgeführt wird
     Dann meldet der Scan keine Befunde
-    Und "openclaw secrets audit --check" auf oc1 ist sauber
+    Und "openclaw secrets audit --check" auf oc4 ist sauber
 
   # ---------------------------------------------------------------------------
   # K6: Update-/Backup-/Restart-Prozedur dokumentiert
@@ -119,16 +121,16 @@ Funktionalität: Familien-Instanz auf oc1 (dev)
     Dann ist der Ablauf schriftlich mit Rollback-Pfad (alten Pin wiederherstellen) dokumentiert
 
   Szenario: Backup- und Restart-Prozedur ist dokumentiert
-    Angenommen die Doku benennt die zu sichernden Pfade "/srv/openclaw/oc1/config" und "/srv/openclaw/oc1/workspace"
+    Angenommen die Doku benennt die zu sichernden Pfade "/srv/openclaw/oc4/config" und "/srv/openclaw/oc4/workspace"
     Wenn ein Backup durchgeführt wird
     Dann ist ein Wiederherstellungsweg (Restore der Volumes + Secrets) dokumentiert
-    Und der Restart-Weg ("docker compose restart openclaw-oc1") ist dokumentiert
+    Und der Restart-Weg ("docker compose restart openclaw-oc4") ist dokumentiert
 
   # ---------------------------------------------------------------------------
   # K7: Review durchgeführt (Autor ≠ Reviewer), Befund dokumentiert
   # ---------------------------------------------------------------------------
   Szenario: Unabhängiger Review mit dokumentiertem Befund
-    Angenommen der Pilot ist auf dem Feature-Branch "feature/pilot-familie-oc1-dev" umgesetzt
+    Angenommen der Pilot ist auf dem Feature-Branch "feature/pilot-familie-oc4-dev" umgesetzt
     Wenn ein Pull Request erstellt wird
     Dann ist der Review-Autor verschieden vom Implementierungs-Autor
     Und der Review-Befund ist im PR (Kommentar oder "iac4-design"-Dokument) dokumentiert
@@ -138,9 +140,23 @@ Funktionalität: Familien-Instanz auf oc1 (dev)
   # K8: Kein Merge nach main während des Pilots
   # ---------------------------------------------------------------------------
   Szenario: Kein Merge nach main während des Pilots
-    Angenommen der Feature-Branch "feature/pilot-familie-oc1-dev" ist der Deploy-Branch
+    Angenommen der Feature-Branch "feature/pilot-familie-oc4-dev" ist der Deploy-Branch
     Wenn der Pilot aktiv läuft
     Dann ist die PR-Basis des Pilot-PRs "main"
     Und es existiert kein Merge-Commit und kein Merge-Event auf "main" für den Feature-Branch
-    Und der Feature-Branch "feature/pilot-familie-oc1-dev" bleibt bestehen
+    Und der Feature-Branch "feature/pilot-familie-oc4-dev" bleibt bestehen
     Und Deploys nach dev erfolgen ausschließlich vom Feature-Branch
+
+  # ---------------------------------------------------------------------------
+  # K9: Workflow 05 erweitert — Device-Pairing + mehrere Telegram-Bots (Multi-Account)
+  # ---------------------------------------------------------------------------
+  Szenario: Workflow 05 genehmigt Device-Pairing und mehrere Telegram-Bots auf oc4
+    Angenommen Workflow "05-device-approve.yml" kennt die Instanz "oc4" mit Port 18792
+    Und das Secret "DEV_OC4_GATEWAY_TOKEN" ist im Workflow als E2E-Gateway-Token hinterlegt
+    Wenn ein Device-Pairing-Request für den Container "openclaw-oc4" eingeht
+    Dann kann der Request per "openclaw devices approve <ID>" freigegeben werden
+    Und der E2E-Modus des Workflows löst für "oc4" den Port 18792 und das Gateway-Token auf
+    Wenn ein Telegram-Pairing-Request für den Bot "harald" und einer für den Bot "anna" eingehen
+    Dann kann die Freigabe je Account ("harald" und "anna") erfolgen
+    Und die Genehmigungs-Whitelist "TELEGRAM_APPROVE_USERS" ist pro Bot/Account abbildbar
+    Und der CI-Workflow "ci-device-approve.yml" läuft auf dem Feature-Branch grün

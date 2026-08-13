@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# bdd-lib.sh – Gemeinsame Helfer fuer die Pilot-BDD-Checks (GH #126, oc1 dev)
-# Feature: bdd/familie-pilot/familie_pilot.feature (K1..K8, 14 Szenarien)
-# Messmethoden: Konzept iac4-pilot/konzept-pilot-oc1-dev.md §7
+# bdd-lib.sh – Gemeinsame Helfer fuer die Pilot-BDD-Checks (GH #126, oc4 dev)
+# Feature: bdd/familie-pilot/familie_pilot.feature (K1..K9, 15 Szenarien)
+# Messmethoden: Konzept iac4-pilot/konzept-pilot-oc1-dev.md §7 (Dateiname
+# historisch, Zielinstanz oc4)
 #
 # Ausfuehrung:
-#   - LOKAL (dieser Checkout): Struktur-/Secret-Checks (K2-K6) ohne Deploy
+#   - LOKAL (dieser Checkout): Struktur-/Secret-Checks (K2-K6, K9) ohne Deploy
 #   - REMOTE (VPS_HOST gesetzt): Deploy-Checks (K1-K4) via SSH (read-only)
 # Die Skripte muessen mit Platzhalter-Personen lauffaehig sein: PERSONS oben.
 # Hinweis: Die bestehende IaC4-BDD-Suite (scripts/bdd/*.bdd.ps1, GH-Runner,
@@ -16,10 +17,10 @@
 set -euo pipefail
 
 # --- Variablen (Platzhalter; per Umgebung ueberschreibbar) -------------------
-PILOT_BRANCH="${PILOT_BRANCH:-feature/pilot-familie-oc1-dev}"
-INSTANCE="${INSTANCE:-oc1}"
-PORT="${PORT:-18789}"
-PERSONS="${PERSONS:-harald anna}"        # Q3 offen: Platzhalter-Personen
+PILOT_BRANCH="${PILOT_BRANCH:-feature/pilot-familie-oc4-dev}"
+INSTANCE="${INSTANCE:-oc4}"
+PORT="${PORT:-18792}"
+PERSONS="${PERSONS:-harald anna}"        # Q3 beantwortet: Platzhalter-Personen (nachlieferbar)
 DEFAULT_ACCOUNT="${DEFAULT_ACCOUNT:-harald}"
 VPS_HOST="${VPS_HOST:-}"                 # leer = nur lokale Checks; z.B. vps-dev.tailcfea8a.ts.net
 VPS_USER="${VPS_USER:-deploy-user}"
@@ -46,7 +47,7 @@ assert_true() { if [ "$2" = "true" ]; then pass "$1"; else fail "$1"; fi; }
 # assert_grep <beschreibung> <datei> <egrep-muster>
 assert_grep() {
   local desc="$1" file="$2" pattern="$3"
-  if grep -qE "$pattern" "$file"; then pass "$desc"; else fail "$desc (Muster '$pattern' nicht in $file)"; fi
+  if grep -qE -- "$pattern" "$file"; then pass "$desc"; else fail "$desc (Muster '$pattern' nicht in $file)"; fi
 }
 
 # --- Remote-Helfer (read-only; leerer VPS_HOST => Skip) ---------------------
@@ -92,11 +93,27 @@ check_config_structure() {
   assert_grep "Compose: Provider-Keys als Container-Env (secrets_ref)"        "$cmp" "openclaw_provider_envs"
   assert_grep "Compose: Telegram-Token je Person als Container-Env"           "$cmp" "telegram_accounts"
   assert_grep "Compose: Host-Port loopback-only (Konzept §3 (a))"             "$cmp" "127\\.0\\.0\\.1:"
-  assert_grep "group_vars: oc1 person_agents Platzhalter harald/anna (Q3)"     "$gv" "person_agents: \\[\"harald\", \"anna\"\\]"
-  assert_grep "group_vars: oc1 telegram_accounts harald/anna"                  "$gv" "DEV_OC1_TELEGRAM_BOT_HARALD"
-  assert_grep "group_vars: oc1 secrets_ref aktiv"                              "$gv" "secrets_ref: true"
+  assert_grep "group_vars: oc4-Instanz-Eintrag existiert (Port 18792, K1)"     "$gv" "name: oc4"
+  assert_grep "group_vars: oc4 Port 18792"                                     "$gv" "port: 18792"
+  assert_grep "group_vars: oc4 person_agents Platzhalter harald/anna (Q3)"     "$gv" "person_agents: \[\"harald\", \"anna\"\]"
+  assert_grep "group_vars: oc4 telegram_accounts harald/anna"                  "$gv" "DEV_OC4_TELEGRAM_BOT_HARALD"
+  assert_grep "group_vars: oc4 secrets_ref aktiv"                              "$gv" "secrets_ref: true"
   assert_grep "group_vars: maxSpawnDepth 2 (S5)"                               "$gv" "maxSpawnDepth: 2"
-  assert_grep "group_vars: Q3-offen-Kommentar dokumentiert"                    "$gv" "Q3 OFFEN"
+  assert_grep "group_vars: Q3-Platzhalter-Kommentar dokumentiert"              "$gv" "PLATZHALTER"
+  assert_grep "group_vars: oc1 bleibt Vanilla-Baseline (keine person_agents)"  "$gv" "OC1 – Creator/Vanilla-Baseline"
+}
+
+# --- Struktur-Check Workflow 05 (K9, #126: oc4-Abdeckung + Multi-Bot) --------
+check_workflow05_structure() {
+  local wf="$REPO_ROOT/.github/workflows/05-device-approve.yml"
+  local ci="$REPO_ROOT/.github/workflows/ci-device-approve.yml"
+  assert_grep "WF05: oc4 im E2E-case (Port 18792, K9a)"        "$wf" "oc4\\) E2E_PORT=18792"
+  assert_grep "WF05: Secret DEV_OC4_GATEWAY_TOKEN referenziert (K9a)" "$wf" "DEV_OC4_GATEWAY_TOKEN"
+  assert_grep "WF05: account-Input (Multi-Bot, K9b)"            "$wf" "account:"
+  assert_grep "WF05: --account an approve.py durchgereicht (K9b)" "$wf" '--account "\$APPROVE_ACCOUNT"'
+  assert_grep "WF05: Whitelist je Bot/Account TELEGRAM_APPROVE_USERS_ (K9c)" "$wf" "TELEGRAM_APPROVE_USERS_"
+  assert_grep "WF05: Account-Whitelist-Fallback dokumentiert"    "$wf" "Fallback"
+  assert_grep "CI: ci-device-approve.yml sichert WF05 ab"        "$ci" "05-device-approve.yml"
 }
 
 # --- Pfad-Trennung (S3): Workspace/agentDir je Person verschieden ------------

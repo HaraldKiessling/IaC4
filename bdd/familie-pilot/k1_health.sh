@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# K1 – Instanz laeuft auf oc1 (dev), Gateway erreichbar (Konzept §7 K1)
+# K1 – Instanz laeuft auf oc4 (dev), Gateway erreichbar (Konzept §7 K1)
 # Remote-Check: Health-Endpunkt, Container-Status, Tailscale-Serve-Route.
 # Lokal: nur Skip (kein Deploy-Zugriff) – VPS_HOST setzen fuer echten Check.
 set -euo pipefail
@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=bdd-lib.sh
 . "$SCRIPT_DIR/bdd-lib.sh"
 
-echo "Feature: K1 – Gateway der Familien-Instanz ist auf oc1 erreichbar"
+echo "Feature: K1 – Gateway der Familien-Instanz ist auf oc4 erreichbar"
 
 given "Docker-Container openclaw-$INSTANCE laeuft auf dem dev-VPS (Tailscale)"
 when "Health-Endpunkt und Container-Status werden geprueft"

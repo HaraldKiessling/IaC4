@@ -14,9 +14,9 @@ given "Bindings/Accounts laut familie_pilot.feature (harald<->harald, anna<->ann
 when "Template + group_vars auf Multi-Account-Struktur geprueft werden"
 check_config_structure
 assert_grep "group_vars: defaultAccount-Kandidat harald ist erste Person" \
-  "$REPO_ROOT/ansible/group_vars/vps-dev.yml" "harald: \"DEV_OC1_TELEGRAM_BOT_HARALD\""
+  "$REPO_ROOT/ansible/group_vars/vps-dev.yml" "harald: \"DEV_OC4_TELEGRAM_BOT_HARALD\""
 assert_grep "group_vars: anna-Account konfiguriert" \
-  "$REPO_ROOT/ansible/group_vars/vps-dev.yml" "anna: \"DEV_OC1_TELEGRAM_BOT_ANNA\""
+  "$REPO_ROOT/ansible/group_vars/vps-dev.yml" "anna: \"DEV_OC4_TELEGRAM_BOT_ANNA\""
 
 given "Gerenderte Config auf dem VPS (falls deployed und VPS_HOST gesetzt)"
 when "accounts + bindings + defaultAccount im Config-Dump geprueft werden"

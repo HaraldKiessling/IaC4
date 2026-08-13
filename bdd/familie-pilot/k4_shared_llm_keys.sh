@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "Feature: K4 – Beide Agents loesen denselben geteilten Provider-Key auf"
 
-given "models.providers.*.apiKey ist SecretRef \${ENV} (oc1: secrets_ref)"
+given "models.providers.*.apiKey ist SecretRef \${ENV} (oc4: secrets_ref)"
 when "Template auf SecretRef-Konstruktion und Plaintext-Freiheit geprueft wird"
 TPL="$REPO_ROOT/ansible/roles/openclaw-gateway/templates/openclaw.json.j2"
 CMP="$REPO_ROOT/ansible/roles/openclaw-gateway/templates/docker-compose.yml.j2"

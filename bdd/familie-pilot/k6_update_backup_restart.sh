@@ -14,7 +14,7 @@ ADR="$REPO_ROOT/docs/adr/ADR-025-openclaw-deployment.md"
 
 assert_grep "Update: Pin-Variable + Deploy (pull: always) dokumentiert" "$DOC" "openclaw_image_version"
 assert_grep "Update: Rollback-Pfad (alten Pin wiederherstellen) dokumentiert" "$DOC" "Rollback"
-assert_grep "Backup: Pfade /srv/openclaw/oc1/config + workspace dokumentiert" "$DOC" "/srv/openclaw/$INSTANCE/(config|workspace)"
+assert_grep "Backup: Pfade /srv/openclaw/oc4/config + workspace dokumentiert" "$DOC" "/srv/openclaw/$INSTANCE/(config|workspace)"
 assert_grep "Backup: Secrets sind SSoT in GH-Secrets (keine Secrets im Backup)" "$DOC" "GH-Secrets"
 assert_grep "Restart: docker compose restart openclaw-$INSTANCE dokumentiert" "$DOC" "restart openclaw"
 assert_grep "ADR-025: Update-Pfad (Pin -> Deploy) belegt" "$ADR" "Update-Pfad"
