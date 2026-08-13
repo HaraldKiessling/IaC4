@@ -4,7 +4,7 @@
 # Syntax: Feature/Scenario/Given/When/Then — deutsch, technisch umsetzbar.
 # Jedes Szenario bildet genau ein Abnahmekriterium (K1–K9) aus #126 ab.
 # Szenario-Anzahl: 15 (K1: 1, K2: 2, K3: 3, K4: 2, K5: 2, K6: 2, K7: 1, K8: 1, K9: 1).
-# Hinweis: Die Personen-Namen "harald"/"anna" sind Platzhalter (Beispielwerte). Q3 ist
+# Hinweis: Die Personen-IDs "person1"/"person2" sind Platzhalter (Beispielwerte). Q3 ist
 # beantwortet (Personen + BotFather-Tokens nachlieferbar); die Platzhalter werden nach
 # Klärung der echten Namen ersetzt.
 
@@ -19,8 +19,8 @@ Funktionalität: Familien-Instanz auf oc4 (dev)
     Angenommen die Instanz "oc4" ist per Feature-Branch "feature/pilot-familie-oc4-dev"
     auf dem dev-VPS "vps-dev.tailcfea8a.ts.net" deployt
     Und das Gateway ist über Tailscale Serve unter Port 18792 erreichbar
-    Und die Personen "harald" und "anna" sind als Agents in "agents.list" konfiguriert
-    Und die Telegram-Accounts "harald" und "anna" existieren in "channels.telegram.accounts"
+    Und die Personen "person1" und "person2" sind als Agents in "agents.list" konfiguriert
+    Und die Telegram-Accounts "person1" und "person2" existieren in "channels.telegram.accounts"
 
   # ---------------------------------------------------------------------------
   # K1: Instanz läuft auf oc4 (dev), Gateway erreichbar
@@ -36,45 +36,45 @@ Funktionalität: Familien-Instanz auf oc4 (dev)
   # K2: ≥2 Personen je eigener Bot, geroutet auf eigene Persona
   # ---------------------------------------------------------------------------
   Szenario: Jeder Personen-Bot routet auf die eigene Agent-Persona
-    Angenommen der Telegram-Bot für "harald" hat den Token aus "DEV_OC4_TELEGRAM_BOT_HARALD"
-    Und der Telegram-Bot für "anna" hat den Token aus "DEV_OC4_TELEGRAM_BOT_ANNA"
-    Wenn eine DM an den Bot von "harald" gesendet wird
-    Dann wird die Nachricht an den Agent "harald" geroutet
-    Und die Antwort trägt die Identity von Agent "harald"
-    Wenn eine DM an den Bot von "anna" gesendet wird
-    Dann wird die Nachricht an den Agent "anna" geroutet
-    Und die Antwort trägt die Identity von Agent "anna"
+    Angenommen der Telegram-Bot für "person1" hat den Token aus "DEV_OC4_TELEGRAM_BOT_PERSON1"
+    Und der Telegram-Bot für "person2" hat den Token aus "DEV_OC4_TELEGRAM_BOT_PERSON2"
+    Wenn eine DM an den Bot von "person1" gesendet wird
+    Dann wird die Nachricht an den Agent "person1" geroutet
+    Und die Antwort trägt die Identity von Agent "person1"
+    Wenn eine DM an den Bot von "person2" gesendet wird
+    Dann wird die Nachricht an den Agent "person2" geroutet
+    Und die Antwort trägt die Identity von Agent "person2"
 
   Szenario: Bindings routen deterministisch pro Telegram-Account
     Angenommen "bindings" enthält
       | agentId | channel  | accountId |
-      | harald  | telegram | harald    |
-      | anna    | telegram | anna      |
-    Wenn "channels.telegram.accounts" genau die AccountIds "harald" und "anna" definiert
-    Dann matcht die Binding für Account "harald" auf Agent "harald"
-    Und die Binding für Account "anna" auf Agent "anna"
+      | person1  | telegram | person1    |
+      | person2    | telegram | person2      |
+    Wenn "channels.telegram.accounts" genau die AccountIds "person1" und "person2" definiert
+    Dann matcht die Binding für Account "person1" auf Agent "person1"
+    Und die Binding für Account "person2" auf Agent "person2"
     Und "channels.telegram.defaultAccount" ist explizit gesetzt
 
   # ---------------------------------------------------------------------------
   # K3: Speicher getrennt (Workspace/Sessions von A nicht in B sichtbar)
   # ---------------------------------------------------------------------------
   Szenario: Workspaces der Personen sind getrennt
-    Angenommen Agent "harald" hat "workspace" "/home/node/.openclaw/workspace/harald"
-    Und Agent "anna" hat "workspace" "/home/node/.openclaw/workspace/anna"
-    Dann sind die Workspace-Pfade von "harald" und "anna" verschieden
-    Und eine in Workspace "harald" angelegte Datei liegt nicht unter Workspace "anna"
+    Angenommen Agent "person1" hat "workspace" "/home/node/.openclaw/workspace/person1"
+    Und Agent "person2" hat "workspace" "/home/node/.openclaw/workspace/person2"
+    Dann sind die Workspace-Pfade von "person1" und "person2" verschieden
+    Und eine in Workspace "person1" angelegte Datei liegt nicht unter Workspace "person2"
 
   Szenario: Session-Stores der Personen sind getrennt
-    Angenommen Agent "harald" nutzt "agentDir" "/home/node/.openclaw/agents/harald/agent"
-    Und Agent "anna" nutzt "agentDir" "/home/node/.openclaw/agents/anna/agent"
-    Wenn eine Session für Agent "harald" angelegt wird
-    Dann liegt sie unter "/home/node/.openclaw/agents/harald/sessions"
-    Und kein Session-Eintrag von "harald" erscheint unter "/home/node/.openclaw/agents/anna/sessions"
+    Angenommen Agent "person1" nutzt "agentDir" "/home/node/.openclaw/agents/person1/agent"
+    Und Agent "person2" nutzt "agentDir" "/home/node/.openclaw/agents/person2/agent"
+    Wenn eine Session für Agent "person1" angelegt wird
+    Dann liegt sie unter "/home/node/.openclaw/agents/person1/sessions"
+    Und kein Session-Eintrag von "person1" erscheint unter "/home/node/.openclaw/agents/person2/sessions"
 
   Szenario: Cross-Session-Recall ist auf die eigene Person begrenzt
-    Angenommen Agent "harald" führt eine Session durch
-    Wenn Agent "anna" "sessions_history" für den eigenen Agent ausführt
-    Dann werden keine Session-Transkripte von Agent "harald" zurückgegeben
+    Angenommen Agent "person1" führt eine Session durch
+    Wenn Agent "person2" "sessions_history" für den eigenen Agent ausführt
+    Dann werden keine Session-Transkripte von Agent "person1" zurückgegeben
 
   # ---------------------------------------------------------------------------
   # K4: Geteilte LLM-Keys funktionieren für alle Agents
@@ -82,7 +82,7 @@ Funktionalität: Familien-Instanz auf oc4 (dev)
   Szenario: Beide Agents lösen denselben geteilten Provider-Key auf
     Angenommen "models.providers.deepseek.apiKey" ist als SecretRef "${DEV_DEEPSEEK_API_KEY}" konfiguriert
     Und die Container-Umgebung von "openclaw-oc4" enthält "DEV_DEEPSEEK_API_KEY"
-    Wenn Agent "harald" einen LLM-Call über den Provider "deepseek" ausführt
+    Wenn Agent "person1" einen LLM-Call über den Provider "deepseek" ausführt
     Dann ist der Call erfolgreich (HTTP 200 des Providers)
     Und im Config-Dump von "openclaw.json" erscheint kein Plaintext-API-Key
 
@@ -156,7 +156,7 @@ Funktionalität: Familien-Instanz auf oc4 (dev)
     Wenn ein Device-Pairing-Request für den Container "openclaw-oc4" eingeht
     Dann kann der Request per "openclaw devices approve <ID>" freigegeben werden
     Und der E2E-Modus des Workflows löst für "oc4" den Port 18792 und das Gateway-Token auf
-    Wenn ein Telegram-Pairing-Request für den Bot "harald" und einer für den Bot "anna" eingehen
-    Dann kann die Freigabe je Account ("harald" und "anna") erfolgen
+    Wenn ein Telegram-Pairing-Request für den Bot "person1" und einer für den Bot "person2" eingehen
+    Dann kann die Freigabe je Account ("person1" und "person2") erfolgen
     Und die Genehmigungs-Whitelist "TELEGRAM_APPROVE_USERS" ist pro Bot/Account abbildbar
     Und der CI-Workflow "ci-device-approve.yml" läuft auf dem Feature-Branch grün

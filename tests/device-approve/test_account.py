@@ -31,10 +31,10 @@ TG_CODE = "QVDCXJEM"
 
 
 def test_remote_approve_cmd_with_account():
-    cmd = approve_step.build_approve_cmd("telegram", "oc4", TG_CODE, account="harald")
+    cmd = approve_step.build_approve_cmd("telegram", "oc4", TG_CODE, account="person1")
     assert cmd == (
         "sudo docker exec openclaw-oc4 openclaw pairing approve telegram "
-        "QVDCXJEM --account harald"
+        "QVDCXJEM --account person1"
     )
 
 
@@ -46,8 +46,8 @@ def test_remote_approve_cmd_without_account_unchanged():
 
 
 def test_remote_list_cmd_with_account():
-    cmd = discovery.build_list_remote_cmd("telegram", ["oc4"], account="anna")
-    assert "openclaw pairing list telegram --json --account anna" in cmd
+    cmd = discovery.build_list_remote_cmd("telegram", ["oc4"], account="person2")
+    assert "openclaw pairing list telegram --json --account person2" in cmd
 
 
 def test_remote_list_cmd_without_account_unchanged():
@@ -57,19 +57,19 @@ def test_remote_list_cmd_without_account_unchanged():
 
 
 def test_account_arg_only_telegram():
-    assert discovery._account_arg("harald", "telegram") == " --account harald"
-    assert discovery._account_arg("harald", "device") == ""
+    assert discovery._account_arg("person1", "telegram") == " --account person1"
+    assert discovery._account_arg("person1", "device") == ""
     assert discovery._account_arg("", "telegram") == ""
 
 
 def test_local_list_cmd_with_account():
-    cmd = approve._local_list_cmd("telegram", account="harald")
-    assert cmd == ["openclaw", "pairing", "list", "telegram", "--json", "--account", "harald"]
+    cmd = approve._local_list_cmd("telegram", account="person1")
+    assert cmd == ["openclaw", "pairing", "list", "telegram", "--json", "--account", "person1"]
 
 
 def test_local_approve_cmd_with_account():
-    cmd = approve._local_approve_cmd("telegram", TG_CODE, account="anna")
-    assert cmd == ["openclaw", "pairing", "approve", "telegram", TG_CODE, "--account", "anna"]
+    cmd = approve._local_approve_cmd("telegram", TG_CODE, account="person2")
+    assert cmd == ["openclaw", "pairing", "approve", "telegram", TG_CODE, "--account", "person2"]
 
 
 def test_local_cmds_without_account_unchanged():

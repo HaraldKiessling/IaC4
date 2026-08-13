@@ -58,7 +58,7 @@ Die Instanz oc4 (Port 18792) ist eine **neue** Familien-Instanz (Alternative A:
 | Geteilte LLM-Keys | `oc.secrets_ref: true` → `models.providers.*.apiKey` als SecretRef `"${DEV_*}"`; Werte als Container-Env via `docker-compose.yml.j2` (Workflow 04 reicht GH-Secrets durch) | S2/S6 |
 | Rollen-Pattern | `agents.defaults.subagents`: `delegationMode: "prefer"`, `maxSpawnDepth: 2` (Orchestrator-Pattern je Person, S5) | S5 |
 
-**Platzhalter:** Personen `harald`/`anna` sind gekennzeichnete Platzhalter (Q3 beantwortet
+**Platzhalter:** Personen-IDs `person1`/`person2` sind gekennzeichnete Platzhalter (Q3 beantwortet
 2026-08-13 – echte Namen + BotFather-Tokens nachlieferbar); Accounts/Bindings werden nur
 gerendert, wenn das jeweilige Token-Env gesetzt ist.
 

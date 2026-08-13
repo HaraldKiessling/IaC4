@@ -20,8 +20,8 @@ set -euo pipefail
 PILOT_BRANCH="${PILOT_BRANCH:-feature/pilot-familie-oc4-dev}"
 INSTANCE="${INSTANCE:-oc4}"
 PORT="${PORT:-18792}"
-PERSONS="${PERSONS:-harald anna}"        # Q3 beantwortet: Platzhalter-Personen (nachlieferbar)
-DEFAULT_ACCOUNT="${DEFAULT_ACCOUNT:-harald}"
+PERSONS="${PERSONS:-person1 person2}"   # Q3 beantwortet: Platzhalter-Personen (nachlieferbar)
+DEFAULT_ACCOUNT="${DEFAULT_ACCOUNT:-person1}"
 VPS_HOST="${VPS_HOST:-}"                 # leer = nur lokale Checks; z.B. vps-dev.tailcfea8a.ts.net
 VPS_USER="${VPS_USER:-deploy-user}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -95,8 +95,8 @@ check_config_structure() {
   assert_grep "Compose: Host-Port loopback-only (Konzept §3 (a))"             "$cmp" "127\\.0\\.0\\.1:"
   assert_grep "group_vars: oc4-Instanz-Eintrag existiert (Port 18792, K1)"     "$gv" "name: oc4"
   assert_grep "group_vars: oc4 Port 18792"                                     "$gv" "port: 18792"
-  assert_grep "group_vars: oc4 person_agents Platzhalter harald/anna (Q3)"     "$gv" "person_agents: \[\"harald\", \"anna\"\]"
-  assert_grep "group_vars: oc4 telegram_accounts harald/anna"                  "$gv" "DEV_OC4_TELEGRAM_BOT_HARALD"
+  assert_grep "group_vars: oc4 person_agents Platzhalter person1/person2 (Q3)" "$gv" "person_agents: \[\"person1\", \"person2\"\]"
+  assert_grep "group_vars: oc4 telegram_accounts person1/person2"             "$gv" "DEV_OC4_TELEGRAM_BOT_PERSON1"
   assert_grep "group_vars: oc4 secrets_ref aktiv"                              "$gv" "secrets_ref: true"
   assert_grep "group_vars: maxSpawnDepth 2 (S5)"                               "$gv" "maxSpawnDepth: 2"
   assert_grep "group_vars: Q3-Platzhalter-Kommentar dokumentiert"              "$gv" "PLATZHALTER"
@@ -123,7 +123,7 @@ check_path_separation() {
   for pid in $PERSONS; do pids+=("$pid"); done
   if [ "${#pids[@]}" -ge 2 ]; then
     local first="${pids[0]}" second="${pids[1]}"
-    # Konstruktionsbedingt getrennt: Pfade enthalten die Person-Id -> harald/anna verschieden
+    # Konstruktionsbedingt getrennt: Pfade enthalten die Person-Id -> person1/person2 verschieden
     assert_grep "Template: Workspace-Pfad konstruiert aus Person-Id (Trennung S3)" "$tpl" "workspace/\\{\\{ pid \\}\\}"
     assert_grep "Template: agentDir-Pfad konstruiert aus Person-Id (Trennung S3)" "$tpl" "agents/\\{\\{ pid \\}\\}/agent"
     assert_true "Personen-IDs verschieden: $first != $second" "$([ "$first" != "$second" ] && echo true || echo false)"

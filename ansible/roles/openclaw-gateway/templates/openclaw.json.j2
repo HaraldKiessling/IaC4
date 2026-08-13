@@ -68,7 +68,7 @@
 {% if (oc.agents | length > 0) or (oc.person_agents is defined and oc.person_agents | length > 0) %},
     "list": [
 {% if oc.person_agents is defined and oc.person_agents | length > 0 %}
-{# #126: Personen-Agents (PLATZHALTER harald/anna bis Q3) – eigener Workspace + agentDir je Person
+{# #126: Personen-Agents (PLATZHALTER person1/person2 bis Q3) – eigener Workspace + agentDir je Person
    (S3, getrennter Speicher). Pfade sind Container-Pfade; Host-Pfade: /srv/openclaw/oc4/{workspace,config}
    (Mapping-Tabelle Konzept §3). subagents.allowAgents: ["<person>"] haelt Rollen-Sub-Agents
    innerhalb der Person (Q5-Empfehlung, Speicher-Isolation S3). #}

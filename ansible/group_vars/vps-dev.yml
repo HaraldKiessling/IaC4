@@ -148,15 +148,15 @@ openclaw_instances:
     # Konzept: iac4-pilot/konzept-pilot-oc1-dev.md (Dateiname historisch, Zielinstanz oc4 – Konzept §3/§4).
     # Harald-Entscheidung 2026-08-13: oc1/oc2/oc3 (Benchmark-Arme) bleiben UNANGETASTET;
     # der Pilot läuft auf der NEUEN Instanz oc4 (Port 18792).
-    # ⚠️ Q3 (Konzept §9, beantwortet 15:43): "harald"/"anna" sind gekennzeichnete PLATZHALTER,
+    # ⚠️ Q3 (Konzept §9, beantwortet 15:43): "person1"/"person2" sind gekennzeichnete PLATZHALTER-IDs,
     #    echte Personen + BotFather-Tokens sind NACHLIEFERBAR (Q3, Web-Oberfläche/Pairing/GH-Secrets).
-    #    Tokens -> GH-Secrets DEV_OC4_TELEGRAM_BOT_HARALD/ANNA; Accounts + Bindings werden erst
+    #    Tokens -> GH-Secrets DEV_OC4_TELEGRAM_BOT_PERSON1/PERSON2; Accounts + Bindings werden erst
     #    gerendert, wenn das jeweilige Token-Env gesetzt ist (gleiches Muster wie Provider-Keys;
     #    Gateway-Start failt nicht ohne Tokens).
-    person_agents: ["harald", "anna"]           # Q3: echte Personen-Namen nach Lieferung ersetzen
+    person_agents: ["person1", "person2"]      # Q3: echte Personen-IDs nach Lieferung ersetzen
     telegram_accounts:
-      harald: "DEV_OC4_TELEGRAM_BOT_HARALD"     # Q3: Token ausstehend (GH-Secret neu)
-      anna: "DEV_OC4_TELEGRAM_BOT_ANNA"         # Q3: Token ausstehend (GH-Secret neu)
+      person1: "DEV_OC4_TELEGRAM_BOT_PERSON1"   # Q3: Token ausstehend (GH-Secret neu)
+      person2: "DEV_OC4_TELEGRAM_BOT_PERSON2"   # Q3: Token ausstehend (GH-Secret neu)
     secrets_ref: true                            # Provider-Keys als SecretRef "${ENV}" statt Plaintext (S2/S6)
     # Pilot-Instanz: ohne Memory-Seed (kein Benchmark-Arm; Seed bleibt OC2/OC3-Variable)
     memory_seed: false               # Instanz-Override; Gate-Ausdruck instance.yml wertet oc.memory_seed vor openclaw_memory_seed aus

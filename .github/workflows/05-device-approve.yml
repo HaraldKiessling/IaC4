@@ -13,12 +13,12 @@
 #     e2e              – kompletter Geraete-Lifecycle-Test (frischer Client)
 #
 #   Input `account` (nur Telegram-Pairing, Multi-Account, #126 Pilot oc4):
-#     optional – Telegram-Account/Bot (z.B. harald|anna). Steuert:
+#     optional – Telegram-Account/Bot (z.B. person1|person2). Steuert:
 #       (a) den CLI-Parameter `--account <id>` bei `openclaw pairing list/approve`
 #           (belegt: docs/channels/pairing.md „Multi-account channels take
 #           `--account <id>`“) und
 #       (b) die Genehmigungs-Whitelist je Bot/Account: falls gesetzt, wird
-#           TELEGRAM_APPROVE_USERS_<ACCOUNT> (z.B. TELEGRAM_APPROVE_USERS_HARALD)
+#           TELEGRAM_APPROVE_USERS_<ACCOUNT> (z.B. TELEGRAM_APPROVE_USERS_PERSON1)
 #           statt der flachen TELEGRAM_APPROVE_USERS geprueft (Fallback auf
 #           TELEGRAM_APPROVE_USERS, wenn die Account-Whitelist nicht gesetzt ist).
 #
@@ -78,7 +78,7 @@ on:
         type: choice
         options: [auto, telegram, device, both]
       account:
-        description: 'Telegram-Account/Bot bei Multi-Account-Pairing (optional, nur Telegram-Pfad, #126 oc4): z.B. harald, anna – steuert --account <id> in pairing list/approve und die Whitelist TELEGRAM_APPROVE_USERS_<ACCOUNT> (Fallback: TELEGRAM_APPROVE_USERS)'
+        description: 'Telegram-Account/Bot bei Multi-Account-Pairing (optional, nur Telegram-Pfad, #126 oc4): z.B. person1, person2 – steuert --account <id> in pairing list/approve und die Whitelist TELEGRAM_APPROVE_USERS_<ACCOUNT> (Fallback: TELEGRAM_APPROVE_USERS)'
         required: false
         default: ''
         type: string
@@ -144,9 +144,9 @@ jobs:
           TG_USER_ID: ${{ github.event.client_payload.telegram_user_id || '' }}
           AUTHORIZED_USERS: ${{ secrets.TELEGRAM_APPROVE_USERS }}
           # #126 (oc4, Multi-Account): Whitelist je Bot/Account – TELEGRAM_APPROVE_USERS_<ACCOUNT>
-          # (z.B. _HARALD/_ANNA); Fallback auf TELEGRAM_APPROVE_USERS, wenn nicht gesetzt.
-          TELEGRAM_APPROVE_USERS_HARALD: ${{ secrets.TELEGRAM_APPROVE_USERS_HARALD }}
-          TELEGRAM_APPROVE_USERS_ANNA: ${{ secrets.TELEGRAM_APPROVE_USERS_ANNA }}
+          # (z.B. _PERSON1/_PERSON2); Fallback auf TELEGRAM_APPROVE_USERS, wenn nicht gesetzt.
+          TELEGRAM_APPROVE_USERS_PERSON1: ${{ secrets.TELEGRAM_APPROVE_USERS_PERSON1 }}
+          TELEGRAM_APPROVE_USERS_PERSON2: ${{ secrets.TELEGRAM_APPROVE_USERS_PERSON2 }}
         run: |
           set -euo pipefail
 
@@ -159,7 +159,7 @@ jobs:
           # 6-7-stellige Pairing-Kurzcodes).
           # #126 (Multi-Account): bei gesetztem account wird die Whitelist je
           # Bot/Account ausgerollt – TELEGRAM_APPROVE_USERS_<ACCOUNT> (z.B.
-          # _HARALD) VOR der flachen TELEGRAM_APPROVE_USERS geprueft. Leere
+          # _PERSON1) VOR der flachen TELEGRAM_APPROVE_USERS geprueft. Leere
           # Account-Whitelist = Warnung + Fallback (kein Auth-Bypass: die
           # Fallback-Whitelist bleibt Pflicht).
           if [ -n "$TG_USER_ID" ]; then

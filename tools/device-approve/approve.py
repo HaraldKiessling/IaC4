@@ -557,7 +557,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--instance-filter", default=None, help="all|oc1|oc2|...")
     ap.add_argument("--account", default=None,
                     help="Telegram-Account/Bot bei Multi-Account-Pairing (optional, nur Telegram-Pfad, "
-                         "#126 oc4): z.B. harald, anna – wird als `--account <id>` an `openclaw pairing "
+                         "#126 oc4): z.B. person1, person2 – wird als `--account <id>` an `openclaw pairing "
                          "list/approve telegram` durchgereicht (belegt: docs/channels/pairing.md). "
                          "Default: leer = Kanal-weite (unscoped) Pairing-Sicht wie bisher)")
     ap.add_argument("--instance-map", help="Pfad zur SSoT-Map 'name|target' (optional)")

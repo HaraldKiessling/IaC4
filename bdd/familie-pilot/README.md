@@ -15,14 +15,14 @@ VPS_HOST=vps-dev.tailcfea8a.ts.net ./run-all.sh
 ```
 
 Variablen (Platzhalter, per Env überschreibbar): `PILOT_BRANCH`, `INSTANCE` (oc4),
-`PORT` (18792), `PERSONS` (`harald anna`), `DEFAULT_ACCOUNT`, `VPS_HOST`, `VPS_USER`.
+`PORT` (18792), `PERSONS` (`person1 person2`), `DEFAULT_ACCOUNT`, `VPS_HOST`, `VPS_USER`.
 
 ## Mapping Kriterium → Skript → Messmethode (Konzept §7)
 
 | K | Skript | Messmethode | Lokal? |
 |---|--------|-------------|--------|
 | K1 | `k1_health.sh` | `GET /health` → 200, Container healthy, `tailscale serve`-Route | nur remote |
-| K2 | `k2_bots_persona.sh` | `accounts` (harald/anna) + `defaultAccount` + `bindings` im Template/Config-Dump; Live-DM-Persona-Test = Abnahme | Struktur lokal, Rest remote |
+| K2 | `k2_bots_persona.sh` | `accounts` (person1/person2) + `defaultAccount` + `bindings` im Template/Config-Dump; Live-DM-Persona-Test = Abnahme | Struktur lokal, Rest remote |
 | K3 | `k3_storage_separation.sh` | getrennte `workspace`/`agentDir`/Sessions-Pfade (Konstruktion + Host-Dirs) | Struktur lokal, Rest remote |
 | K4 | `k4_shared_llm_keys.sh` | `apiKey` als SecretRef `${ENV}`, kein Plaintext im Config-Dump; Env-Durchreichung im Compose | Struktur lokal, Rest remote |
 | K5 | `k5_secrets_not_in_git.sh` | `git grep` Secret-Muster, `.gitignore` (`.env*`), nur `.env.example` committet | **voll lokal** |
@@ -33,10 +33,10 @@ Variablen (Platzhalter, per Env überschreibbar): `PILOT_BRANCH`, `INSTANCE` (oc
 
 ## Hinweise
 
-- **Q3 (Konzept §9, beantwortet 2026-08-13):** Personen `harald`/`anna` sind
+- **Q3 (Konzept §9, beantwortet 2026-08-13):** Personen-IDs `person1`/`person2` sind
   gekennzeichnete Platzhalter; echte Namen + BotFather-Tokens sind nachlieferbar.
   Accounts und Bindings werden nur gerendert, wenn das jeweilige Token-Env
-  (GH-Secret `DEV_OC4_TELEGRAM_BOT_HARALD/ANNA`) gesetzt ist – bis dahin sind die
+  (GH-Secret `DEV_OC4_TELEGRAM_BOT_PERSON1/PERSON2`) gesetzt ist – bis dahin sind die
   K2-Remote-Checks erwartungsgemäß rot/skip, kein Config-Fehler.
 - **Kein Deploy, kein Restart, keine Schreibzugriffe:** Alle Checks sind read-only.
 - **Einordnung:** Die bestehende IaC4-BDD-Suite (`scripts/bdd/*.bdd.ps1`,
