@@ -11,17 +11,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "Feature: K4 – Beide Agents loesen denselben geteilten Provider-Key auf"
 
+GV="$REPO_ROOT/ansible/group_vars/vps-dev.yml"
+assert_grep "group_vars: oc4 Web-Search auf OpenRouter umgestellt (DEV_OC4_OPENROUTER_API_KEY)" "$GV" "DEV_OC4_OPENROUTER_API_KEY"
+
 given "models.providers.*.apiKey ist SecretRef \${ENV} (oc4: secrets_ref)"
 when "Template auf SecretRef-Konstruktion und Plaintext-Freiheit geprueft wird"
 TPL="$REPO_ROOT/ansible/roles/openclaw-gateway/templates/openclaw.json.j2"
 CMP="$REPO_ROOT/ansible/roles/openclaw-gateway/templates/docker-compose.yml.j2"
 assert_grep "Template: apiKey als \${ENV}-SecretRef (Kurzform)" "$TPL" "\"apiKey\".*'\\$\\{'.*penv"
+assert_grep "Template: WebSearch-Key als \${ENV}-SecretRef (oc4, OpenRouter #126)" "$TPL" "\"apiKey\".*websearch_api_key_env"
+assert_grep "Template: WebSearch-baseUrl explizit (Determinismus K2)" "$TPL" "websearch_base_url"
+assert_grep "Template: WebSearch-Modell explizit (Determinismus K2)" "$TPL" "websearch_model"
 if grep -qE '"apiKey": "sk-|apiKey.*sk-[A-Za-z0-9]{16,}' "$TPL"; then
   fail "Template enthaelt Plaintext-Key-Muster"
 else
   pass "Template rendert keine Plaintext-Keys (nur \${ENV}-SecretRef oder leer)"
 fi
 assert_grep "Compose: Provider-Env wird in den Container durchgereicht" "$CMP" "{{ penv }}"
+assert_grep "Compose: WebSearch-Env (OpenRouter) wird durchgereicht (SecretRef-Aufloesung)" "$CMP" "websearch_api_key_env"
 assert_grep "Compose: Telegram-Token-Env wird durchgereicht" "$CMP" "{{ acc_env }}"
 
 given "Gerenderte Config auf dem VPS (falls deployed)"

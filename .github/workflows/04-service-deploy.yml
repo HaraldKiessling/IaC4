@@ -102,8 +102,8 @@ jobs:
       DEV_OC3_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC3_WEBSEARCH_API_KEY }}
       DEV_OC3_GATEWAY_TOKEN: ${{ secrets.DEV_OC3_GATEWAY_TOKEN }}
       DEV_OC3_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC3_TELEGRAM_BOT_TOKEN }}
-      # #126 Pilot (oc4): Secrets der Familien-Instanz (geteilt + je Person, Q3 Platzhalter)
-      DEV_OC4_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC4_WEBSEARCH_API_KEY }}
+      # #126 Pilot (oc4): Secrets der Familien-Instanz (geteilt + je Person, Q3 Platzhalter); Web-Search via OpenRouter
+      DEV_OC4_OPENROUTER_API_KEY: ${{ secrets.DEV_OC4_OPENROUTER_API_KEY }}
       DEV_OC4_GATEWAY_TOKEN: ${{ secrets.DEV_OC4_GATEWAY_TOKEN }}
       DEV_OC4_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC4_TELEGRAM_BOT_TOKEN }}
       DEV_OC4_TELEGRAM_BOT_PERSON1: ${{ secrets.DEV_OC4_TELEGRAM_BOT_PERSON1 }}

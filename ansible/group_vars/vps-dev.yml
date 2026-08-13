@@ -161,7 +161,13 @@ openclaw_instances:
     # Pilot-Instanz: ohne Memory-Seed (kein Benchmark-Arm; Seed bleibt OC2/OC3-Variable)
     memory_seed: false               # Instanz-Override; Gate-Ausdruck instance.yml wertet oc.memory_seed vor openclaw_memory_seed aus
     llm_provider: deepseek            # aktiver Provider (Key Pflicht: DEV_DEEPSEEK_API_KEY, geteilt)
-    websearch_api_key_env: "DEV_OC4_WEBSEARCH_API_KEY"
+    # Web-Search oc4: OpenRouter statt Perplexity (Harald-Entscheidung 2026-08-13 17:00, #126).
+    # Key (sk-or-...) als GH-Secret DEV_OC4_OPENROUTER_API_KEY; openclaw.json rendert SecretRef
+    # "${DEV_OC4_OPENROUTER_API_KEY}" (oc.secrets_ref). Routing-Beleg: docs/tools/perplexity-search.md
+    # „OpenRouter/Sonar-Kompatibilitaet“ – sk-or-Praefix -> OpenRouter-Chat-Completions-Pfad.
+    websearch_api_key_env: "DEV_OC4_OPENROUTER_API_KEY"
+    websearch_base_url: "https://openrouter.ai/api/v1"   # explizit (Determinismus K2)
+    websearch_model: "perplexity/sonar-pro"              # explizit (Determinismus K2)
     gateway_token_env: "DEV_OC4_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC4_TELEGRAM_BOT_TOKEN"
     gh_token_env: "DEV_OC4_GH_TOKEN"

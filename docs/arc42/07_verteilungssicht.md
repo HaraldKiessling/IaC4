@@ -56,11 +56,19 @@ Die Instanz oc4 (Port 18792) ist eine **neue** Familien-Instanz (Alternative A:
 | Eigener Bot je Person | `oc.telegram_accounts` → `channels.telegram.accounts.<person>.botToken` + `defaultAccount` + `dmPolicy: "pairing"` | S4 |
 | Routing | Top-Level `bindings[]`: `{agentId: <person>, match: {channel: "telegram", accountId: <person>}}` | S4 |
 | Geteilte LLM-Keys | `oc.secrets_ref: true` → `models.providers.*.apiKey` als SecretRef `"${DEV_*}"`; Werte als Container-Env via `docker-compose.yml.j2` (Workflow 04 reicht GH-Secrets durch) | S2/S6 |
+| Web-Search (OpenRouter) | `oc.websearch_api_key_env: "DEV_OC4_OPENROUTER_API_KEY"` → `plugins.entries.perplexity.config.webSearch.apiKey` als SecretRef `"${DEV_OC4_OPENROUTER_API_KEY}"` (+ `baseUrl`/`model` explizit); der sk-or-Key schaltet auf den OpenRouter-Chat-Completions-Pfad um (Doku: `docs/tools/perplexity-search.md` „OpenRouter/Sonar“) | Harald 2026-08-13 17:00 (#126, statt Perplexity) |
 | Rollen-Pattern | `agents.defaults.subagents`: `delegationMode: "prefer"`, `maxSpawnDepth: 2` (Orchestrator-Pattern je Person, S5) | S5 |
 
 **Platzhalter:** Personen-IDs `person1`/`person2` sind gekennzeichnete Platzhalter (Q3 beantwortet
 2026-08-13 – echte Namen + BotFather-Tokens nachlieferbar); Accounts/Bindings werden nur
 gerendert, wenn das jeweilige Token-Env gesetzt ist.
+
+**Web-Search (Umstellung 2026-08-13 17:00, #126):** oc4 nutzt OpenRouter statt Perplexity
+(GH-Secret `DEV_OC4_OPENROUTER_API_KEY`). Gerendert als SecretRef `"${DEV_OC4_OPENROUTER_API_KEY}"`
+in `plugins.entries.perplexity.config.webSearch.apiKey` (SecretRef-faehig, Beleg:
+`reference/secretref-credential-surface.md`); der sk-or-Key schaltet den Provider auf den
+OpenRouter-Chat-Completions-Pfad um (Sonar-Kompatibilitaet, `docs/tools/perplexity-search.md`).
+oc1/oc2/oc3 bleiben unveraendert auf Perplexity (`<T>_OC<n>_WEBSEARCH_API_KEY`).
 
 ### Pfad-Mapping Host ↔ Container (oc4)
 

@@ -32,6 +32,12 @@ services:
       {{ penv }}: "{{ pkey }}"
 {% endif %}
 {% endfor %}
+{% if oc.websearch_api_key_env is defined and oc.websearch_api_key_env | length > 0 %}
+{% set ws_key = lookup('env', oc.websearch_api_key_env) | default('', true) %}
+{% if ws_key | length > 0 %}
+      {{ oc.websearch_api_key_env }}: "{{ ws_key }}"   # #126 (oc4): Web-Search-Key als Container-Env – SecretRef-Aufloesung im Gateway-Prozess (openclaw.json: plugins.entries.perplexity.config.webSearch.apiKey)
+{% endif %}
+{% endif %}
 {% endif %}
 {% if oc.telegram_accounts is defined and oc.telegram_accounts | length > 0 %}
       # #126 Pilot (oc4): Telegram-Bot-Token je Person (SecretRef "${ENV}" in openclaw.json).
