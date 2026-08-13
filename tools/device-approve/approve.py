@@ -171,17 +171,28 @@ def load_instance_map_from_ssot(root: str) -> List[Tuple[str, str]]:
 # ── Lokaler Modus (ohne SSH, ohne Tailscale) ──
 
 
-def _local_list_cmd(typ: str) -> List[str]:
-    """Δ1: lokale Discovery-Quelle je Typ (openclaw CLI auf dem Gateway)."""
+def _local_list_cmd(typ: str, account: str = "") -> List[str]:
+    """Δ1: lokale Discovery-Quelle je Typ (openclaw CLI auf dem Gateway).
+
+    #126 (oc4, Multi-Account): bei gesetztem account wird `--account <id>` an
+    `openclaw pairing list telegram` angehaengt (belegt: docs/channels/pairing.md
+    „Multi-account channels take `--account <id>`“) – nur Telegram-Pfad.
+    """
     if typ == "telegram":
-        return ["openclaw", "pairing", "list", "telegram", "--json"]
+        cmd = ["openclaw", "pairing", "list", "telegram", "--json"]
+        if account:
+            cmd += ["--account", account]
+        return cmd
     return ["openclaw", "devices", "list", "--json"]
 
 
-def _local_approve_cmd(typ: str, request_id: str) -> List[str]:
+def _local_approve_cmd(typ: str, request_id: str, account: str = "") -> List[str]:
     """Δ2: lokales Approve-Kommando je Typ."""
     if typ == "telegram":
-        return ["openclaw", "pairing", "approve", "telegram", request_id]
+        cmd = ["openclaw", "pairing", "approve", "telegram", request_id]
+        if account:
+            cmd += ["--account", account]
+        return cmd
     return ["openclaw", "devices", "approve", request_id]
 
 
@@ -193,6 +204,7 @@ def run_local_discovery(
     log: Optional[Callable[[str], None]] = None,
     timeout: int = LOCAL_TIMEOUT,
     action: str = "approve",
+    account: str = "",
 ) -> Tuple[Optional[DiscoveryResult], dict]:
     """Lokale Discovery ueber die openclaw CLI direkt auf dem Gateway.
 
@@ -213,7 +225,7 @@ def run_local_discovery(
     types_to_try = ["telegram", "device"] if derived_type == "both" else [derived_type]
 
     for typ in types_to_try:
-        cmd_list = _local_list_cmd(typ)
+        cmd_list = _local_list_cmd(typ, account=account)
         log(f"🔍 Lokale Discovery ({typ}): {' '.join(cmd_list)}")
         try:
             proc = (runner or subprocess.run)(  # noqa: S603 – keine Shell
@@ -274,9 +286,10 @@ def run_local_approve(
     *,
     runner=None,
     timeout: int = LOCAL_TIMEOUT,
+    account: str = "",
 ) -> int:
     """Lokaler Approve: typ-spezifisches Kommando (Δ2)."""
-    cmd = _local_approve_cmd(found_type, request_id)
+    cmd = _local_approve_cmd(found_type, request_id, account=account)
     proc = (runner or subprocess.run)(  # noqa: S603 – keine Shell
         cmd, capture_output=True, text=True, timeout=timeout
     )
@@ -478,6 +491,7 @@ def run_local_list_discovery(
     runner=None,
     log: Optional[Callable[[str], None]] = None,
     timeout: int = LOCAL_TIMEOUT,
+    account: str = "",
 ) -> Tuple[List[PendingEntry], dict]:
     """Lokale Listen-Discovery: ALLE pending Eintraege der Gateway-Instanz.
 
@@ -497,7 +511,7 @@ def run_local_list_discovery(
 
     types_to_try = ["telegram", "device"] if derived_type == "both" else [derived_type]
     for typ in types_to_try:
-        cmd_list = _local_list_cmd(typ)
+        cmd_list = _local_list_cmd(typ, account=account)
         log(f"🔍 Lokale Discovery ({typ}): {' '.join(cmd_list)}")
         try:
             proc = (runner or subprocess.run)(  # noqa: S603 – keine Shell
@@ -541,6 +555,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--type-filter", default=None, help="auto|telegram|device|both")
     ap.add_argument("--target-filter", default=None, help="dev|prod|both")
     ap.add_argument("--instance-filter", default=None, help="all|oc1|oc2|...")
+    ap.add_argument("--account", default=None,
+                    help="Telegram-Account/Bot bei Multi-Account-Pairing (optional, nur Telegram-Pfad, "
+                         "#126 oc4): z.B. harald, anna – wird als `--account <id>` an `openclaw pairing "
+                         "list/approve telegram` durchgereicht (belegt: docs/channels/pairing.md). "
+                         "Default: leer = Kanal-weite (unscoped) Pairing-Sicht wie bisher)")
     ap.add_argument("--instance-map", help="Pfad zur SSoT-Map 'name|target' (optional)")
     ap.add_argument("--ssot-root", default=".", help="SSoT-Root (default: .)")
     ap.add_argument("--vps-user", help="VPS-SSH-User (env VPS_USER)")
@@ -598,7 +617,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     type_f = opts.type_filter or os.environ.get("APPROVE_TYPE", "auto")
     target_f = opts.target_filter or os.environ.get("APPROVE_TARGET", "both")
     inst_f = opts.instance_filter or os.environ.get("APPROVE_INSTANCE", "all")
+    account = opts.account or os.environ.get("APPROVE_ACCOUNT", "")
     scope = opts.scope or os.environ.get("APPROVE_SCOPE", "device")
+
+    # #126 (oc4, Multi-Account): account ist ein Telegram-Pairing-Konzept –
+    # bei Nicht-Telegram-Typen Hinweis statt Fehler (device-Pfad ignoriert den
+    # Parameter; keine versteckte Filterwirkung).
+    if account and type_f not in ("telegram", "both", "auto"):
+        print(f"⚠️  --account '{account}' ist nur fuer Telegram-Pairing relevant – "
+              f"wird bei Typ '{type_f}' ignoriert.", file=sys.stderr)
     vps_user = opts.vps_user or os.environ.get("VPS_USER", "")
     ssh_key = opts.ssh_key or os.environ.get("SSH_KEY_PATH", "")
     ts_tailnet = opts.ts_tailnet or os.environ.get("TS_TAILNET", "")
@@ -733,7 +760,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if opts.list_only:
         if is_local:
             # Ergaenzung (Design §1/2c): Gateway-eigene pending Requests
-            entries, stats = run_local_list_discovery(derived_type, log=log)
+            entries, stats = run_local_list_discovery(derived_type, log=log, account=account)
             result = build_list_result_json(
                 status="list_ok",
                 entries=entries,
@@ -777,6 +804,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             resolve_ip=resolve_ip,
             run_remote=run_remote,
             log=log,
+            account=account,
         )
         result = build_list_result_json(
             status="list_ok",
@@ -957,6 +985,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         d_result, stats = run_local_discovery(
             rid, derived_type, log=log,
             action="remove" if opts.remove_only else "approve",
+            account=account,
         )
         if d_result is None:
             result = build_result_json(
@@ -1021,7 +1050,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             return emit(result, 0 if rc == 0 else 1)
 
         # Lokaler Approve (typ-spezifisch, Δ2)
-        rc = run_local_approve(rid, d_result.found_type)
+        rc = run_local_approve(rid, d_result.found_type, account=account)
         status = "approved" if rc == 0 else "error"
         result = build_result_json(
             status=status,
@@ -1085,6 +1114,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             # bleibt der bisherige Bibliotheks-/CLI-Pfad unveraendert.
             github_output=os.environ.get("GITHUB_OUTPUT"),
             log=log,
+            account=account,
         )
     except RequestNotFoundError as err:
         scanned = [f"{n}/{t}" for n, t in filtered_map]

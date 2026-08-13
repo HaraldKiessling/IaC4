@@ -68,8 +68,13 @@ def build_approve_cmd(
     found_type: str,
     instance: str,
     request_id: str,
+    account: str = "",
 ) -> str:
     """Baut das typ-spezifische Approve-Kommando (validiert VOR dem Bau).
+
+    #126 (oc4, Multi-Account): optionaler account – wird nur fuer Telegram
+    als `--account <id>` an `openclaw pairing approve telegram <CODE>`
+    angehaengt (belegt: docs/channels/pairing.md). Default leer = wie bisher.
 
     Raises:
         ValueError: unbekannter Typ / ID entspricht nicht dem Typ-Format /
@@ -81,7 +86,10 @@ def build_approve_cmd(
     if not valid:
         raise ValueError(err)
     validate_instance(instance)
-    return APPROVE_CMD_TEMPLATES[found_type].format(instance=instance, request_id=request_id)
+    return APPROVE_CMD_TEMPLATES[found_type].format(
+        instance=instance, request_id=request_id,
+        account_arg=discovery._account_arg(account, found_type),
+    )
 
 
 def validate_and_build_cmd(
