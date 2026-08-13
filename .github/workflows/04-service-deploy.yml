@@ -95,6 +95,9 @@ jobs:
       DEV_OC1_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC1_WEBSEARCH_API_KEY }}
       DEV_OC1_GATEWAY_TOKEN: ${{ secrets.DEV_OC1_GATEWAY_TOKEN }}
       DEV_OC1_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC1_TELEGRAM_BOT_TOKEN }}
+      # #126 Pilot (oc1): Telegram-Bot-Token je Person (Q3 – GH-Secrets folgen nach Klaerung)
+      DEV_OC1_TELEGRAM_BOT_HARALD: ${{ secrets.DEV_OC1_TELEGRAM_BOT_HARALD }}
+      DEV_OC1_TELEGRAM_BOT_ANNA: ${{ secrets.DEV_OC1_TELEGRAM_BOT_ANNA }}
       DEV_OC2_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC2_WEBSEARCH_API_KEY }}
       DEV_OC2_GATEWAY_TOKEN: ${{ secrets.DEV_OC2_GATEWAY_TOKEN }}
       DEV_OC2_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC2_TELEGRAM_BOT_TOKEN }}

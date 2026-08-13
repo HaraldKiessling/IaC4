@@ -1,3 +1,17 @@
+{# =============================================================================
+   OpenClaw-Gateway-Config (ADR-025): Multi-Instanz, SSoT group_vars/<target>.yml
+
+   #126 PILOT Familien-Instanz (oc1, dev) – optionale Erweiterungen (nur bei Bedarf
+   je Instanz gesetzt, oc2/oc3 bleiben unveraendert):
+   - oc.person_agents        : Personen-Agents mit eigenem workspace + agentDir (S3)
+   - oc.telegram_accounts    : Multi-Account-Telegram (S4): accounts + defaultAccount + dmPolicy
+   - oc.secrets_ref          : Provider-Keys als SecretRef "${ENV}" statt Plaintext (S2/S6)
+   Konzept: iac4-pilot/konzept-pilot-oc1-dev.md (Konzept §3).
+   ⚠️ bind: "lan" im Container BLEIBT (Konzept §3 Empfehlung (a)): Exposition ist trotzdem
+   loopback-only via Host-Port "127.0.0.1:<port>:<port>" + tailscale serve (ADR-025).
+   Container-internes "loopback" waere ueber den publizierten Port NICHT erreichbar
+   (Docker-Bridge-Caveat) und wuerde Docker-DNS (Ollama/Qdrant) verlieren.
+   ============================================================================= #}
 {% set am = oc.agent_models | default(openclaw_agent_models, true) %}
 {% set subagents_defaults = oc.subagents_defaults | default({}, true) %}
 {% set allow_agents = oc.subagents_allow_agents | default([], true) %}
@@ -6,6 +20,16 @@
 {% set orch_tool_scope = oc.orchestrator_tool_scope | default('', true) %}
 {% set subagent_tools = oc.subagent_tools | default([], true) %}
 {% set agent_thinking = oc.agent_thinking | default({}, true) %}
+{# #126: Aktive Telegram-Accounts vorab berechnen (nur Accounts mit gesetztem Token-Env werden
+   gerendert – gleiches Muster wie Provider: „nur gesetzte Keys landen in der Config“; Q3 offen:
+   bis Tokens vorliegen bleibt der Account unsichtbar, Gateway-Start failt nicht). #}
+{% set acc_ns = namespace(active=[]) %}
+{% if oc.telegram_accounts is defined and oc.telegram_accounts | length > 0 %}
+{% for acc_id, acc_env in oc.telegram_accounts.items() %}
+{% set acc_tok = lookup('env', acc_env) | default('', true) %}
+{% if acc_tok | length > 0 %}{% set _ = acc_ns.active.append(acc_id) %}{% endif %}
+{% endfor %}
+{% endif %}
 {
   "gateway": {
     "mode": "local",
@@ -41,8 +65,24 @@
       "subagents": {{ subagents_defaults | tojson }}
 {% endif %}
     }
-{% if oc.agents | length > 0 %},
+{% if (oc.agents | length > 0) or (oc.person_agents is defined and oc.person_agents | length > 0) %},
     "list": [
+{% if oc.person_agents is defined and oc.person_agents | length > 0 %}
+{# #126: Personen-Agents (PLATZHALTER harald/anna bis Q3) – eigener Workspace + agentDir je Person
+   (S3, getrennter Speicher). Pfade sind Container-Pfade; Host-Pfade: /srv/openclaw/oc1/{workspace,config}
+   (Mapping-Tabelle Konzept §3). subagents.allowAgents: ["<person>"] haelt Rollen-Sub-Agents
+   innerhalb der Person (Q5-Empfehlung, Speicher-Isolation S3). #}
+{% for pid in oc.person_agents %}      {
+        "id": "{{ pid }}",
+        "name": "{{ pid | title }}",
+        "workspace": "/home/node/.openclaw/workspace/{{ pid }}",
+        "agentDir": "/home/node/.openclaw/agents/{{ pid }}/agent",
+        "subagents": {
+          "allowAgents": ["{{ pid }}"]
+        }
+      }{{ "," if not loop.last else "" }}
+{% endfor %}
+{% else %}
 {% for a in oc.agents %}{% set agent_id = a | lower | replace(' ', '-') %}      {
         "id": "{{ agent_id }}",
         "name": "{{ a }}",
@@ -64,9 +104,21 @@
         }
 {% endif %}
       }{{ "," if not loop.last else "" }}
-{% endfor %}    ]
+{% endfor %}
+{% endif %}    ]
 {% endif %}
-  },
+  }{% if acc_ns.active | length > 0 %},
+  "bindings": [
+{# #126 (S4): Bindings agentId<->accountId je aktiver Telegram-Account – deterministisch (K2). #}
+{% for acc_id in acc_ns.active %}    {
+      "agentId": "{{ acc_id }}",
+      "match": {
+        "channel": "telegram",
+        "accountId": "{{ acc_id }}"
+      }
+    }{{ "," if not loop.last else "" }}
+{% endfor %}  ]
+{% endif %},
   "memory": {
     "backend": "qmd"
   },
@@ -111,7 +163,7 @@
       "{{ pname }}": {
         "api": "{{ pm.api }}"
 {% if pkey | length > 0 %},
-        "apiKey": "{{ pkey }}"
+        "apiKey": "{{ '${' ~ penv ~ '}' if (oc.secrets_ref | default(false) | bool) else pkey }}"
 {% endif %}
 {% if pm.baseUrl is defined and pm.baseUrl %},
         "baseUrl": "{{ pm.baseUrl }}"
@@ -126,7 +178,19 @@
   },
   "channels": {
     "telegram": {
-{% if oc_telegram_bot_token | default('') | length > 0 %}
+{% if acc_ns.active | length > 0 %}
+      "enabled": true,
+      "defaultAccount": "{{ acc_ns.active[0] }}",
+      "dmPolicy": "pairing",
+      "accounts": {
+{# #126 (S4): Bot-Token je Person als SecretRef "${ENV}" (Kurzform) – belegt:
+   reference/secretref-credential-surface.md: channels.telegram.accounts.*.botToken.
+   Aufloesung aus der Container-Umgebung (docker-compose.yml.j2 reicht die Tokens durch). #}
+{% for acc_id in acc_ns.active %}        "{{ acc_id }}": {
+          "botToken": "{{ '${' ~ oc.telegram_accounts[acc_id] ~ '}' }}"
+        }{{ "," if not loop.last else "" }}
+{% endfor %}      }
+{% elif oc_telegram_bot_token | default('') | length > 0 %}
       "enabled": true,
       "botToken": "{{ oc_telegram_bot_token }}"
 {% else %}

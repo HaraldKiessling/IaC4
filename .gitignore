@@ -18,7 +18,9 @@ __pycache__/
 
 # Secrets
 .env
+.env.*
 !*.example
+!.env.example
 *.pem
 *.key
 oauth-creds.txt
