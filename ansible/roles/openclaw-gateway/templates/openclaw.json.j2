@@ -1,12 +1,12 @@
 {# =============================================================================
    OpenClaw-Gateway-Config (ADR-025): Multi-Instanz, SSoT group_vars/<target>.yml
 
-   #126 PILOT Familien-Instanz (oc1, dev) – optionale Erweiterungen (nur bei Bedarf
-   je Instanz gesetzt, oc2/oc3 bleiben unveraendert):
+   #126 PILOT Familien-Instanz (oc4, dev) – optionale Erweiterungen (nur bei Bedarf
+   je Instanz gesetzt, oc1/oc2/oc3 bleiben unveraendert):
    - oc.person_agents        : Personen-Agents mit eigenem workspace + agentDir (S3)
    - oc.telegram_accounts    : Multi-Account-Telegram (S4): accounts + defaultAccount + dmPolicy
    - oc.secrets_ref          : Provider-Keys als SecretRef "${ENV}" statt Plaintext (S2/S6)
-   Konzept: iac4-pilot/konzept-pilot-oc1-dev.md (Konzept §3).
+   Konzept: iac4-pilot/konzept-pilot-oc1-dev.md (Dateiname historisch, Zielinstanz oc4, §3).
    ⚠️ bind: "lan" im Container BLEIBT (Konzept §3 Empfehlung (a)): Exposition ist trotzdem
    loopback-only via Host-Port "127.0.0.1:<port>:<port>" + tailscale serve (ADR-025).
    Container-internes "loopback" waere ueber den publizierten Port NICHT erreichbar
@@ -69,7 +69,7 @@
     "list": [
 {% if oc.person_agents is defined and oc.person_agents | length > 0 %}
 {# #126: Personen-Agents (PLATZHALTER harald/anna bis Q3) – eigener Workspace + agentDir je Person
-   (S3, getrennter Speicher). Pfade sind Container-Pfade; Host-Pfade: /srv/openclaw/oc1/{workspace,config}
+   (S3, getrennter Speicher). Pfade sind Container-Pfade; Host-Pfade: /srv/openclaw/oc4/{workspace,config}
    (Mapping-Tabelle Konzept §3). subagents.allowAgents: ["<person>"] haelt Rollen-Sub-Agents
    innerhalb der Person (Q5-Empfehlung, Speicher-Isolation S3). #}
 {% for pid in oc.person_agents %}      {

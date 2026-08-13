@@ -24,7 +24,7 @@ services:
       TELEGRAM_BOT_TOKEN: "{{ oc_telegram_bot_token }}"
 {% endif %}
 {% if oc.secrets_ref | default(false) | bool %}
-      # #126 Pilot (oc1): Geteilte Provider-Keys als Container-Env – SecretRef-Aufloesung im
+      # #126 Pilot (oc4): Geteilte Provider-Keys als Container-Env – SecretRef-Aufloesung im
       # Gateway-Prozess (openclaw.json enthaelt nur "${ENV}"; Werte aus GH-Secrets via Workflow 04).
 {% for pname, penv in openclaw_provider_envs.items() %}
 {% set pkey = lookup('env', penv) | default('', true) if penv else '' %}
@@ -34,7 +34,7 @@ services:
 {% endfor %}
 {% endif %}
 {% if oc.telegram_accounts is defined and oc.telegram_accounts | length > 0 %}
-      # #126 Pilot (oc1): Telegram-Bot-Token je Person (SecretRef "${ENV}" in openclaw.json).
+      # #126 Pilot (oc4): Telegram-Bot-Token je Person (SecretRef "${ENV}" in openclaw.json).
 {% for acc_id, acc_env in oc.telegram_accounts.items() %}
 {% set acc_tok = lookup('env', acc_env) | default('', true) %}
 {% if acc_tok | length > 0 %}

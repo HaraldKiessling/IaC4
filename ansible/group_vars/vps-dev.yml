@@ -20,21 +20,6 @@ openclaw_instances:
     enabled: true
     port: 18789
     label: "OC1 – Creator/Vanilla-Baseline (Benchmark-Arm, Design 01-oc2-oc3-benchmark Kap. 6.1)"
-    # #126 PILOT Familien-Instanz (oc1, dev): Eine Instanz, geteilte LLM-Keys (S2),
-    # getrennter Speicher je Person (S3), eigener Telegram-Bot je Person (S4).
-    # Konzept: iac4-pilot/konzept-pilot-oc1-dev.md (Konzept §3/§4).
-    # ⚠️ Q3 OFFEN (Konzept §9): "harald"/"anna" sind PLATZHALTER, bis Harald die Pilot-Personen
-    #    und deren BotFather-Tokens liefert. Tokens -> GH-Secrets DEV_OC1_TELEGRAM_BOT_HARALD/ANNA;
-    #    Accounts + Bindings werden erst gerendert, wenn das jeweilige Token-Env gesetzt ist
-    #    (gleiches Muster wie Provider-Keys; Gateway-Start failt nicht ohne Tokens).
-    # ⚠️ Q2 OFFEN (Konzept §9): Benchmark-Kollision – oc1 war Vanilla-Baseline (Design 01);
-    #    der Pilot-Umbau ist mit dem Benchmark-Arm zu klaeren. Q1 (Konzept §0): „Server oc1“ =
-    #    bestehende Instanz oc1 auf vps-dev (kein neuer Host) – verifiziert.
-    person_agents: ["harald", "anna"]           # Q3: echte Personen-Namen nach Klaerung ersetzen
-    telegram_accounts:
-      harald: "DEV_OC1_TELEGRAM_BOT_HARALD"     # Q3: Token ausstehend (GH-Secret neu)
-      anna: "DEV_OC1_TELEGRAM_BOT_ANNA"         # Q3: Token ausstehend (GH-Secret neu)
-    secrets_ref: true                            # Provider-Keys als SecretRef "${ENV}" statt Plaintext (S2/S6)
     # OC1 = Vanilla-Baseline bleibt ohne Seed (User-Entscheidung 2026-08-05; Konzept v3.1 Frage 6 —
     # Benchmark-Stoervariable eliminiert; dev-oc2/oc3 behalten Seed via vps-dev.yml-Z.4-6)
     memory_seed: false               # Instanz-Override; Gate-Ausdruck instance.yml Z.141/153 wertet oc.memory_seed vor openclaw_memory_seed aus
@@ -43,7 +28,7 @@ openclaw_instances:
     gateway_token_env: "DEV_OC1_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC1_TELEGRAM_BOT_TOKEN"
     gh_token_env: "DEV_OC1_GH_TOKEN"
-    agents: []                        # #126 Pilot: Personen-Agents via person_agents (oben); keine Rollen-Agents
+    agents: []                        # bewusst KEINE Rollen-Agents (Single-Agent, Creator-These)
     # Fairness-Fix (2026-08-03, Kosten-Befund): OC1 lief auf pro (OpenClaw-Default =
     # erstes Provider-Modell). Alle 3 Arme jetzt modellgleich auf flash — einzige
     # Benchmark-Variable = Team-Setup (OC1: Single, OC2/OC3: Team).
@@ -54,14 +39,12 @@ openclaw_instances:
     # Konstant-Haltung wie OC2 (Design 01 Kap. 6.1): identische Timeouts/Concurrency
     # fuer alle 3 Benchmark-Arme – Timeout/Concurrency duerfen keine Variable sein.
     # Bewusst NICHT Doku-Defaults (maxConcurrent 8, runTimeout 0) – Abweichung dokumentiert.
-    # #126 Pilot: Orchestrator-Pattern pro Person – maxSpawnDepth 2 (S5, Rollen-Sub-Agents
-    # innerhalb der Person via allowAgents); Timeout/Concurrency bleiben Benchmark-Konstanten.
     subagents_defaults:
-      delegationMode: "prefer"      # #126 Pilot (war "suggest" der Vanilla-Baseline)
-      maxSpawnDepth: 2              # #126 Pilot (war 1) – Orchestrator-Pattern je Person (S5)
+      delegationMode: "suggest"      # Doku-Default, explizit (Creator: sparsame Delegation)
+      maxSpawnDepth: 1               # Doku-Default, explizit (kein Orchestrator-Pattern)
       maxChildrenPerAgent: 5
-      maxConcurrent: 4              # Konstante (identisch OC2/OC3)
-      runTimeoutSeconds: 900        # Konstante (identisch OC2/OC3)
+      maxConcurrent: 4               # Konstante (identisch OC2/OC3)
+      runTimeoutSeconds: 900         # Konstante (identisch OC2/OC3)
   - name: oc2
     enabled: true
     port: 18790
@@ -156,3 +139,42 @@ openclaw_instances:
     # braucht volle Tools als Pass-Through; Steuerung via AGENTS.md-Mandat (weich).
     agent_workspaces: true
     subagents_tools_deny: ["cron", "gateway"]
+  - name: oc4
+    enabled: true
+    port: 18792              # nächster freier Port nach oc3=18791 (Harald-Entscheidung 2026-08-13 15:43)
+    label: "OC4 – Familien-Instanz (Pilot, GH #126): 1 Gateway, geteilte LLM-Keys (S2), getrennter Speicher je Person (S3), eigener Telegram-Bot je Person (S4)"
+    # #126 PILOT Familien-Instanz (oc4, dev): Eine Instanz, geteilte LLM-Keys (S2),
+    # getrennter Speicher je Person (S3), eigener Telegram-Bot je Person (S4).
+    # Konzept: iac4-pilot/konzept-pilot-oc1-dev.md (Dateiname historisch, Zielinstanz oc4 – Konzept §3/§4).
+    # Harald-Entscheidung 2026-08-13: oc1/oc2/oc3 (Benchmark-Arme) bleiben UNANGETASTET;
+    # der Pilot läuft auf der NEUEN Instanz oc4 (Port 18792).
+    # ⚠️ Q3 (Konzept §9, beantwortet 15:43): "harald"/"anna" sind gekennzeichnete PLATZHALTER,
+    #    echte Personen + BotFather-Tokens sind NACHLIEFERBAR (Q3, Web-Oberfläche/Pairing/GH-Secrets).
+    #    Tokens -> GH-Secrets DEV_OC4_TELEGRAM_BOT_HARALD/ANNA; Accounts + Bindings werden erst
+    #    gerendert, wenn das jeweilige Token-Env gesetzt ist (gleiches Muster wie Provider-Keys;
+    #    Gateway-Start failt nicht ohne Tokens).
+    person_agents: ["harald", "anna"]           # Q3: echte Personen-Namen nach Lieferung ersetzen
+    telegram_accounts:
+      harald: "DEV_OC4_TELEGRAM_BOT_HARALD"     # Q3: Token ausstehend (GH-Secret neu)
+      anna: "DEV_OC4_TELEGRAM_BOT_ANNA"         # Q3: Token ausstehend (GH-Secret neu)
+    secrets_ref: true                            # Provider-Keys als SecretRef "${ENV}" statt Plaintext (S2/S6)
+    # Pilot-Instanz: ohne Memory-Seed (kein Benchmark-Arm; Seed bleibt OC2/OC3-Variable)
+    memory_seed: false               # Instanz-Override; Gate-Ausdruck instance.yml wertet oc.memory_seed vor openclaw_memory_seed aus
+    llm_provider: deepseek            # aktiver Provider (Key Pflicht: DEV_DEEPSEEK_API_KEY, geteilt)
+    websearch_api_key_env: "DEV_OC4_WEBSEARCH_API_KEY"
+    gateway_token_env: "DEV_OC4_GATEWAY_TOKEN"
+    telegram_bot_token_env: "DEV_OC4_TELEGRAM_BOT_TOKEN"
+    gh_token_env: "DEV_OC4_GH_TOKEN"
+    agents: []                        # #126 Pilot: Personen-Agents via person_agents (oben); keine Rollen-Agents
+    agent_models:
+      Orchestrator:
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+    # #126 Pilot (S5): Orchestrator-Pattern pro Person – maxSpawnDepth 2 (Rollen-Sub-Agents
+    # innerhalb der Person via allowAgents im Template); Timeout/Concurrency wie Benchmark-Konstanten.
+    subagents_defaults:
+      delegationMode: "prefer"      # Orchestrator-Pattern je Person (S5)
+      maxSpawnDepth: 2              # Orchestrator-Pattern je Person (S5)
+      maxChildrenPerAgent: 5
+      maxConcurrent: 4
+      runTimeoutSeconds: 900

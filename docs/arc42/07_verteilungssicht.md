@@ -37,15 +37,17 @@
 | 2b (Restrict) | 🔒 Geschlossen | – | < 1 Min |
 | 2c+ (Final) | 🔒 Nur Tailscale | tailscale0:22 | dauerhaft |
 
-## OpenClaw oc1 – Familien-Instanz (Pilot, GH #126)
+## OpenClaw oc4 – Familien-Instanz (Pilot, GH #126)
 
-**Status:** Feature-Branch `feature/pilot-familie-oc1-dev` (kein Merge nach `main` während des Pilots, K8).
+**Status:** Feature-Branch `feature/pilot-familie-oc4-dev` (kein Merge nach `main` während des Pilots, K8).
+Zielinstanz: **oc4** (Port 18792) auf `vps-dev.tailcfea8a.ts.net` – Harald-Entscheidung 2026-08-13 15:43
+(oc1/oc2/oc3 bleiben als Benchmark-Arme unangetastet; Dateiname des Konzepts ist historisch `konzept-pilot-oc1-dev.md`).
 Konzept: `iac4-pilot/konzept-pilot-oc1-dev.md`. BDD: `bdd/familie-pilot/`.
 
 ### Konfigurationsmodell (Alternative A: 1 Gateway, N Agents)
 
-Die Instanz oc1 (Port 18789) wird vom Single-Agent-/Vanilla-Modus auf das
-**Familien-Modell** umgestellt — Quelle: `ansible/group_vars/vps-dev.yml` (oc1) +
+Die Instanz oc4 (Port 18792) ist eine **neue** Familien-Instanz (Alternative A:
+1 Gateway, N Agents) — Quelle: `ansible/group_vars/vps-dev.yml` (oc4, neuer Eintrag) +
 `ansible/roles/openclaw-gateway/templates/openclaw.json.j2`:
 
 | Mechanik | Umsetzung | Scope-Punkt |
@@ -56,33 +58,34 @@ Die Instanz oc1 (Port 18789) wird vom Single-Agent-/Vanilla-Modus auf das
 | Geteilte LLM-Keys | `oc.secrets_ref: true` → `models.providers.*.apiKey` als SecretRef `"${DEV_*}"`; Werte als Container-Env via `docker-compose.yml.j2` (Workflow 04 reicht GH-Secrets durch) | S2/S6 |
 | Rollen-Pattern | `agents.defaults.subagents`: `delegationMode: "prefer"`, `maxSpawnDepth: 2` (Orchestrator-Pattern je Person, S5) | S5 |
 
-**Platzhalter:** Personen `harald`/`anna` sind bis zur Klärung Q3 (Konzept §9) Platzhalter;
-Accounts/Bindings werden nur gerendert, wenn das jeweilige Token-Env gesetzt ist.
+**Platzhalter:** Personen `harald`/`anna` sind gekennzeichnete Platzhalter (Q3 beantwortet
+2026-08-13 – echte Namen + BotFather-Tokens nachlieferbar); Accounts/Bindings werden nur
+gerendert, wenn das jeweilige Token-Env gesetzt ist.
 
-### Pfad-Mapping Host ↔ Container (oc1)
+### Pfad-Mapping Host ↔ Container (oc4)
 
 | Zweck | Host-Pfad (`vps-dev`) | Container-Pfad |
 |-------|----------------------|----------------|
-| Config + Agent-State (inkl. `agents/<person>/agent`) | `/srv/openclaw/oc1/config` | `/home/node/.openclaw` |
-| Workspaces (je Person) | `/srv/openclaw/oc1/workspace/<person>` | `/home/node/.openclaw/workspace/<person>` |
-| Sessions | `/srv/openclaw/oc1/config/agents/<person>/sessions` | `/home/node/.openclaw/agents/<person>/sessions` |
+| Config + Agent-State (inkl. `agents/<person>/agent`) | `/srv/openclaw/oc4/config` | `/home/node/.openclaw` |
+| Workspaces (je Person) | `/srv/openclaw/oc4/workspace/<person>` | `/home/node/.openclaw/workspace/<person>` |
+| Sessions | `/srv/openclaw/oc4/config/agents/<person>/sessions` | `/home/node/.openclaw/agents/<person>/sessions` |
 
 ### Expositions-Caveat `bind: "lan"` (Konzept §3, Empfehlung (a))
 
 Der Container bindet `lan` (Docker-Bridge, `traefik-network`), weil ein container-interner
-`loopback`-Bind über den publizierten Port (`127.0.0.1:18789:18789`) nicht erreichbar wäre.
+`loopback`-Bind über den publizierten Port (`127.0.0.1:18792:18792`) nicht erreichbar wäre.
 Die Exposition ist trotzdem loopback-only: Host-Port bindet `127.0.0.1`, TLS-Front ist
-`tailscale serve --https=18789` (ADR-025). Von außen ist das Gateway nur im Tailnet erreichbar.
+`tailscale serve --https=18792` (ADR-025). Von außen ist das Gateway nur im Tailnet erreichbar.
 
 ### Betrieb (K6: Update / Backup / Restart)
 
 - **Update:** Image-Pin `openclaw_image_version` ändern (SSoT `ansible/group_vars/all.yml`,
-  ADR-017) → Workflow `04-service-deploy.yml` (`target: dev`, `instance: oc1`, `pull: always` +
+  ADR-017) → Workflow `04-service-deploy.yml` (`target: dev`, `instance: oc4`, `pull: always` +
   Recreate via `docker_compose_v2`). Rollback = alten Pin wiederherstellen + erneut deployen.
-- **Backup:** Verzeichnisse `/srv/openclaw/oc1/config` und `/srv/openclaw/oc1/workspace`
+- **Backup:** Verzeichnisse `/srv/openclaw/oc4/config` und `/srv/openclaw/oc4/workspace`
   (Host-Pfade) sichern; Secrets sind SSoT in GH-Secrets (`.env`/`.env.example`-Schema: Konzept §4),
   keine Secrets im Backup nötig.
 - **Restore:** Volumes aus Backup zurückkopieren (uid 1000), danach
-  `docker compose -f /srv/openclaw/oc1/docker-compose.yml restart openclaw` (Container `openclaw-oc1`).
-- **Restart:** `docker compose -f /srv/openclaw/oc1/docker-compose.yml restart openclaw` bzw.
-  `docker restart openclaw-oc1`; Health: `GET https://vps-dev.tailcfea8a.ts.net:18789/health` → 200.
+  `docker compose -f /srv/openclaw/oc4/docker-compose.yml restart openclaw` (Container `openclaw-oc4`).
+- **Restart:** `docker compose -f /srv/openclaw/oc4/docker-compose.yml restart openclaw` bzw.
+  `docker restart openclaw-oc4`; Health: `GET https://vps-dev.tailcfea8a.ts.net:18792/health` → 200.
