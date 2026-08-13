@@ -1,7 +1,7 @@
 # ADR-025: OpenClaw-Deployment-Form (Docker-Container, Multi-Instanz)
 
 - **Status:** Angenommen (Accepted, 2026-08-01; Revision der Vorgängerversion vom 2026-07-31)
-- **Datum:** 2026-07-31 (revidiert 2026-08-01)
+- **Datum:** 2026-07-31 (revidiert 2026-08-01; 2026-08-13: OC4-Pilot Familien-Instanz, GH #126)
 - **Kontext:** Migrationsplan Phase 5 – „OpenClaw" auf DEV. IaC3-Betrieb: OpenClaw lief nativ (ohne systemd → Vorfall 2026-07-16, 6h Downtime) und eine Rollen-Neuinstallation behielt **alte Konfigurationen** (IaC3-Lesson: Altlasten in `~/.openclaw`). Harald 2026-08-01: **Multi-Instanz**-Betrieb für Untersuchungen (mehrere Gateways, nicht Agents) + Recherche zu offizieller Ansible-/Docker-Installation.
 
 ## Entscheidungsfrage
@@ -36,10 +36,10 @@ Wie wird das OpenClaw-Gateway auf dem IaC4-VPS betrieben — und wie werden mehr
 
 ## Konsequenzen
 - Rolle `openclaw-gateway`: Container-Deploy pro Instanz (Compose-Template, openclaw.json.j2, Health-Wait, Serve-Task)
-- Instanz-Struktur: OC1 (Default, WebUI+Telegram+Memory+WebSearch+LLM), OC2 (zusätzlich Agents orchestrator/architect/reviewer/engineer), OC3 (DEV: aktiv als Best-Practice-Referenz seit 2026-08-01, Design 01-oc2-oc3-benchmark; PROD: aktiv als Best-Practice-Referenz seit 2026-08-12)
+- Instanz-Struktur: OC1 (Default, WebUI+Telegram+Memory+WebSearch+LLM), OC2 (zusätzlich Agents orchestrator/architect/reviewer/engineer), OC3 (DEV: aktiv als Best-Practice-Referenz seit 2026-08-01, Design 01-oc2-oc3-benchmark; PROD: aktiv als Best-Practice-Referenz seit 2026-08-12), OC4 (DEV: Pilot Familien-Instanz GH #126 seit 2026-08-13, Port 18792, Feature-Branch `feature/pilot-familie-oc4-dev`, kein Merge nach `main` während des Pilots (K8); erweitert Option B um Personen-Agents (`agents.list`, getrennter Speicher S3), Multi-Account-Telegram (`accounts` + `bindings`, S4) und Provider-Keys als SecretRef `${ENV}` statt Plaintext (S2/S6) – Konzept §3; Details: `group_vars/vps-dev.yml` + `docs/arc42/07`)
 - Secrets je Instanz als GH-Secrets (`OC<n>_TELEGRAM_BOT_TOKEN`, `OC<n>_LLM_API_KEY`, `OC<n>_WEBSEARCH_API_KEY`); Workflow reicht sie als env durch
 - Kein Host-Node/pnpm mehr; alte native Rolle ersetzt
-- BDD: `openclaw.bdd.ps1` (Health je Instanz via HTTPS, Ports von außen dicht, Serve-Routen)
+- BDD: `openclaw.bdd.ps1` (Health je Instanz via HTTPS, Ports von außen dicht, Serve-Routen); Pilot-BDD `bdd/familie-pilot/` (K1–K9, lokal ausführbar)
 - arc42/07: OpenClaw als Container, Ports 18789/18790/18791 nur Tailnet
 
 ## Referenzen
