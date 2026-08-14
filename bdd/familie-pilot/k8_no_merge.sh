@@ -25,10 +25,11 @@ else
   fail "Feature-Branch $PILOT_BRANCH ist nicht auf origin (Push ausstehend)"
 fi
 
-if git log --oneline main..HEAD >/dev/null 2>&1; then
-  pass "Commits liegen nur auf dem Feature-Branch (nicht auf main)"
+ADVANCED="$(git log --oneline main..HEAD 2>/dev/null || true)"
+if [ -n "$ADVANCED" ]; then
+  pass "Commits vorhanden – Fortschritt gegenueber main (main..HEAD)"
 else
-  fail "Kein Fortschritt gegenueber main sichtbar"
+  fail "Kein Fortschritt gegenueber main sichtbar (main..HEAD leer)"
 fi
 
 note "Deploy nach dev ausschliesslich vom Feature-Branch via 04-service-deploy.yml (instance=$INSTANCE) – Konvention dokumentiert in docs/arc42/07."
