@@ -1,7 +1,6 @@
 # BDD – Pilot Familien-Instanz oc4 (GH #126)
 
-Ausführbare Checks zu `familie_pilot.feature` (K1–K9, 15 Szenarien; Referenz:
-`iac4-pilot/konzept-pilot-oc1-dev.md` §7 – Dateiname historisch, Zielinstanz **oc4**).
+Ausführbare Checks zu `familie_pilot.feature` (K1–K9, 15 Szenarien; Referenz-Konzept: `docs/arc42/07_verteilungssicht.md` (Abschnitt „OpenClaw oc4 – Familien-Instanz“, GH #126); alte Konzept-Datei `iac4-pilot/konzept-pilot-oc1-dev.md` (§7) historisch, Zielinstanz **oc4**).
 Jede Datei `k<N>_*.sh` bildet genau ein Abnahmekriterium ab.
 
 ## Lauf

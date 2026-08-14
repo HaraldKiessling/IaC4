@@ -40,9 +40,9 @@
 ## OpenClaw oc4 – Familien-Instanz (Pilot, GH #126)
 
 **Status:** Feature-Branch `feature/pilot-familie-oc4-dev` (kein Merge nach `main` während des Pilots, K8).
-Zielinstanz: **oc4** (Port 18792) auf `vps-dev.tailcfea8a.ts.net` – Harald-Entscheidung 2026-08-13 15:43
-(oc1/oc2/oc3 bleiben als Benchmark-Arme unangetastet; Dateiname des Konzepts ist historisch `konzept-pilot-oc1-dev.md`).
-Konzept: `iac4-pilot/konzept-pilot-oc1-dev.md`. BDD: `bdd/familie-pilot/`.
+Zielinstanz: **oc4** (Port 18792) auf `vps-dev.tailcfea8a.ts.net` – Betreiber-Entscheidung 2026-08-13 15:43
+(oc1/oc2/oc3 bleiben als Benchmark-Arme unangetastet; Dateiname des früheren Konzepts ist historisch `konzept-pilot-oc1-dev.md`).
+Konzept (aktuell): `docs/adr/ADR-025-openclaw-deployment.md` (Pilot oc4) + dieser Abschnitt; historisch: `iac4-pilot/konzept-pilot-oc1-dev.md` (existiert nicht, keine Neuanlage). BDD: `bdd/familie-pilot/`.
 
 ### Konfigurationsmodell (Alternative A: 1 Gateway, N Agents)
 
@@ -56,7 +56,7 @@ Die Instanz oc4 (Port 18792) ist eine **neue** Familien-Instanz (Alternative A:
 | Eigener Bot je Person | `oc.telegram_accounts` → `channels.telegram.accounts.<person>.botToken` + `defaultAccount` + `dmPolicy: "pairing"` | S4 |
 | Routing | Top-Level `bindings[]`: `{agentId: <person>, match: {channel: "telegram", accountId: <person>}}` | S4 |
 | Geteilte LLM-Keys | `oc.secrets_ref: true` → `models.providers.*.apiKey` als SecretRef `"${DEV_*}"`; Werte als Container-Env via `docker-compose.yml.j2` (Workflow 04 reicht GH-Secrets durch) | S2/S6 |
-| Web-Search (OpenRouter) | `oc.websearch_api_key_env: "DEV_OC4_OPENROUTER_API_KEY"` → `plugins.entries.perplexity.config.webSearch.apiKey` als SecretRef `"${DEV_OC4_OPENROUTER_API_KEY}"` (+ `baseUrl`/`model` explizit); der sk-or-Key schaltet auf den OpenRouter-Chat-Completions-Pfad um (Doku: `docs/tools/perplexity-search.md` „OpenRouter/Sonar“) | Harald 2026-08-13 17:00 (#126, statt Perplexity) |
+| Web-Search (OpenRouter) | `oc.websearch_api_key_env: "DEV_OC4_OPENROUTER_API_KEY"` → `plugins.entries.perplexity.config.webSearch.apiKey` als SecretRef `"${DEV_OC4_OPENROUTER_API_KEY}"` (+ `baseUrl`/`model` explizit); der sk-or-Key schaltet auf den OpenRouter-Chat-Completions-Pfad um (Doku: `docs/tools/perplexity-search.md` „OpenRouter/Sonar“) | Betreiber-Entscheidung 2026-08-13 17:00 (#126, statt Perplexity) |
 | Rollen-Pattern | `agents.defaults.subagents`: `delegationMode: "prefer"`, `maxSpawnDepth: 2` (Orchestrator-Pattern je Person, S5) | S5 |
 
 **Platzhalter:** Personen-IDs `person1`/`person2` sind gekennzeichnete Platzhalter (Q3 beantwortet

@@ -1,6 +1,6 @@
 # language: de
 # BDD-Feature: Familien-Instanz auf oc4 (dev) — Pilot (GH Issue #126)
-# Referenz-Konzept: iac4-pilot/konzept-pilot-oc1-dev.md (Dateiname historisch, Zielinstanz oc4)
+# Referenz-Konzept: docs/arc42/07_verteilungssicht.md („OpenClaw oc4 – Familien-Instanz“, GH #126; alte Datei iac4-pilot/konzept-pilot-oc1-dev.md historisch, Zielinstanz oc4)
 # Syntax: Feature/Scenario/Given/When/Then — deutsch, technisch umsetzbar.
 # Jedes Szenario bildet genau ein Abnahmekriterium (K1–K9) aus #126 ab.
 # Szenario-Anzahl: 15 (K1: 1, K2: 2, K3: 3, K4: 2, K5: 2, K6: 2, K7: 1, K8: 1, K9: 1).
@@ -9,7 +9,7 @@
 # Klärung der echten Namen ersetzt.
 
 Funktionalität: Familien-Instanz auf oc4 (dev)
-  Als Betreiber (Harald) möchte ich EINE OpenClaw-Instanz (oc4, dev) betreiben,
+  Als Betreiber möchte ich EINE OpenClaw-Instanz (oc4, dev) betreiben,
   die mehrere Familienmitglieder mit geteilten LLM-Keys, getrenntem Speicher
   und je einem eigenen Telegram-Bot versorgt, damit die Familie gemeinsam
   Infrastruktur nutzt, aber getrennt arbeitet.

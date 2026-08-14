@@ -2,8 +2,10 @@
 # =============================================================================
 # bdd-lib.sh – Gemeinsame Helfer fuer die Pilot-BDD-Checks (GH #126, oc4 dev)
 # Feature: bdd/familie-pilot/familie_pilot.feature (K1..K9, 15 Szenarien)
-# Messmethoden: Konzept iac4-pilot/konzept-pilot-oc1-dev.md §7 (Dateiname
-# historisch, Zielinstanz oc4)
+# Messmethoden: bdd/familie-pilot/README.md (K1..K9); Pilot-Konzept aktuell:
+# docs/arc42/07_verteilungssicht.md („OpenClaw oc4 – Familien-Instanz“) +
+# docs/adr/ADR-025-openclaw-deployment.md; alte Konzept-Datei
+# iac4-pilot/konzept-pilot-oc1-dev.md §7 historisch (existiert nicht, keine Neuanlage), Zielinstanz oc4
 #
 # Ausfuehrung:
 #   - LOKAL (dieser Checkout): Struktur-/Secret-Checks (K2-K6, K9) ohne Deploy
@@ -12,7 +14,7 @@
 # Hinweis: Die bestehende IaC4-BDD-Suite (scripts/bdd/*.bdd.ps1, GH-Runner,
 # qa/bdd-testkonzept.md) bleibt unveraendert; dieses Verzeichnis bildet die
 # Szenarien der familie_pilot.feature als zusaetzliche, lokal ausfuehrbare
-# Shell-Checks ab (Entscheidung engineer-pro, Konzept §6).
+# Shell-Checks ab (Entscheidung engineer-pro, Konzept §6 der historischen Datei).
 # =============================================================================
 set -euo pipefail
 
@@ -25,7 +27,7 @@ DEFAULT_ACCOUNT="${DEFAULT_ACCOUNT:-person1}"
 VPS_HOST="${VPS_HOST:-}"                 # leer = nur lokale Checks; z.B. vps-dev.tailcfea8a.ts.net
 VPS_USER="${VPS_USER:-deploy-user}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-# Container-Pfade (Konzept §3); Host-Pfade: /srv/openclaw/<instance>/...
+# Container-Pfade (Konzept §3 der historischen Datei); Host-Pfade: /srv/openclaw/<instance>/...
 WORKSPACE_ROOT="/home/node/.openclaw/workspace"
 AGENT_DIR_ROOT="/home/node/.openclaw/agents"
 HOST_DATA_ROOT="/srv/openclaw"

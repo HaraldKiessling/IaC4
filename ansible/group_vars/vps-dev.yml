@@ -141,14 +141,16 @@ openclaw_instances:
     subagents_tools_deny: ["cron", "gateway"]
   - name: oc4
     enabled: true
-    port: 18792              # nächster freier Port nach oc3=18791 (Harald-Entscheidung 2026-08-13 15:43)
+    port: 18792              # nächster freier Port nach oc3=18791 (Betreiber-Entscheidung 2026-08-13 15:43)
     label: "OC4 – Familien-Instanz (Pilot, GH #126): 1 Gateway, geteilte LLM-Keys (S2), getrennter Speicher je Person (S3), eigener Telegram-Bot je Person (S4)"
     # #126 PILOT Familien-Instanz (oc4, dev): Eine Instanz, geteilte LLM-Keys (S2),
     # getrennter Speicher je Person (S3), eigener Telegram-Bot je Person (S4).
-    # Konzept: iac4-pilot/konzept-pilot-oc1-dev.md (Dateiname historisch, Zielinstanz oc4 – Konzept §3/§4).
-    # Harald-Entscheidung 2026-08-13: oc1/oc2/oc3 (Benchmark-Arme) bleiben UNANGETASTET;
+    # Konzept (aktuell): docs/arc42/07_verteilungssicht.md „OpenClaw oc4 – Familien-Instanz“
+    # + docs/adr/ADR-025-openclaw-deployment.md; alte Konzept-Datei
+    # iac4-pilot/konzept-pilot-oc1-dev.md (§3/§4) historisch (existiert nicht, keine Neuanlage).
+    # Betreiber-Entscheidung 2026-08-13: oc1/oc2/oc3 (Benchmark-Arme) bleiben UNANGETASTET;
     # der Pilot läuft auf der NEUEN Instanz oc4 (Port 18792).
-    # ⚠️ Q3 (Konzept §9, beantwortet 15:43): "person1"/"person2" sind gekennzeichnete PLATZHALTER-IDs,
+    # ⚠️ Q3 (Konzept §9 der historischen Datei, beantwortet 15:43): "person1"/"person2" sind gekennzeichnete PLATZHALTER-IDs,
     #    echte Personen + BotFather-Tokens sind NACHLIEFERBAR (Q3, Web-Oberfläche/Pairing/GH-Secrets).
     #    Tokens -> GH-Secrets DEV_OC4_TELEGRAM_BOT_PERSON1/PERSON2; Accounts + Bindings werden erst
     #    gerendert, wenn das jeweilige Token-Env gesetzt ist (gleiches Muster wie Provider-Keys;
@@ -161,7 +163,7 @@ openclaw_instances:
     # Pilot-Instanz: ohne Memory-Seed (kein Benchmark-Arm; Seed bleibt OC2/OC3-Variable)
     memory_seed: false               # Instanz-Override; Gate-Ausdruck instance.yml wertet oc.memory_seed vor openclaw_memory_seed aus
     llm_provider: deepseek            # aktiver Provider (Key Pflicht: DEV_DEEPSEEK_API_KEY, geteilt)
-    # Web-Search oc4: OpenRouter statt Perplexity (Harald-Entscheidung 2026-08-13 17:00, #126).
+    # Web-Search oc4: OpenRouter statt Perplexity (Betreiber-Entscheidung 2026-08-13 17:00, #126).
     # Key (sk-or-...) als GH-Secret DEV_OC4_OPENROUTER_API_KEY; openclaw.json rendert SecretRef
     # "${DEV_OC4_OPENROUTER_API_KEY}" (oc.secrets_ref). Routing-Beleg: docs/tools/perplexity-search.md
     # „OpenRouter/Sonar-Kompatibilitaet“ – sk-or-Praefix -> OpenRouter-Chat-Completions-Pfad.

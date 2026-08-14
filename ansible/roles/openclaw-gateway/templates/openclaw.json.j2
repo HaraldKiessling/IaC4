@@ -6,7 +6,9 @@
    - oc.person_agents        : Personen-Agents mit eigenem workspace + agentDir (S3)
    - oc.telegram_accounts    : Multi-Account-Telegram (S4): accounts + defaultAccount + dmPolicy
    - oc.secrets_ref          : Provider-Keys als SecretRef "${ENV}" statt Plaintext (S2/S6)
-   Konzept: iac4-pilot/konzept-pilot-oc1-dev.md (Dateiname historisch, Zielinstanz oc4, §3).
+   Konzept (aktuell): docs/arc42/07_verteilungssicht.md („OpenClaw oc4 – Familien-Instanz“)
+   + docs/adr/ADR-025-openclaw-deployment.md; alte Konzept-Datei
+   iac4-pilot/konzept-pilot-oc1-dev.md (§3) historisch (existiert nicht, keine Neuanlage).
    ⚠️ bind: "lan" im Container BLEIBT (Konzept §3 Empfehlung (a)): Exposition ist trotzdem
    loopback-only via Host-Port "127.0.0.1:<port>:<port>" + tailscale serve (ADR-025).
    Container-internes "loopback" waere ueber den publizierten Port NICHT erreichbar
@@ -130,7 +132,7 @@
           "webSearch": {
 {# #126 (oc4): Web-Search-Key als SecretRef "${ENV}" statt Plaintext (Muster wie Provider-Keys,
    oc.secrets_ref; belegt: reference/secretref-credential-surface.md,
-   plugins.entries.perplexity.config.webSearch.apiKey). OpenRouter-Umstellung (Harald 2026-08-13):
+   plugins.entries.perplexity.config.webSearch.apiKey). OpenRouter-Umstellung (Betreiber-Entscheidung 2026-08-13):
    ein OpenRouter-Key (Praefix sk-or-) schaltet den Perplexity-Provider auf den
    OpenRouter-Chat-Completions-Pfad um (docs/tools/perplexity-search.md „OpenRouter/Sonar“);
    baseUrl/model optional explizit (Determinismus K2). #}
