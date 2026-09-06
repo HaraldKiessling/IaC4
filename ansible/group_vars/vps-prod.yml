@@ -69,3 +69,15 @@ openclaw_instances:
     subagents_allow_agents: ["orchestrator", "architect", "engineer-pro", "reviewer"]
     agent_workspaces: true
     subagents_tools_deny: ["cron", "gateway"]
+
+# ── Zusätzliche SSH-Pubkeys für deploy-user (additiv, IaC4-Mechanik-Ergänzung) ──
+# PoC E3 (Owner-Nacht-PoC #1475, 2026-09-06): HA-Preprod-Deploy-Key analog dem
+# vps-dev-Muster (PR #130 / 0ede3c4). Vehikel: Workflow 04, Playbook
+# 03-docker-traefik.yml, Rolle deploy-user-keys (idempotent-additiv, lineinfile;
+# löscht nie Keys; No-op auf Targets ohne Variable). Variable NUR hier (vps-prod,
+# PoC-Rolle "preprod") definiert → dev-Wirkung ausgeschlossen; Keys sind öffentlich
+# (keine Secrets). Quelle: home-assistant-agent-Repo 00-generate-ssh-key.yml
+# (Run #34042843491, Rotation 2026-09-06 15:36Z). Bewusst NUR Branch-Deploy
+# (chore/poc-ha-key-vpsprod), kein main-Merge im PoC.
+deploy_user_authorized_keys_extra:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPLht5T3jpSaavPIby3mcTgkTKrv8NOD6lcrqGroNYDP ha-deploy-key-20260906"
