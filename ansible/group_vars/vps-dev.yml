@@ -139,3 +139,72 @@ openclaw_instances:
     # braucht volle Tools als Pass-Through; Steuerung via AGENTS.md-Mandat (weich).
     agent_workspaces: true
     subagents_tools_deny: ["cron", "gateway"]
+  - name: oc4
+    enabled: true
+    port: 18792              # nächster freier Port nach oc3=18791 (Betreiber-Entscheidung 2026-08-13 15:43)
+    label: "OC4 – Arbeits-/Familien-Instanz (dev): 5 Agents (3 Repos + Recherche + Frau), geteilte LLM-Keys (S2), getrennter Speicher je Agent (S3), Gruppen-Routing Arbeits-Bot + Frauen-Bot (S4)"
+    # 2026-09-06 (Harald): Umbau von person1/person2-Platzhaltern auf echte Agents.
+    # Agents: iac4, home-assistant-agent, anlagen, recherche (erreichbar via Arbeits-Bot @dev_oc4_bot
+    # in 4 privaten Gruppen) + frau (Ehefrau, via Frauen-Bot @dev_oc4_2_bot, DM).
+    # Gruppen-IDs verifiziert per Bot-API getChat (2026-09-06 17:22 UTC).
+    # Konzept: docs/arc42/07_verteilungssicht.md „OpenClaw oc4 – Familien-Instanz“ + ADR-025.
+    person_agents: ["iac4", "home-assistant-agent", "anlagen", "recherche", "frau"]
+    telegram_accounts:
+      person1: "DEV_OC4_TELEGRAM_BOT_PERSON1"   # Arbeits-Bot @dev_oc4_bot (Harald)
+      person2: "DEV_OC4_TELEGRAM_BOT_PERSON2"   # Frauen-Bot @dev_oc4_2_bot (Ehefrau)
+    # DM-Binding: Frauen-Bot -> frau-Agent (Ehefrau schreibt dem Bot direkt)
+    telegram_dm_bindings:
+      - agent: "frau"
+        account: "person2"
+    # Gruppen-Bindings (Bauart B): Arbeits-Bot-Gruppen -> je eigener Agent
+    telegram_group_bindings:
+      - agent: "iac4"
+        account: "person1"
+        group_id: "-5411914303"
+      - agent: "home-assistant-agent"
+        account: "person1"
+        group_id: "-5169914497"
+      - agent: "anlagen"
+        account: "person1"
+        group_id: "-5415588967"
+      - agent: "recherche"
+        account: "person1"
+        group_id: "-5481768978"
+    # Gruppen-Allowlist + requireMention=false (Harald 2026-09-06: ohne @ chatten)
+    telegram_group_allow:
+      - id: "-5411914303"
+        require_mention: false
+      - id: "-5169914497"
+        require_mention: false
+      - id: "-5415588967"
+        require_mention: false
+      - id: "-5481768978"
+        require_mention: false
+    telegram_allow_from: ["7145674995"]   # Haralds Telegram-User-ID (Sender-Allowlist)
+    secrets_ref: true                            # Provider-Keys als SecretRef "${ENV}" statt Plaintext (S2/S6)
+    # Pilot-Instanz: ohne Memory-Seed (kein Benchmark-Arm; Seed bleibt OC2/OC3-Variable)
+    memory_seed: false               # Instanz-Override; Gate-Ausdruck instance.yml wertet oc.memory_seed vor openclaw_memory_seed aus
+    llm_provider: deepseek            # aktiver Provider (Key Pflicht: DEV_DEEPSEEK_API_KEY, geteilt)
+    # Web-Search oc4: OpenRouter statt Perplexity (Betreiber-Entscheidung 2026-08-13 17:00, #126).
+    # Key (sk-or-...) als GH-Secret DEV_OC4_OPENROUTER_API_KEY; openclaw.json rendert SecretRef
+    # "${DEV_OC4_OPENROUTER_API_KEY}" (oc.secrets_ref). Routing-Beleg: docs/tools/perplexity-search.md
+    # „OpenRouter/Sonar-Kompatibilitaet“ – sk-or-Praefix -> OpenRouter-Chat-Completions-Pfad.
+    websearch_api_key_env: "DEV_OC4_OPENROUTER_API_KEY"
+    websearch_base_url: "https://openrouter.ai/api/v1"   # explizit (Determinismus K2)
+    websearch_model: "perplexity/sonar-pro"              # explizit (Determinismus K2)
+    gateway_token_env: "DEV_OC4_GATEWAY_TOKEN"
+    telegram_bot_token_env: "DEV_OC4_TELEGRAM_BOT_TOKEN"
+    gh_token_env: "DEV_OC4_GH_TOKEN"
+    agents: []                        # #126 Pilot: Personen-Agents via person_agents (oben); keine Rollen-Agents
+    agent_models:
+      Orchestrator:
+        primary: "deepseek/deepseek-v4-flash"
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+    # #126 Pilot (S5): Orchestrator-Pattern pro Person – maxSpawnDepth 2 (Rollen-Sub-Agents
+    # innerhalb der Person via allowAgents im Template); Timeout/Concurrency wie Benchmark-Konstanten.
+    subagents_defaults:
+      delegationMode: "prefer"      # Orchestrator-Pattern je Person (S5)
+      maxSpawnDepth: 2              # Orchestrator-Pattern je Person (S5)
+      maxChildrenPerAgent: 5
+      maxConcurrent: 4
+      runTimeoutSeconds: 900

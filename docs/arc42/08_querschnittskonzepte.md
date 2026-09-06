@@ -16,7 +16,7 @@
 | TAILSCALE_OAUTH_CLIENT_SECRET | GH Actions Secret | OAuth-Client-Secret |
 | TAILSCALE_TAILNET | GH Actions Secret | Tailnet-Name |
 | <T>_<PROVIDER>_API_KEY | GH Actions Secret | LLM-Provider-Keys (T=DEV/PROD; PROVIDER=deepseek/openrouter/openai/google; nur gesetzte werden konfiguriert) |
-| <T>_OC<n>_WEBSEARCH_API_KEY | GH Actions Secret | Perplexity-WebSearch je Instanz (optional) |
+| <T>_OC<n>_WEBSEARCH_API_KEY | GH Actions Secret | Perplexity-WebSearch je Instanz (optional; Ausnahme oc4/#126: DEV_OC4_OPENROUTER_API_KEY – Web-Search via OpenRouter) |
 | <T>_OC<n>_GATEWAY_TOKEN | GH Actions Secret | Gateway-Auth-Token je Instanz (Pflicht, K3-1) |
 | <T>_OC<n>_TELEGRAM_BOT_TOKEN | GH Actions Secret | Telegram-Bot je Instanz (optional) |
 

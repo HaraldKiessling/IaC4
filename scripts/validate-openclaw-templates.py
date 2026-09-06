@@ -102,10 +102,12 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                 assert d['tools']['subagents']['tools']['deny'] == oc['subagents_tools_deny'], \
                     f"{oc['name']}: tools.subagents.deny falsch"
             e2 = jinja2.Environment()
+            e2.filters['bool'] = _bool_filter  # #128: Compose-Template nutzt Ansible-Idiom `| bool` (secrets_ref) – wie e/e3
             e2.globals['lookup'] = fake_lookup
             yaml.safe_load(e2.from_string(COMPOSE).render(
                 oc=oc, openclaw_image=gv_all['openclaw_image'],
                 openclaw_image_version=gv_all['openclaw_image_version'],
+                openclaw_provider_envs=target['openclaw_provider_envs'],  # #128: secrets_ref-Block iteriert Provider-Envs
                 docker_network='traefik-network', oc_gateway_token='tok', oc_telegram_bot_token=''))
             # N5: Key-Pfad (apiKey + models) mit Dummy-Keys durchrendern
             dummy_lookup = {v: 'k-' + k for k, v in target['openclaw_provider_envs'].items() if v}
@@ -122,7 +124,10 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                 assert 'providers' not in dk
                 for pn, envname in target['openclaw_provider_envs'].items():
                     if envname:
-                        assert dk['models']['providers'][pn].get('apiKey') == 'k-' + pn, f"apiKey fehlt bei {pn}"
+                        # #128: secrets_ref-Instanzen (oc4) rendern SecretRef "${ENV}" statt Dummy-Key (S2)
+                        expected = '${' + envname + '}' if _bool_filter(oc.get('secrets_ref', False)) else 'k-' + pn
+                        assert dk['models']['providers'][pn].get('apiKey') == expected, \
+                            f"apiKey fehlt/falsch bei {pn} (erwartet {expected})"
         except Exception as ex:
             failures.append(f"{tf}/{oc['name']}: {ex}")
 

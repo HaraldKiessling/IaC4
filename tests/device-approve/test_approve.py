@@ -310,7 +310,7 @@ class TestApproveCli:
         monkeypatch.setattr(approve, "run_local_discovery", lambda request_id, derived_type, runner=None, log=None, timeout=15, **kw: (fake_result, {"scanned": ["local/local"], "unreachable": []}))
         seen = []
         monkeypatch.setattr(approve, "run_local_approve",
-                            lambda rid, found_type, runner=None, timeout=15: (seen.append((rid, found_type)) or 0))
+                            lambda rid, found_type, runner=None, timeout=15, account="": (seen.append((rid, found_type)) or 0))
         rc = approve.main(["--local"])
         data = json.loads(capsys.readouterr().out)
         assert data["status"] == "approved"

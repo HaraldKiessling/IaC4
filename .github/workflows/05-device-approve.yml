@@ -12,6 +12,19 @@
 #     remove           – gepaartes Geraet entfernen (nur device)
 #     e2e              – kompletter Geraete-Lifecycle-Test (frischer Client)
 #
+#   Input `account` (nur Telegram-Pairing, Multi-Account, #126 Pilot oc4):
+#     optional – Telegram-Account/Bot (z.B. person1|person2). Steuert:
+#       (a) den CLI-Parameter `--account <id>` bei `openclaw pairing list/approve`
+#           (belegt: docs/channels/pairing.md „Multi-account channels take
+#           `--account <id>`“) und
+#       (b) die Genehmigungs-Whitelist je Bot/Account: falls gesetzt, wird
+#           TELEGRAM_APPROVE_USERS_<ACCOUNT> (z.B. TELEGRAM_APPROVE_USERS_PERSON1)
+#           statt der flachen TELEGRAM_APPROVE_USERS geprueft (Fallback auf
+#           TELEGRAM_APPROVE_USERS, wenn die Account-Whitelist nicht gesetzt ist).
+#
+#   oc4-Abdeckung (#126): E2E-`case` + Verify-/Port-Blöcke kennen oc4 (Port 18792,
+#     Secret DEV_OC4_GATEWAY_TOKEN) – keine case-Lücke mehr (Konzept §7.1).
+#
 #   Input `scope` (nur mode=remove):
 #     device (Default) – genau ein Geraet per `id` (v3.5-Pfad, unveraendert)
 #     instance         – ALLE gepaarten Geraete der gefilterten Instanzen
@@ -31,7 +44,8 @@
 #
 #   Secrets: TAILSCALE_OAUTH_CLIENT_ID / TAILSCALE_OAUTH_CLIENT_SECRET
 #   (Tailscale-Action v4.1.3), VPS_USER, SSH_KEY, TELEGRAM_APPROVE_USERS
-#   (Whitelist Telegram-Pfad). Sicherheits-Gates: Whitelist
+#   (Whitelist Telegram-Pfad; #126: optional TELEGRAM_APPROVE_USERS_<ACCOUNT>
+#   je Bot/Account bei Multi-Account-Pairing). Sicherheits-Gates: Whitelist
 #   (repository_dispatch, auth_check.sh), ID-Validierung + Typ-Ableitung
 #   (discovery.py --validate-id), Tailscale-only SSH, keine Secrets in Logs.
 name: "05 – Freigabe (Telegram-Pairing + Device-Approve, Ein-Job)"
@@ -63,6 +77,11 @@ on:
         default: 'auto'
         type: choice
         options: [auto, telegram, device, both]
+      account:
+        description: 'Telegram-Account/Bot bei Multi-Account-Pairing (optional, nur Telegram-Pfad, #126 oc4): z.B. person1, person2 – steuert --account <id> in pairing list/approve und die Whitelist TELEGRAM_APPROVE_USERS_<ACCOUNT> (Fallback: TELEGRAM_APPROVE_USERS)'
+        required: false
+        default: ''
+        type: string
       target:
         description: 'Ziel-VPS (dev | prod | both)'
         required: false
@@ -121,8 +140,13 @@ jobs:
           INPUT_INSTANCE: ${{ github.event.inputs.instance || github.event.client_payload.instance || 'all' }}
           INPUT_MODE: ${{ inputs.mode || 'approve' }}
           INPUT_SCOPE: ${{ inputs.scope || 'device' }}
+          INPUT_ACCOUNT: ${{ github.event.inputs.account || github.event.client_payload.account || '' }}
           TG_USER_ID: ${{ github.event.client_payload.telegram_user_id || '' }}
           AUTHORIZED_USERS: ${{ secrets.TELEGRAM_APPROVE_USERS }}
+          # #126 (oc4, Multi-Account): Whitelist je Bot/Account – TELEGRAM_APPROVE_USERS_<ACCOUNT>
+          # (z.B. _PERSON1/_PERSON2); Fallback auf TELEGRAM_APPROVE_USERS, wenn nicht gesetzt.
+          TELEGRAM_APPROVE_USERS_PERSON1: ${{ secrets.TELEGRAM_APPROVE_USERS_PERSON1 }}
+          TELEGRAM_APPROVE_USERS_PERSON2: ${{ secrets.TELEGRAM_APPROVE_USERS_PERSON2 }}
         run: |
           set -euo pipefail
 
@@ -133,8 +157,26 @@ jobs:
           # AUTHORIZED_USERS referenziert. Die Request-ID-Validierung ist an
           # discovery.py --validate-id delegiert (Single Source of Truth – auch
           # 6-7-stellige Pairing-Kurzcodes).
+          # #126 (Multi-Account): bei gesetztem account wird die Whitelist je
+          # Bot/Account ausgerollt – TELEGRAM_APPROVE_USERS_<ACCOUNT> (z.B.
+          # _PERSON1) VOR der flachen TELEGRAM_APPROVE_USERS geprueft. Leere
+          # Account-Whitelist = Warnung + Fallback (kein Auth-Bypass: die
+          # Fallback-Whitelist bleibt Pflicht).
           if [ -n "$TG_USER_ID" ]; then
-            export TG_USER_ID AUTHORIZED_USERS
+            if [ -n "$INPUT_ACCOUNT" ]; then
+              ACC_UPPER=$(printf '%s' "$INPUT_ACCOUNT" | tr '[:lower:]' '[:upper:]')
+              ACC_VAR="TELEGRAM_APPROVE_USERS_${ACC_UPPER}"
+              ACC_USERS="${!ACC_VAR:-}"
+              if [ -n "$ACC_USERS" ]; then
+                export AUTHORIZED_USERS="$ACC_USERS"
+                echo "ℹ️  Account-Whitelist ${ACC_VAR} aktiv (Bot: $INPUT_ACCOUNT)"
+              else
+                echo "⚠️  Account-Whitelist ${ACC_VAR} nicht gesetzt – Fallback auf TELEGRAM_APPROVE_USERS" >&2
+                export AUTHORIZED_USERS
+              fi
+            else
+              export AUTHORIZED_USERS
+            fi
             bash tools/telegram-approve-bot/auth_check.sh
           fi
 
@@ -166,6 +208,7 @@ jobs:
               echo "DERIVED_TYPE=$LIST_TYPE"
               echo "APPROVE_TARGET=$INPUT_TARGET"
               echo "APPROVE_INSTANCE=$INPUT_INSTANCE"
+              echo "APPROVE_ACCOUNT=$INPUT_ACCOUNT"
             } >> "$GITHUB_ENV"
             if [ "$INPUT_MODE" = "e2e" ]; then
               echo "🧪 E2E-Modus: id='${INPUT_ID:-}' ignoriert (keine Validierung), type=$LIST_TYPE"
@@ -208,8 +251,9 @@ jobs:
               echo "APPROVE_TARGET=$INPUT_TARGET"
               echo "APPROVE_INSTANCE=$INPUT_INSTANCE"
               echo "APPROVE_SCOPE=$INPUT_SCOPE"
+              echo "APPROVE_ACCOUNT=$INPUT_ACCOUNT"
             } >> "$GITHUB_ENV"
-            echo "✅ Eingaben validiert (mode=$INPUT_MODE scope=$INPUT_SCOPE id=$INPUT_ID type=$DERIVED_TYPE target=$INPUT_TARGET inst=$INPUT_INSTANCE)"
+            echo "✅ Eingaben validiert (mode=$INPUT_MODE scope=$INPUT_SCOPE id=$INPUT_ID type=$DERIVED_TYPE target=$INPUT_TARGET inst=$INPUT_INSTANCE account=$INPUT_ACCOUNT)"
           fi
 
       # SSoT-Mapping (v3.4/H2): approve.py generiert die Instanz-Map selbst
@@ -253,9 +297,11 @@ jobs:
         env:
           # Instanz-spezifische Gateway-Tokens (Fix 2026-08-12): vorher war GW_TOKEN
           # hart auf OC1 codiert – E2E für oc2/oc3 nutzte das falsche Secret.
+          # #126 (oc4): DEV_OC4_GATEWAY_TOKEN analog ergaenzt (Port 18792).
           GW_TOKEN_DEV_OC1: ${{ secrets.DEV_OC1_GATEWAY_TOKEN }}
           GW_TOKEN_DEV_OC2: ${{ secrets.DEV_OC2_GATEWAY_TOKEN }}
           GW_TOKEN_DEV_OC3: ${{ secrets.DEV_OC3_GATEWAY_TOKEN }}
+          GW_TOKEN_DEV_OC4: ${{ secrets.DEV_OC4_GATEWAY_TOKEN }}
           GW_TOKEN_PROD_OC1: ${{ secrets.PROD_OC1_GATEWAY_TOKEN }}
           GW_TOKEN_PROD_OC2: ${{ secrets.PROD_OC2_GATEWAY_TOKEN }}
           GW_TOKEN_PROD_OC3: ${{ secrets.PROD_OC3_GATEWAY_TOKEN }}
@@ -266,6 +312,7 @@ jobs:
             oc1) E2E_PORT=18789 ;;
             oc2) E2E_PORT=18790 ;;
             oc3) E2E_PORT=18791 ;;
+            oc4) E2E_PORT=18792 ;;
             *) echo "❌ Unbekannte Instanz: $APPROVE_INSTANCE" >&2; exit 2 ;;
           esac
           # Instanz-spezifisches Gateway-Token auflösen (Fix 2026-08-12)
@@ -528,6 +575,7 @@ jobs:
             --type-filter "$DERIVED_TYPE" \
             --target-filter "$APPROVE_TARGET" \
             --instance-filter "$APPROVE_INSTANCE" \
+            --account "$APPROVE_ACCOUNT" \
             --vps-user "$VPS_USER" \
             --ssh-key ~/.ssh/id_ed25519 \
             --ts-tailnet "$TS_TAILNET" \
@@ -556,6 +604,7 @@ jobs:
             --type-filter "$DERIVED_TYPE" \
             --target-filter "$APPROVE_TARGET" \
             --instance-filter "$APPROVE_INSTANCE" \
+            --account "$APPROVE_ACCOUNT" \
             --vps-user "$VPS_USER" \
             --ssh-key ~/.ssh/id_ed25519 \
             --ts-tailnet "$TS_TAILNET" \

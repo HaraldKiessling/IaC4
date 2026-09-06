@@ -147,15 +147,18 @@ SSH_OPTS = [
 ]
 # Δ1: getrennte Discovery-Quellen je Typ (werden in der Remote-Schleife
 # pro Instanz ausgeführt; 2>/dev/null + `|| true` = fail-safe bei Instanz-Down)
+# #126 (oc4, Multi-Account): {account_arg} wird beim Aufruf gefuellt
+# (` --account <id>` nur Telegram, belegt: docs/channels/pairing.md
+# „Multi-account channels take `--account <id>`“); leer = Kanal-weit wie bisher.
 PAIRING_LIST_CMD = (
-    "sudo docker exec openclaw-{instance} openclaw pairing list telegram --json 2>/dev/null"
+    "sudo docker exec openclaw-{instance} openclaw pairing list telegram --json{account_arg} 2>/dev/null"
 )
 DEVICES_LIST_CMD = (
     "sudo docker exec openclaw-{instance} openclaw devices list --json 2>/dev/null"
 )
 # Δ2: Approve-Kommandos je Typ (Templates HIER; approve_step.py re-exportiert)
 APPROVE_CMD_TEMPLATES = {
-    "telegram": "sudo docker exec openclaw-{instance} openclaw pairing approve telegram {request_id}",
+    "telegram": "sudo docker exec openclaw-{instance} openclaw pairing approve telegram {request_id}{account_arg}",
     "device": "sudo docker exec openclaw-{instance} openclaw devices approve {request_id}",
 }
 # Δ3 (v3.2, Reject-Modus): Reject-Kommando je Typ. NUR device – die openclaw
@@ -523,7 +526,20 @@ def group_by_vps(instance_map: List[Tuple[str, str]]) -> "OrderedDict[str, List[
     return groups
 
 
-def _source_specs(typ: str) -> List[Tuple[str, str, str]]:
+def _account_arg(account: str, src_typ: str) -> str:
+    """#126 (oc4, Multi-Account): CLI-Parameter-Suffix fuer Telegram-Pairing.
+
+    Belegt: docs/channels/pairing.md – „Multi-account channels take
+    `--account <id>`“ (approve; analog fuer pairing list, account-scoped
+    Pairing-Store: `<channel>-<accountId>-allowFrom.json`). Nur Telegram-
+    Quellen bekommen den Suffix; device bleibt unveraendert.
+    """
+    if account and src_typ == "telegram":
+        return f" --account {account}"
+    return ""
+
+
+def _source_specs(typ: str, account: str = "") -> List[Tuple[str, str, str]]:
     """(source_typ, list_cmd_template, approve_cmd_template) je Remote-Quelle."""
     if typ == "telegram":
         return [("telegram", PAIRING_LIST_CMD, APPROVE_CMD_TEMPLATES["telegram"])]
@@ -547,7 +563,9 @@ def _source_var(typ: str, src_typ: str) -> str:
     return "RESULT_TG" if src_typ == "telegram" else "RESULT_DEV"
 
 
-def _build_json_collection_block(src_typ: str, list_tmpl: str, var: str) -> List[str]:
+def _build_json_collection_block(
+    src_typ: str, list_tmpl: str, var: str, account: str = ""
+) -> List[str]:
     """JSON-Block-Zeilen (Marker + List-Cmd + printf) fuer EINE Quelle.
 
     Gemeinsame Basis von build_ein_job_remote_cmd (Approve-Modus) und
@@ -558,7 +576,9 @@ def _build_json_collection_block(src_typ: str, list_tmpl: str, var: str) -> List
     Die Zeilen laufen innerhalb der `for inst in ...`-Remote-Schleife;
     ${inst} setzt die Remote-Shell. `|| true` = fail-safe bei Instanz-Down.
     """
-    list_cmd = list_tmpl.format(instance="${inst}")
+    list_cmd = list_tmpl.format(
+        instance="${inst}", account_arg=_account_arg(account, src_typ)
+    )
     return [
         f'  echo "---JSON-BEGIN:${{inst}}:{src_typ}---"',
         f"  {var}=$({list_cmd} || true)",
@@ -574,6 +594,7 @@ def build_ein_job_remote_cmd(
     *,
     approve: bool = True,
     action: str = "approve",
+    account: str = "",
 ) -> str:
     """Baut das Ein-Job-Remote-Shell-Template (1 SSH pro VPS).
 
@@ -645,11 +666,12 @@ def build_ein_job_remote_cmd(
         array_key = _action_array_key(src_typ, action)
         id_fields = "|".join(_action_id_fields(src_typ, action))
 
-        lines.extend(_build_json_collection_block(src_typ, list_tmpl, var))
+        lines.extend(_build_json_collection_block(src_typ, list_tmpl, var, account=account))
 
         if approve:
             action_cmd = cmd_templates[src_typ].format(
-                instance="${inst}", request_id=request_id
+                instance="${inst}", request_id=request_id,
+                account_arg=_account_arg(account, src_typ),
             )
             # Array-Inhalt extrahieren (nur pending/requests, nicht paired) und
             # ID-Feld matchen – kein jq, nur POSIX-Tools (R08).
@@ -689,6 +711,7 @@ def _split_label(label: str) -> Tuple[str, str]:
 def build_list_remote_cmd(
     typ: str,
     instances: List[str],
+    account: str = "",
 ) -> str:
     """Baut das Listen-Remote-Shell-Template (1 SSH pro VPS, KEIN Approve).
 
@@ -720,7 +743,7 @@ def build_list_remote_cmd(
     lines = ["echo '---LIST-BEGIN---'", "for inst in " + " ".join(instances) + "; do"]
     for src_typ, list_tmpl, _approve_tmpl in _source_specs(typ):
         var = _source_var(typ, src_typ)
-        lines.extend(_build_json_collection_block(src_typ, list_tmpl, var))
+        lines.extend(_build_json_collection_block(src_typ, list_tmpl, var, account=account))
     lines.append("done")
     lines.append('echo "---LIST-END---"')
     return "\n".join(lines) + "\n"
@@ -825,6 +848,7 @@ def run_list_discovery(
     resolve_ip: Optional[Callable[[str], Optional[str]]] = None,
     run_remote: Optional[Callable[[str, str], str]] = None,
     log: Optional[Callable[[str], None]] = None,
+    account: str = "",
 ) -> ListDiscoveryResult:
     """Listen-Discovery ueber alle VPS: sammelt ALLE pending-Eintraege.
 
@@ -857,7 +881,7 @@ def run_list_discovery(
             log(f"⚠️  VPS {node} nicht erreichbar, ueberspringe")
             continue
 
-        remote_cmd = build_list_remote_cmd(derived_type, instances)
+        remote_cmd = build_list_remote_cmd(derived_type, instances, account=account)
         log(f"🔍 SSH {node} ({target}): {', '.join(instances)} – Sammle pending-Eintraege")
         stdout = run_remote(ip, remote_cmd) if run_remote else ""
 
@@ -1271,6 +1295,7 @@ def run_discovery(
     github_output: Optional[str] = None,
     log: Optional[Callable[[str], None]] = None,
     action: str = "approve",
+    account: str = "",
 ) -> DiscoveryResult:
     """Ein-Job-Kern (v3.0): Discovery + Aktion in EINER SSH-Session pro VPS.
 
@@ -1316,7 +1341,8 @@ def run_discovery(
             continue
 
         remote_cmd = build_ein_job_remote_cmd(
-            derived_type, instances, request_id, approve=approve, action=action
+            derived_type, instances, request_id, approve=approve, action=action,
+            account=account,
         )
         log(f"🔍 SSH {node} ({target}): {', '.join(instances)} – Quelle(n): {derived_type}")
         stdout = run_remote(ip, remote_cmd) if run_remote else ""

@@ -4,7 +4,7 @@
 #   Auswahl (playbook):
 #     docker-traefik : Docker-Engine + Traefik (Reverse Proxy)
 #     services       : Ollama, Qdrant, Code-Server
-#     openclaw       : OpenClaw-Gateways (instance: all | oc1 | oc2 | oc3)
+#     openclaw       : OpenClaw-Gateways (instance: all | oc1 | oc2 | oc3 | oc4)
 #   Reihenfolge (Operator-Verantwortung): 1. docker-traefik, 2. services, 3. openclaw
 #   Vorbedingung: Workflow 03 (Baseline) gelaufen, VPS via Tailscale erreichbar.
 #   Optionen: skip_bootstrap (Benchmark), clean (destruktiv – PROD nur mit confirm_clean_prod)
@@ -31,7 +31,7 @@ on:
           - services
           - openclaw
       instance:
-        description: 'OpenClaw-Instanz (nur playbook=openclaw): all | oc1 | oc2 | oc3'
+        description: 'OpenClaw-Instanz (nur playbook=openclaw): all | oc1 | oc2 | oc3 | oc4'
         required: false
         default: 'all'
         type: choice
@@ -40,6 +40,7 @@ on:
           - oc1
           - oc2
           - oc3
+          - oc4
       skip_bootstrap:
         description: 'skipBootstrap-Modus: verhindert BOOTSTRAP.md-Erzeugung + entfernt bestehende (generisch – wird u.a. vom OC-Benchmark verwendet)'
         required: false
@@ -101,9 +102,16 @@ jobs:
       DEV_OC3_WEBSEARCH_API_KEY: ${{ secrets.DEV_OC3_WEBSEARCH_API_KEY }}
       DEV_OC3_GATEWAY_TOKEN: ${{ secrets.DEV_OC3_GATEWAY_TOKEN }}
       DEV_OC3_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC3_TELEGRAM_BOT_TOKEN }}
+      # #126 Pilot (oc4): Secrets der Familien-Instanz (geteilt + je Person, Q3 Platzhalter); Web-Search via OpenRouter
+      DEV_OC4_OPENROUTER_API_KEY: ${{ secrets.DEV_OC4_OPENROUTER_API_KEY }}
+      DEV_OC4_GATEWAY_TOKEN: ${{ secrets.DEV_OC4_GATEWAY_TOKEN }}
+      DEV_OC4_TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_OC4_TELEGRAM_BOT_TOKEN }}
+      DEV_OC4_TELEGRAM_BOT_PERSON1: ${{ secrets.DEV_OC4_TELEGRAM_BOT_PERSON1 }}
+      DEV_OC4_TELEGRAM_BOT_PERSON2: ${{ secrets.DEV_OC4_TELEGRAM_BOT_PERSON2 }}
       DEV_OC1_GH_TOKEN: ${{ secrets.DEV_OC1_GH_TOKEN }}
       DEV_OC2_GH_TOKEN: ${{ secrets.DEV_OC2_GH_TOKEN }}
       DEV_OC3_GH_TOKEN: ${{ secrets.DEV_OC3_GH_TOKEN }}
+      DEV_OC4_GH_TOKEN: ${{ secrets.DEV_OC4_GH_TOKEN }}
       PROD_DEEPSEEK_API_KEY: ${{ secrets.PROD_DEEPSEEK_API_KEY }}
       PROD_OPENROUTER_API_KEY: ${{ secrets.PROD_OPENROUTER_API_KEY }}
       PROD_OPENAI_API_KEY: ${{ secrets.PROD_OPENAI_API_KEY }}
