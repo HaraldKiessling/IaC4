@@ -70,18 +70,13 @@
 {% if (oc.agents | length > 0) or (oc.person_agents is defined and oc.person_agents | length > 0) %},
     "list": [
 {% if oc.person_agents is defined and oc.person_agents | length > 0 %}
-{# #126: Personen-Agents (PLATZHALTER person1/person2 bis Q3) – eigener Workspace + agentDir je Person
-   (S3, getrennter Speicher). Pfade sind Container-Pfade; Host-Pfade: /srv/openclaw/oc4/{workspace,config}
-   (Mapping-Tabelle Konzept §3). subagents.allowAgents: ["<person>"] haelt Rollen-Sub-Agents
-   innerhalb der Person (Q5-Empfehlung, Speicher-Isolation S3). #}
+{# 2026-09-06 (Harald): Agents mit eigenem workspace + agentDir (S3, getrennter Speicher).
+   Keine allowAgents-Restriktion mehr – Repo-/Recherche-Agents koennen frei delegieren. #}
 {% for pid in oc.person_agents %}      {
         "id": "{{ pid }}",
-        "name": "{{ pid | title }}",
+        "name": "{{ pid }}",
         "workspace": "/home/node/.openclaw/workspace/{{ pid }}",
-        "agentDir": "/home/node/.openclaw/agents/{{ pid }}/agent",
-        "subagents": {
-          "allowAgents": ["{{ pid }}"]
-        }
+        "agentDir": "/home/node/.openclaw/agents/{{ pid }}/agent"
       }{{ "," if not loop.last else "" }}
 {% endfor %}
 {% else %}
@@ -111,15 +106,40 @@
 {% endif %}
   }{% if acc_ns.active | length > 0 %},
   "bindings": [
-{# #126 (S4): Bindings agentId<->accountId je aktiver Telegram-Account – deterministisch (K2). #}
-{% for acc_id in acc_ns.active %}    {
-      "agentId": "{{ acc_id }}",
+{# #126/S6: Bindings – explizite DM- (telegram_dm_bindings) und Gruppen-Bindings
+   (telegram_group_bindings, peer group id). Rückwärtskompatibel: ohne diese Felder wird
+   KEIN Binding gerendert (oc1/oc2/oc3 unverändert, Golden-File-OC1 bleibt). #}
+{% set b_ns = namespace(rendered=false) %}
+{% if oc.telegram_dm_bindings is defined %}
+{% for dm in oc.telegram_dm_bindings %}
+{% if dm.account in acc_ns.active %}{% if b_ns.rendered %},{% endif %}{% set b_ns.rendered = true %}
+    {
+      "agentId": "{{ dm.agent }}",
       "match": {
         "channel": "telegram",
-        "accountId": "{{ acc_id }}"
+        "accountId": "{{ dm.account }}"
       }
-    }{{ "," if not loop.last else "" }}
-{% endfor %}  ]
+    }
+{% endif %}
+{% endfor %}
+{% endif %}
+{% if oc.telegram_group_bindings is defined %}
+{% for gb in oc.telegram_group_bindings %}
+{% if gb.account in acc_ns.active and gb.group_id | default('') | length > 0 %}{% if b_ns.rendered %},{% endif %}{% set b_ns.rendered = true %}
+    {
+      "agentId": "{{ gb.agent }}",
+      "match": {
+        "channel": "telegram",
+        "accountId": "{{ gb.account }}",
+        "peer": {
+          "kind": "group",
+          "id": "{{ gb.group_id }}"
+        }
+      }
+    }
+{% endif %}
+{% endfor %}
+{% endif %}  ]
 {% endif %},
   "memory": {
     "backend": "qmd"
@@ -203,6 +223,19 @@
           "botToken": "{{ '${' ~ oc.telegram_accounts[acc_id] ~ '}' }}"
         }{{ "," if not loop.last else "" }}
 {% endfor %}      }
+{# #126/S6: Gruppen-Allowlist + requireMention (oc4 – Harald 2026-09-06: ohne @ chatten).
+   Nur im Multi-Account-Zweig gerendert (Komma-Sicherheit). #}
+{% if oc.telegram_group_allow is defined and oc.telegram_group_allow | length > 0 %},
+      "groupPolicy": "allowlist",
+      "groups": {
+{% for g in oc.telegram_group_allow %}        "{{ g.id }}": {
+          "requireMention": {{ (g.require_mention | default(false)) | tojson }}
+        }{{ "," if not loop.last else "" }}
+{% endfor %}      }
+{% endif %}
+{% if oc.telegram_allow_from is defined and oc.telegram_allow_from | length > 0 %},
+      "allowFrom": {{ oc.telegram_allow_from | tojson }}
+{% endif %}
 {% elif oc_telegram_bot_token | default('') | length > 0 %}
       "enabled": true,
       "botToken": "{{ oc_telegram_bot_token }}"
