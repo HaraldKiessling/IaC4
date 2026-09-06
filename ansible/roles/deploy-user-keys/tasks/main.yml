@@ -1,0 +1,37 @@
+---
+# deploy-user-keys – Zusätzliche SSH-Pubkeys additiv in authorized_keys von deploy-user
+# ------------------------------------------------------------------------------------
+# Hintergrund (Befund 2026-09-06): IaC4 pflegt SSH-Pubkeys bisher NUR via cloud-config.yaml
+# beim VPS-Provisioning (Phase 0). Für LAUFENDE Hosts fehlte eine authorized_keys-Pflege –
+# das separate Repo home-assistant-agent (Staging-Bootstrap, Workflow 01-staging-bootstrap)
+# braucht deploy-Zugriff per eigenem Deploy-Key auf vps-dev (Owner hat keinen SSH-Zugriff,
+# einziger Weg = IaC4-GH-Actions). Diese Rolle schließt die Lücke additiv und idempotent.
+#
+# Wirkung: NUR Targets, deren group_vars/vps-<target>.yml `deploy_user_authorized_keys_extra`
+# setzt (aktuell ausschließlich vps-dev). prod bleibt unberührt (Variable dort nicht definiert,
+# Rolle = No-op via Default []). Es werden NIE bestehende Keys entfernt (lineinfile state=present).
+#
+# Rollback-Weg (Worst-Case Lockout-Betrachtung): reiner additiver Eintrag; Entfernen = Zeile
+# aus group_vars/vps-dev.yml löschen + erneuter Deploy (Zeile bleibt auf Host, bis manuell
+# entfernt – bewusst kein state=absent-Mechanismus, um Lockout durch Fehlbedienung zu vermeiden).
+- name: .ssh-Verzeichnis von deploy-user sicherstellen
+  ansible.builtin.file:
+    path: /home/deploy-user/.ssh
+    state: directory
+    owner: deploy-user
+    group: deploy-user
+    mode: '0700'
+  when: deploy_user_authorized_keys_extra | default([]) | length > 0
+
+- name: Zusätzliche SSH-Pubkeys additiv autorisieren (idempotent, exakter Zeilen-Match)
+  ansible.builtin.lineinfile:
+    path: /home/deploy-user/.ssh/authorized_keys
+    line: "{{ item }}"
+    regexp: "^{{ item | regex_escape() }}$"
+    state: present
+    create: true
+    owner: deploy-user
+    group: deploy-user
+    mode: '0600'
+  loop: "{{ deploy_user_authorized_keys_extra | default([]) }}"
+  when: deploy_user_authorized_keys_extra | default([]) | length > 0

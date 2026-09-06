@@ -1,7 +1,12 @@
 ---
+# Phase 2b – Docker & Traefik
+# deploy-user-keys läuft ZUERST (additive authorized_keys-Pflege, z.B. HA-Staging-Deploy-Key
+# auf vps-dev; No-op auf Targets ohne deploy_user_authorized_keys_extra) – unabhängig vom
+# Traefik-Health-Check, damit die Key-Wirkung nicht an späteren Rollen-Schritten hängt.
 - name: Phase 2b – Docker & Traefik
   hosts: vps
   become: true
   roles:
+    - role: deploy-user-keys
     - docker
     - traefik

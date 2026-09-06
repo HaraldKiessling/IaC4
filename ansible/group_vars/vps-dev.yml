@@ -139,3 +139,13 @@ openclaw_instances:
     # braucht volle Tools als Pass-Through; Steuerung via AGENTS.md-Mandat (weich).
     agent_workspaces: true
     subagents_tools_deny: ["cron", "gateway"]
+
+# ── Zusätzliche SSH-Pubkeys für deploy-user (additiv, IaC4-Mechanik-Ergänzung) ──
+# Hintergrund (Befund 2026-09-06): IaC4 pflegt Pubkeys bisher NUR via cloud-config.yaml
+# beim VPS-Provisioning. Für laufende Hosts pflegt die Rolle deploy-user-keys diese Liste
+# idempotent-additiv in ~deploy-user/.ssh/authorized_keys (Vehikel: Workflow 04,
+# Playbook 03-docker-traefik.yml). Variable NUR hier (vps-dev) definiert → prod-Wirkung
+# ausgeschlossen; Keys sind öffentlich (keine Secrets). Quelle: home-assistant-agent-Repo
+# 00-generate-ssh-key.yml (Run #34042843491, Rotation 2026-09-06 15:36Z).
+deploy_user_authorized_keys_extra:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPLht5T3jpSaavPIby3mcTgkTKrv8NOD6lcrqGroNYDP ha-deploy-key-20260906"
