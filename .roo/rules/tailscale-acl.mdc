@@ -6,3 +6,9 @@
 - OAuth-Client verwendet `tag:ci` + `tag:ia4` (IaC3-Muster: 1 Client, beide Tags – Tag-Ownership)
 - IaC4-VPS-Ziel-Tag ist `tag:ia4` (Original-ACL-Design); Auth-Key joint frische VPS direkt mit tag:ia4 (kein Re-Tag-Workaround); Re-Tag-Step = Korrektur für Bestands-Nodes
 - Additive IaC4-ACL-Erweiterung (tag:ia4) ausschließlich via `scripts/ensure-acl-ia4.py` (Workflow 01, idempotent, Backup+Rollback) – nie manuell/Terraform überschreiben
+
+## Owner-Governance (Owner-Regel, 2026-09-06)
+
+- **KEINE Änderung der Tailscale-ACL ohne ausdrückliche Zustimmung des Owners** – auch nicht in Feature-Branches und auch dann nicht, wenn die Änderung über GitHub Actions auf einem Branch ausgeführt würde (ACLs sind zentral und produktionsrelevant)
+- Vor jeder Vorlage zur Owner-Entscheidung müssen die Auswirkungen detailliert ermittelt UND reviewed worden sein (Autor ≠ Reviewer). Die Vorlage dokumentiert: exakter ACL-Diff, betroffene Quellen/Ziele/Ports/Aktionen, Verifikation dass fremde Bestände unverändert bleiben, Rollback-Pfad
+- ACL-Änderungen laufen ausschließlich additiv über die ensure-*-Skripte (`scripts/ensure-acl-ia4.py`) – niemals überschreiben
