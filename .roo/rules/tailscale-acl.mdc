@@ -10,5 +10,5 @@
 ## Owner-Governance (Owner-Regel, 2026-09-06)
 
 - **KEINE Änderung der Tailscale-ACL ohne ausdrückliche Zustimmung des Owners** – auch nicht in Feature-Branches und auch dann nicht, wenn die Änderung über GitHub Actions auf einem Branch ausgeführt würde (ACLs sind zentral und produktionsrelevant)
-- Vor jeder Vorlage zur Owner-Entscheidung müssen die Auswirkungen detailliert ermittelt UND reviewed worden sein (Autor ≠ Reviewer). Die Vorlage dokumentiert: exakter ACL-Diff, betroffene Quellen/Ziele/Ports/Aktionen, Verifikation dass fremde Bestände unverändert bleiben, Rollback-Pfad
+- Vor jeder Vorlage zur Owner-Entscheidung müssen die Auswirkungen detailliert ermittelt UND reviewed worden sein (Autor ≠ Reviewer). Die Vorlage dokumentiert: exakter ACL-Diff, betroffene Quellen/Ziele/Ports/Aktionen, Verifikation, dass fremde Bestände unverändert bleiben, Rollback-Pfad
 - ACL-Änderungen laufen ausschließlich additiv über die ensure-*-Skripte (`scripts/ensure-acl-ia4.py`) – niemals überschreiben
