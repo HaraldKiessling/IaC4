@@ -1,0 +1,25 @@
+---
+# ufw-cgnat-extra – Zusätzliche CGNAT-/Tailnet-Portfreigaben (Host-Firewall, additiv)
+# ------------------------------------------------------------------------------------
+# Hintergrund (PoC E3, 2026-09-06): HA-QS-Port 8123 auf vps-prod ist aktuell über die
+# UFW-Allow-Regel der home-assistant-agent-Rolle ha-staging erreichbar (from 100.64.0.0/10,
+# IaC4-R9-Muster). Diese Regel würde bei einem IaC4-Re-Provision (cloud-config +
+# 02-ssh-restrict) verloren gehen → dauerhafte Verankerung in IaC4, additiv.
+#
+# Wirkung: NUR Targets, deren group_vars/vps-<target>.yml `ufw_allow_cgnat_extra` setzt
+# (aktuell ausschließlich vps-prod: Port 8123/tcp). dev bleibt unberührt (Variable dort
+# nicht definiert → Rolle = No-op via Default []; dev bezieht seine 8123-Freigabe weiter
+# aus dem HA-Repo, keine Doppelpflege in IaC4). Es werden NIE bestehende Regeln entfernt
+# (nur rule: allow, kein delete/deny).
+#
+# Rollback-Weg (Worst-Case-Betrachtung): rein additiver Eintrag; Entfernen = Eintrag aus
+# group_vars/vps-prod.yml löschen + Re-Deploy (UFW-Regel bleibt auf Host, bis manuell
+# entfernt – bewusst kein delete-Mechanismus, um Lockout durch Fehlbedienung zu vermeiden).
+- name: Zusätzliche CGNAT-/Tailnet-Ports erlauben (UFW, additiv/idempotent)
+  community.general.ufw:
+    rule: allow
+    from: 100.64.0.0/10
+    port: "{{ item.port }}"
+    proto: "{{ item.proto | default('tcp') }}"
+  loop: "{{ ufw_allow_cgnat_extra | default([]) }}"
+  when: ufw_allow_cgnat_extra | default([]) | length > 0

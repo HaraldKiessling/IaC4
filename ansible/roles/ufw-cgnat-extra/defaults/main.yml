@@ -1,0 +1,7 @@
+---
+# ufw-cgnat-extra – Defaults
+# SSoT für zusätzliche CGNAT-/Tailnet-Portfreigaben auf Host-Ebene (UFW INPUT):
+# Liste `ufw_allow_cgnat_extra` je Target in group_vars/vps-<target>.yml
+# (Einträge: {port, proto}). Default leer → Rolle ist No-op auf Targets ohne
+# Freigabe (additiv, nie destruktiv).
+ufw_allow_cgnat_extra: []

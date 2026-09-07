@@ -8,5 +8,6 @@
   become: true
   roles:
     - role: deploy-user-keys
+    - role: ufw-cgnat-extra
     - docker
     - traefik

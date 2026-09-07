@@ -69,3 +69,16 @@ openclaw_instances:
     subagents_allow_agents: ["orchestrator", "architect", "engineer-pro", "reviewer"]
     agent_workspaces: true
     subagents_tools_deny: ["cron", "gateway"]
+
+# ── Zusätzliche CGNAT-/Tailnet-Portfreigaben (Host-Firewall UFW, additiv) ──
+# PoC E3 (Owner-Nacht-PoC #1475, 2026-09-06): HA-QS-Port 8123 auf vps-prod ist aktuell
+# über die UFW-Allow-Regel der home-assistant-agent-Rolle ha-staging erreichbar
+# (from 100.64.0.0/10, IaC4-R9-Muster). Diese Regel würde bei einem IaC4-Re-Provision
+# (cloud-config + 02-ssh-restrict) verloren gehen → dauerhafte Verankerung in IaC4.
+# Mechanik: Rolle ufw-cgnat-extra (idempotent-additiv, rule: allow, kein delete/deny;
+# No-op auf Targets ohne Variable). Variable NUR hier (vps-prod) definiert → dev-Wirkung
+# ausgeschlossen; dev bezieht seine 8123-Freigabe weiter aus dem HA-Repo (keine
+# Doppelpflege in IaC4). Quelle: HA-Repo roles/ha-staging/tasks/main.yml (UFW-Task).
+ufw_allow_cgnat_extra:
+  - port: 8123
+    proto: tcp
