@@ -60,6 +60,23 @@
   register: docker_user_rules
   changed_when: docker_user_rules.rc == 0
 
+# UFW: HA-PoC-Port 8123 aus CGNAT erlauben (additiv, F-C 2026-09-07)
+# Owner-F-C 07.09. 03:04Z (Default-Umsetzung abgenommen): HA-PoC Staging/QS wird auf
+# vps-dev UND vps-prod aus dem Tailnet auf 8123/tcp erreicht (Runner-Checks HTTP 401
+# bestätigt; Freigabe lag bisher nur manuell/ad-hoc auf den Live-Hosts vor). Dieser
+# Task verankert die 8123-CGNAT-Allow-Regel dauerhaft (Drift-/Reset-Schutz) auf beiden
+# Targets: Playbook 03-docker-traefik.yml (hosts: vps) läuft je Target über Workflow 04
+# (playbook=docker-traefik, target=dev|prod). Quellenbasiert wie Firewall-Konzept
+# R4/R7-R9 (docs/plans/iac4-firewall-konzept.md); rein additiv - SSH-22-Regeln aus
+# 02-ssh-restrict.yml und bestehende Port-Allows (80/8080 traefik, 11434 ollama)
+# bleiben unverändert. Keine Tailscale-ACL-Änderung.
+- name: UFW - Port 8123 aus CGNAT erlauben (HA-PoC Tailnet, F-C 2026-09-07)
+  community.general.ufw:
+    rule: allow
+    from: 100.64.0.0/10
+    port: 8123
+    proto: tcp
+
 # ADR-016: deploy-user wird BEWUSST nicht in die docker-Gruppe aufgenommen
 # (docker-Gruppe = root-Äquivalent; Wartung via sudo, auditierbar).
 # BDD-Check in scripts/bdd/docker-traefik.bdd.ps1 (Szenario D2).
