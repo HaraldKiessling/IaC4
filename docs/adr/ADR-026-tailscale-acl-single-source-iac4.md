@@ -32,25 +32,45 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
 2. **Ein Mechanismus:** `scripts/ensure-acl.py` liest die SSoT, vergleicht sie
    **semantisch** (huJSON→JSON, layout-tolerant) mit der Live-Policy und wendet
    nur die fehlende Differenz **rein additiv** an (bestehende Zeilen werden nie
-   verändert oder entfernt).
-3. **Ein Apply-Weg:** `.github/workflows/00-acl-apply.yml` — ausschließlich
+   verändert oder entfernt). Neue Einträge werden an ihrer **Modell-Position**
+   eingefügt, sodass die Regel-Reihenfolge erhalten bleibt.
+3. **Erfolgskriterium Null-Diff (Owner-Entscheid F4=(a)):** Der Abgleich
+   `--verify <export-datei>` gilt als bestanden bei **semantischer Gleichheit der
+   geparsten Policy inkl. Regel-Reihenfolge** (`acls`/`ssh`). Tags (`tagOwners`)
+   werden als Zuordnung verglichen; Formatierung, Kommentare und Trailing-Kommas
+   bleiben unberücksichtigt. **Byte**-Gleichheit ist **nicht** das Kriterium (die
+   Tailscale-API reserialisiert die Policy).
+4. **Ein Apply-Weg:** `.github/workflows/00-acl-apply.yml` — ausschließlich
    manuell (`workflow_dispatch`), Inputs `confirm`/`dry_run`/`rules`,
    **kein** push-/PR-Trigger (Governance: ACL nie automatisch). Secrets-Namen
    unverändert (`TAILSCALE_TAILNET`, `TAILSCALE_API_KEY`).
-4. **Kein Terraform-ACL-Resource:** ADR-010 bleibt gewahrt (Overwrite-Gefahr).
+5. **Übergang IaC4-first (Owner-Entscheid F3=(b)):** Der IaC4-Apply führt; der
+   HA-Apply-Weg bleibt während des Übergangs als **Rückfallweg offen** und wird
+   **danach** gesperrt (deaktivieren statt löschen, F6=(a)).
+6. **Kein Terraform-ACL-Resource:** ADR-010 bleibt gewahrt (Overwrite-Gefahr).
 
 Der bisherige IaC4-Pfad (`ensure-acl-ia4.py`) wird auf einen dünnen
 Kompatibilitäts-Shim reduziert (leitet auf `ensure-acl.py --rule iac4`), damit
 der bestehende Aufrufer (Workflow 01) nicht bricht.
+
+### Übernahme aus HA-PR #54 (F5=(a))
+
+Die semantische **IaC4-Vorbedingung** (HA-Gruppen setzen auf die `tag:ia4`-Basis
+auf; layout-tolerante, scope-gekoppelte Prüfung) aus `home-assistant-agent`
+PR **#54** (Branch `fix/acl-precondition-semantisch`) ist **1:1** in
+`scripts/ensure-acl.py` enthalten (`precondition_ok()`/`PRECOND_DESC`, im Apply nur
+für die tatsächlich eingefügten Gruppen geprüft) und offline getestet
+(`acl/tests/offline_tests.py`). **#54** wird als **überholt** geschlossen
+(Referenz auf PR #140 + Branch/Commit).
 
 ## Optionen
 
 ### A: Konsolidierung in IaC4 (SSoT + semantischer Applier) — EMPFEHLUNG
 - **Fachliche Auswirkungen:** Eine Regelquelle, ein Governance-Ort, deckt den
   Owner-Entscheid ab. Beseitigt doppelte Wartung und die geteilte-Skript-SSoT.
-  Die robustere Mechanik des HA-Skripts (semantischer Multimengen-Vergleich)
-  wird zum einzigen Mechanismus; die byte-exakten IaC4-Anker (brittle gegen
-  API-Re-Serialisierung) entfallen.
+  Die robustere Mechanik des HA-Skripts (semantischer Vergleich) wird zum einzigen
+  Mechanismus, ergänzt um die **Reihenfolge-Prüfung** (F4); die byte-exakten
+  IaC4-Anker (brittle gegen API-Re-Serialisierung) entfallen.
 
 ### B: Konsolidierung in ha-repo
 - **Verworfen:** ACL ist Infrastruktur → falsche Zuordnung; widerspricht dem
@@ -77,9 +97,9 @@ der bestehende Aufrufer (Workflow 01) nicht bricht.
 
 **Option A.** Umsetzung erfolgt schrittweise über das Runbook
 [docs/workflows/acl-migration-runbook.md](../workflows/acl-migration-runbook.md)
-(M1 Inventar/Export → M2 Modell 1:1 → M3 Null-Diff → M4 Schnitt → M5 Einfrieren
-→ M6 Stilllegung). Erste PR-Stufe (dieser Stand): Modell + Skript + Workflow +
-Doku, **Draft, kein Merge, kein Apply**.
+(M1 Export → M2 Modell 1:1 → M3 semantischer Null-Diff → M4 IaC4-Apply
+(HA parallel offen) → M5 Sperre HA-Weg → M6 Doku). Erste PR-Stufe (dieser Stand):
+Modell + Skript + Workflow + Doku, **Draft, kein Merge, kein Apply**.
 
 ## Worst-Case / Rollback (Pflicht: ACL-Änderung)
 
@@ -94,16 +114,19 @@ Doku, **Draft, kein Merge, kein Apply**.
   - **Gegenmaßnahme:** semantische Additivitäts-/Multimengen-Prüfung
     (Fremdbestand unverändert); Null-Diff-Gate in M3.
 - **Worst-Case 3 — Doppel-Schreiben** während des Übergangs.
-  - **Gegenmaßnahme:** `concurrency`-Guard im Apply-Workflow; ha-repo-Pfad
-    **vor** erstem IaC4-Apply deaktivieren (Runbook M4); Fremdbestands-Abbruch.
+  - **Gegenmaßnahme:** `concurrency`-Guard im Apply-Workflow; **IaC4-first** (der
+    Applier erzwingt die IaC4-Baseline als Vorbedingung für HA-Gruppen); der
+    HA-Pfad bleibt bis zur **Sperre nach** dem IaC4-Apply offen (F3=(b)) und wird
+    danach deaktiviert (F6=(a)); Fremdbestands-/Additivitäts-Abbruch.
 
 ## Konsequenzen
 
 - Neue SSoT `acl/tailscale-acl.hujson` + Konventionen (`acl/README.md`).
 - `scripts/ensure-acl.py` ersetzt `ensure-acl-ia4.py` (Shim bleibt für Workflow 01).
 - Neuer manueller Workflow `.github/workflows/00-acl-apply.yml`.
-- ha-repo erhält einen Grenz-Hinweis (ACL wird in IaC4 verwaltet) und friert
-  seinen ACL-Pfad ein (→ entfernen).
+- ha-repo erhält einen Grenz-Hinweis (ACL wird in IaC4 verwaltet); sein ACL-Pfad
+  wird nach dem Übergang **gesperrt** (deaktivieren statt löschen, F6=(a); → später
+  entfernen).
 - **Voraussetzung (Lücke, nicht Auftrag):** gültiger IaC4-`TAILSCALE_API_KEY`
   sowie ein roher Live-Export sind für M3 (Null-Diff) erforderlich; heute nicht vorhanden.
 - **Folge-Entscheidungen (separat):** Zeitpunkt des Schnitts, Prod-Ausführung,

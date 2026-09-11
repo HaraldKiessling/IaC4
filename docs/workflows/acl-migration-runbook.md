@@ -1,10 +1,11 @@
 # Runbook: Tailscale-ACL-Migration nach IaC4 (Single Source)
 
-> **Status:** Vorbereitung (Draft). Kein Merge, kein Apply. Owner-Entscheid
-> 2026-09-11: „Tailscale-ACL ist Infrastruktur und gehört zu IaC4."
-> **Grundsatz:** nur die reine Migration + saubere Dokumentation — keine
-> zusätzlichen Anforderungen (identifizierte Lücken werden separat als
-> IaC4-Issues erfasst).
+> **Status:** Vorbereitung (Draft). Kein Merge, kein Apply. Owner-Entscheide
+> 2026-09-11 (07:27 UTC Grundsatz „ACL ist Infrastruktur → IaC4"; 07:56–11:08 UTC
+> F1–F6, siehe unten).
+> **Grundsatz:** **reiner, verhaltensneutraler Umzug** + saubere Dokumentation —
+> keine zusätzlichen Anforderungen; identifizierte Lücken werden separat als
+> IaC4-Issues erfasst.
 
 ## Zweck
 
@@ -13,7 +14,17 @@ Migration der geteilten Tailscale-ACL von **zwei additiven Schreibpfaden**
 IaC4**: SSoT `acl/tailscale-acl.hujson`, ein semantischer Applier
 (`scripts/ensure-acl.py`), ein manueller Apply-Weg
 (`.github/workflows/00-acl-apply.yml`). Ergebnis: `tag:ia4` **und** `tag:ha`
-(inkl. `tag:ha-ci`, Phase-2-/MQTT-/Energie-Regeln) aus einer Regelquelle.
+(inkl. `tag:ha-ci`, MQTT-/Energie-Regeln) aus einer Regelquelle.
+
+## Abgestimmte Entscheide (2026-09-11, F1–F6)
+
+| # | Gegenstand | Festlegung |
+|---|------------|------------|
+| **F1=(a)** | Umfang | **Reiner Umzug**, verhaltensneutral. Die neue **Lese-Regel (Kostal/KSEM = Energie-Regel 7)** bleibt `pending` und kommt erst **nach** dem Schnitt als eigener, freigegebener Schritt. |
+| **F3=(b)** | Übergang | **IaC4-first**: der IaC4-Apply führt; der HA-Apply bleibt **bis danach** als **Rückfallweg offen**; **Sperre danach**. |
+| **F4=(a)** | Erfolgskriterium | **Semantische Gleichheit** der geparsten Policy **inkl. Regel-Reihenfolge** (`acls`/`ssh`); Formatierung/Kommentare dürfen abweichen. **Byte**-Gleichheit ist **nicht** das Kriterium (Tailscale-API reserialisiert). |
+| **F5=(a)** | HA-PR #54 | Inhalt (semantische Precondition) wandert ins IaC4-Werkzeug; **#54** wird als **überholt** geschlossen (Referenz-Kommentar auf PR #140 + Branch/Commit). |
+| **F6=(a)** | Sperre | HA-Workflow **deaktivieren** (nicht löschen) + **Kopfhinweis** + Doku-Eintrag; Ausführung durch den **Orchestrator nach Owner-Bestätigung**, im Migrations-Log festgehalten. |
 
 ## Voraussetzungen (blockierend, vor M1)
 
@@ -29,87 +40,129 @@ IaC4**: SSoT `acl/tailscale-acl.hujson`, ein semantischer Applier
 
 ## Ablauf
 
-### M1 — Inventar (verlustfrei, read-only)
+### M1 — Export (Inventar, verlustfrei, read-only)
 
 1. Live-Policy roh exportieren und versionieren:
    `python3 scripts/ensure-acl.py --export --out acl/live-<ts>.hujson`
    (schreibt rohe huJSON + `.sha256`; reiner `GET`).
-2. Semantic parsen und in die Struktur `tagOwners` / `acls` / `ssh` zerlegen.
+2. Semantisch parsen und in die Struktur `tagOwners` / `acls` / `ssh` zerlegen.
 3. Regel-für-Regel-Zuordnung erstellen: welche Live-Blöcke gehören zu `tag:ia4`
-   (IaC4), welche zu `tag:ha`/`tag:ha-ci` (HA 1–5), was ist „fremder Bestand"
+   (IaC4), welche zu `tag:ha`/`tag:ha-ci` (HA), was ist „fremder Bestand"
    (ia3, Owner-Konsole) → Letzteres bleibt **unverändert**.
 4. **Ergebnis:** vollständiges semantisches Inventar = Ist-Referenz für M2.
    Kein Schreiben.
 
-### M2 — Modell (verlustfrei überführen)
+### M2 — Modell 1:1
 
-1. `acl/tailscale-acl.hujson` **aus dem Inventar** ableiten — 1:1 aus der
-   Live-Policy (inkl. ia3/tag:ci/Owner-Konsole). Ziel: Modell ≡ Live
-   (Zero-Delta-Ausgang).
+1. `acl/tailscale-acl.hujson` **1:1 aus dem Inventar** ableiten — inkl.
+   ia3/`tag:ci`/Owner-Konsole. Ziel: Modell ≡ Live (Zero-Delta-Ausgang).
 2. Die `tag:ha`-Regeln (live) werden Teil des IaC4-Modells — ohne Änderung am
    Live-Zustand.
-3. **Noch nicht angewandte Regeln** (Regel 7 Energie; Regel 6 MQTT mit
-   **strittigem** Live-Stand) werden **nicht still mitmigriert**: sie bleiben als
-   `pending` markiert (deklariert, nicht Teil des Live-Solls) und laufen als
-   **separate Owner-Freigaben**.
+3. **Noch nicht angewandte Regeln** werden **nicht still mitmigriert**, sondern
+   bleiben `pending` (deklariert, nicht Teil des Live-Solls):
+   - `mqtt-1883` (Regel 6, Live-Zustand **strittig**),
+   - `energie-read` (Regel 7 — **die neue Kostal/KSEM-Lese-Regel**, F1=(a)).
+   Jede ist eine **separate Owner-Freigabe**; `energie-read` kommt erst **nach**
+   dem Schnitt als eigener Schritt.
 4. Modell-Gates prüfen: `python3 scripts/ensure-acl.py --check-model`.
 
-### M3 — Verifikation (Zero-Delta-Beweis)
+### M3 — Semantischer Null-Diff (Verifikation)
 
-1. `python3 scripts/ensure-acl.py --verify` gegen Live → **Diff muss leer sein**
-   (kein Fehlend/Geändert/Fremd). Voraussetzung: V1 + V2.
-2. Roundtrip: `--dry-run` zeigt „0 Einfügungen, 0 Entfernungen".
-3. Erst bei bestätigtem Zero-Delta gilt „Stand synchronisiert"; ein
-   Drift-Befund, der von der Annahme abweicht, wird hier eingearbeitet.
-4. **Nachweis (offline, ohne Live):** `python3 acl/tests/offline_tests.py`.
+1. `python3 scripts/ensure-acl.py --verify <export-datei>` (Voraussetzung: V1 + V2).
+   **Null-Diff = semantische Gleichheit der geparsten Policy:**
+   - **Tags** (`tagOwners`) als **Zuordnung** — Reihenfolge irrelevant;
+   - **Regeln** (`acls`) und **SSH** (`ssh`) **inkl. Reihenfolge** der Einträge;
+   - **Formatierung, Kommentare, Trailing-Kommas** und die Feld-/Listen-Reihenfolge
+     *innerhalb* einer Regel bleiben **unberücksichtigt**.
+   exit != 0 bei Fehlend/Geändert/Fremd **oder** Reihenfolge-Abweichung.
+2. **Reproduzierbar:** derselbe Export aus M1 (Datei + `.sha256`) ergibt denselben
+   Null-Diff — der Abgleich ist wiederholbar und nicht byte-, sondern semantik-basiert
+   (Tailscale-API reserialisiert).
+3. Roundtrip: `--dry-run` zeigt „0 Einfügungen, 0 Entfernungen".
+4. Erst bei bestätigtem Null-Diff gilt „Stand synchronisiert"; ein Drift-Befund, der
+   von der Annahme abweicht, wird hier eingearbeitet.
+5. **Nachweis (offline, ohne Live):** `python3 acl/tests/offline_tests.py`.
 
-### M4 — Schnitt & Schreib-Hoheit (Übergang)
+### M4 — IaC4-Apply (HA parallel offen) — F3=(b)
 
-| Phase | Schreibpfad IaC4 | Schreibpfad ha-repo | Bedingung |
-|-------|------------------|----------------------|-----------|
-| M0–M3 | nur `--dry-run` | **eingefroren** (kein Apply) | ab Owner-Go „Freeze" |
-| M4 (Schnitt) | einziger Schreibpfad | deaktiviert | Zero-Delta + Owner-Go |
+1. Erster IaC4-Apply über `.github/workflows/00-acl-apply.yml`
+   (`confirm=APPLY-ACL`, `dry_run=false`, `rules` nach Freigabe) — rein additiv,
+   Backup + Auto-Rollback, `count==1`-Gates.
+2. **IaC4-first:** der IaC4-Apply führt. **Der HA-Apply-Weg bleibt während des
+   Übergangs offen** (Rückfallweg) — bis zur Sperre (M5) ist bei Bedarf ein
+   Rückgriff auf `00-acl-apply-ha.yml` möglich.
+3. Doppel-Schreiben begrenzen: `concurrency`-Guard im IaC4-Workflow;
+   Additivitäts-/Fremdbestands-Checks in beiden Skripten; der IaC4-Applier erzwingt
+   die **IaC4-Baseline als Vorbedingung** für HA-Gruppen (Reihenfolge IaC4-first).
 
-- **Reihenfolge im Schnitt:** zuerst ha-repo-Apply-Workflow deaktivieren →
-  **dann** erster IaC4-Apply. Niemals beide gleichzeitig aktiv.
-- Doppel-Schreiben verhindern: `concurrency`-Guard im IaC4-Workflow,
-  Fremdbestands-Abbruch im Skript, ha-repo-Apply deaktiviert.
+### M5 — Sperre HA-Weg — F6=(a)
 
-### M5 — Deprecate ha-repo-ACL-Pfad
+**Checkliste — Ausführung durch den Orchestrator *nach* Owner-Bestätigung; jeder
+Punkt wird im Migrations-Log festgehalten.**
 
-1. **Deprecate (mit M4):** `00-acl-apply-ha.yml` deaktivieren (Trigger entfernen
-   oder `if: false`-Guard) + Header-Hinweis; `scripts/ensure-acl-ha.py` behalten
-   (nur-lesend/Referenz) mit Deprecated-Marker; README/AGENTS.md/TODO.md im
-   ha-repo aktualisieren (siehe Grenz-Hinweis unten).
-2. **Einfrieren (nach erster IaC4-Apply-Phase):** Skript + Workflow nur noch als
-   Rollback-Referenz; kein Dispatch mehr möglich.
-3. **Entfernen (nach stabiler IaC4-Phase, Owner-Go):** Workflow +
-   `ensure-acl-ha.py` löschen; History bleibt in Git.
+- [ ] Owner-Bestätigung der Sperre liegt vor.
+- [ ] `00-acl-apply-ha.yml` **deaktivieren** (nicht löschen): Trigger entfernen bzw.
+      `if: false`-Guard setzen.
+- [ ] **Kopfhinweis** im HA-Workflow setzen (Text = Block „Header-Hinweis" aus
+      [ha-repo-acl-boundary-note.md](ha-repo-acl-boundary-note.md)).
+- [ ] `scripts/ensure-acl-ha.py` als **Rollback-Referenz** erhalten (nur-lesend,
+      Deprecated-Header-Marker).
+- [ ] ha-repo-Doku aktualisieren: `docs/reference/tailscale-acl.md`,
+      `AGENTS.md` (Harte Regeln), `TODO.md` (F14 als superseded) — Textbaustein aus
+      [ha-repo-acl-boundary-note.md](ha-repo-acl-boundary-note.md).
+- [ ] **Migrations-Log**-Eintrag ergänzen (Datum, Schritt, Ausführender).
 
-### M6 — Stilllegung IaC4-Altpfad
+> Deaktivieren statt löschen stellt den Rückfallweg bis zur endgültigen Stilllegung
+> bereit; die Reaktivierung ist **nur nach erneutem Owner-Go** zulässig.
 
-1. Workflow 01 (`01-tailscale-terraform.yml`) enthält einen **automatischen**
-   ACL-Schritt (`ensure-acl-ia4.py` auf `push: main`). Dieser widerspricht der
-   Governance „ACL nie automatisch" und wird beim Schnitt entfernt; der
-   Kompatibilitäts-Shim `ensure-acl-ia4.py` wird dann gelöscht.
-2. Verbleibend: ausschließlich `00-acl-apply.yml` (manuell) als ACL-Schreibweg.
+### M6 — Doku
+
+- ADR-026, dieses Runbook und `acl/README.md` konsistent halten; Regel-Spiegelung in
+  `.roo/rules/tailscale-acl.mdc` und `AGENTS.md`.
+- Keine Platzhalter; Abweichungen von der Spezifikation sind zu melden.
+- Übernahme aus HA-PR #54 dokumentieren (siehe Abschnitt unten).
+
+## Übernahme aus HA-PR #54 (semantische Precondition) — F5=(a)
+
+Die HA-seitige Vorab-Prüfung („IaC4-Voraussetzung `tag:ia4` vorhanden") wurde in
+`HaraldKiessling/home-assistant-agent` von einem **byte-exakten Anker** auf eine
+**semantische** Prüfung umgestellt (geparste huJSON, layout-tolerant, nur für die
+tatsächlich eingefügten Regeln — PR **#54**, Branch `fix/acl-precondition-semantisch`).
+Diese Semantik ist **1:1** in das IaC4-Werkzeug übernommen:
+
+- `scripts/ensure-acl.py` → `precondition_ok()` + `PRECOND_DESC`; ausgeführt in
+  `main()` nur für die Gruppen, die **dieser Lauf tatsächlich einfügt**
+  (Scope-Kopplung), gegen Live + geplante Einfügungen;
+- Nachweis: `acl/tests/offline_tests.py` — positiv (`ha-tagowners`/`ha-acl`/`ha-ssh`
+  erfüllt) und negativ (ohne IaC4-Basis fehlt die Vorbedingung).
+
+Damit ist der **Inhalt von #54 vollständig im IaC4-Checker enthalten**; **#54**
+wurde als **überholt** geschlossen (Referenz auf PR #140 + Branch/Commit).
 
 ## Rollback
 
-- **Live-ACL:** durch die Backup-/Rollback-Mechanik des Appliers jederzeit auf
-  den letzten guten Stand zurückführbar (`/tmp/acl-backup.json` des Laufs erneut
-  `POST`; zusätzlich manueller Konsolen-Rollback im Tailscale-Admin).
-- **IaC4-Seite:** `git revert` des Modell-/Skript-/Doku-PR stellt den Vorzustand
-  wieder her.
-- **ha-repo-Seite:** der eingefrorene Workflow/das Skript bleibt bis Stufe 3
-  erhalten und kann per `git` reaktiviert werden — **nur nach erneutem Owner-Go**.
+- **Live-ACL:** durch die Backup-/Rollback-Mechanik des Appliers jederzeit auf den
+  letzten guten Stand zurückführbar (`/tmp/acl-backup.json` des Laufs erneut `POST`;
+  zusätzlich manueller Konsolen-Rollback im Tailscale-Admin).
+- **IaC4-Seite:** `git revert` des Modell-/Skript-/Doku-PR stellt den Vorzustand wieder her.
+- **ha-repo-Seite:** der **deaktivierte** (nicht gelöschte) Workflow und das Skript
+  bleiben bis zur endgültigen Stilllegung erhalten und können per `git` reaktiviert
+  werden — **nur nach erneutem Owner-Go**.
 
 ## Grenz-Hinweis für das ha-repo
 
 Der Textbaustein für das ha-repo liegt in
 [ha-repo-acl-boundary-note.md](ha-repo-acl-boundary-note.md) (dort separat
-einzubringen, z. B. `docs/reference/tailscale-acl.md` + Header-Hinweis im
-Apply-Workflow + `AGENTS.md`/`TODO.md`).
+einzubringen: `docs/reference/tailscale-acl.md` + Header-Hinweis im Apply-Workflow +
+`AGENTS.md`/`TODO.md`).
+
+## Migrations-Log
+
+| Datum (UTC) | Schritt | Status | Ausführender |
+|-------------|---------|--------|--------------|
+| 2026-09-11 | M1–M3 vorbereitet: SSoT + semantischer Applier + Doku (Draft-PR #140) | vorbereitet | Engineer |
+| 2026-09-11 | M4 IaC4-Apply | blockiert — V1 (Key 401) + V2 (roher Export) fehlen | Orchestrator (nach V1/V2) |
+| 2026-09-11 | M5 Sperre HA-Weg | ausstehend — nach Owner-Bestätigung | Orchestrator |
 
 ## Offene Lücken (separat als IaC4-Issues, nicht Teil dieser Migration)
 

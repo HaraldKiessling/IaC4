@@ -35,8 +35,18 @@
 #   ::add-mask (Defense-in-depth).
 #
 #   Verifikation: jeder eingefuegte Eintrag exakt +1 (count==1-Gate), keine
-#   Bestands-Regel entfernt/geaendert (semantische Multimengen-Pruefung),
-#   IaC4-Vorbedingungen (tag:ia4) fuer eingefuegte Regeln vorhanden.
+#   Bestands-Regel entfernt/geaendert (semantische Multimengen-Pruefung); neue
+#   Eintraege werden an ihrer MODELL-Position eingefuegt (Regel-Reihenfolge bleibt
+#   erhalten). IaC4-Vorbedingung (tag:ia4) wird SEMANTISCH und nur fuer die
+#   tatsaechlich eingefuegten Gruppen geprueft (IaC4-first; uebernommen aus
+#   HA-PR #54). Der Erfolgs-Abgleich ("Null-Diff") laeuft ueber
+#   `python3 scripts/ensure-acl.py --verify <export-datei>`: semantisch inkl.
+#   Regel-Reihenfolge (acls/ssh); Formatierung/Kommentare bleiben unberuecksichtigt.
+#
+#   Uebergang (Owner-Entscheid F3=(b)/F6=(a)): IaC4-first – der ha-repo-ACL-Weg
+#   bleibt bis zur Sperre als Rueckfallweg offen und wird danach deaktiviert
+#   (nicht geloescht, mit Kopfhinweis). Siehe
+#   docs/workflows/acl-migration-runbook.md.
 #
 #   Rollback: automatisch bei Verifikationsfehler (POST des Backups). Zusaetzlich
 #   Backup-Datei des Laufs /tmp/acl-backup.json (Runner-Dateisystem); manueller

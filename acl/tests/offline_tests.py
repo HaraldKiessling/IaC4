@@ -3,11 +3,14 @@
 
 Prüft:
  1. SSoT-Datei parsebar + Modell-Gates (Tag-Referenzen, Marker).
- 2. Null-Diff des Modells gegen den rekonstruierten Live-Snapshot (acl/tests/fixtures).
+ 2. Null-Diff des Modells gegen den rekonstruierten Live-Snapshot (acl/tests/
+    fixtures) – semantisch, inkl. Regel-Reihenfolge (acls/ssh).
  3. Rein additive Einfügung der iac4-Gruppe in einen Snapshot OHNE iac4
-    (0 Entfernungen, count==1-Gate, semantische Additivität).
+    (0 Entfernungen, count==1-Gate, semantische Additivität, Reihenfolge erhalten).
  4. Negativ-Test: Erkennung einer entfernten Bestandsregel.
  5. Export-Modus liest offline (--file) und schreibt huJSON + SHA256.
+ 6. IaC4-Vorbedingung (aus HA-PR #54) semantisch inkl. Negativ-Fall.
+ 7. `--verify <export-datei>` (Positional) = reproduzierbarer Null-Diff.
 
 Aufruf: python3 acl/tests/offline_tests.py
 """
@@ -81,7 +84,7 @@ def main():
     for section in m.SECTION_ORDER:
         ents = [e for e in iac4 if e.section == section]
         if ents:
-            new_text = m.insert_entries(new_text, section, ents)
+            new_text = m.insert_entries(new_text, section, ents, model[section])
 
     # a) 0 Entfernungen (nur hinzugefügte Zeilen)
     old_lines = Counter(l.rstrip("\n") for l in minus_text.splitlines() if l.strip())
@@ -107,6 +110,11 @@ def main():
     check("Semantische Additivität (keine Bestandsregel entfernt/geändert)", ok_add,
           "; ".join(details))
 
+    # d) Regel-Reihenfolge nach Einfügung erhalten (Modell-Position je Eintrag)
+    ord_problems = m.order_diff(model, m.parse_live(new_text))
+    check("Regel-Reihenfolge nach Einfügung erhalten (acls/ssh)", ord_problems == [],
+          "; ".join(ord_problems))
+
     # 4) Negativ-Test: entfernte Bestandsregel wird erkannt
     broken = json.loads(new_text)
     broken["acls"] = broken["acls"][1:]  # erste Regel (base ia3) entfernen
@@ -124,6 +132,24 @@ def main():
           rc == 0 and os.path.exists(out) and os.path.exists(out + ".sha256"))
     with open(out, encoding="utf-8") as f:
         check("Export ist byte-identisch zum Snapshot", f.read() == live_text)
+
+    # 6) IaC4-Vorbedingung (übernommen aus HA-PR #54) – semantisch, layout-tolerant
+    pol = m.parse_policy(live_text)
+    check("Vorbedingung ha-tagowners erfüllt (tag:ia4 -> autogroup:admin)",
+          m.precondition_ok(pol, "ha-tagowners"))
+    check("Vorbedingung ha-acl erfüllt (src tag:ia4 -> dst tag:ia4:*)",
+          m.precondition_ok(pol, "ha-acl"))
+    check("Vorbedingung ha-ssh erfüllt (dst tag:ia4)",
+          m.precondition_ok(pol, "ha-ssh"))
+    bare = {"tagOwners": {}, "acls": [], "ssh": []}
+    check("Vorbedingung ha-acl fehlt ohne IaC4-Basis (Negativ-Fall)",
+          not m.precondition_ok(bare, "ha-acl"))
+    check("Gruppe 'iac4' hat keine Vorbedingung", m.precondition_ok(bare, "iac4"))
+
+    # 7) --verify <export-datei> (Positional) = reproduzierbarer Null-Diff
+    rc = os.system("%s %s --verify %s >/dev/null" % (
+        sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"), FIXTURE))
+    check("--verify <export-datei>: Null-Diff gegen Snapshot (exit 0)", rc == 0)
 
     print("")
     if _failures:

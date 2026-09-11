@@ -10,16 +10,23 @@ Prinzip (100% Sicherheit — additiv, idempotent, failsafe):
   Marker (`// rule: <gruppe>` bzw. `// base`). Der Skript-Code enthält KEINE
   Regel-Inhalte mehr (Single Source of Truth).
 - SEMANTISCHE Prüfung: Live-Policy und Modell werden als huJSON geparst und
-  strukturell verglichen (kein Byte-Anker). Reihenfolge/Whitespace/Kommentare/
-  Trailing-Kommas sind irrelevant.
-- ADDITIV: neue Regeln werden als Text VOR die jeweiligen Abschnitts-Einträge
-  eingefügt (direkt nach der öffnenden Klammer) – bestehende Zeilen werden NIE
-  verändert oder entfernt.
+  strukturell verglichen (kein Byte-Anker). Formatierung, Kommentare, Trailing-
+  Kommas sowie die Feld-/Listen-Reihenfolge INNERHALB einer Regel sind
+  irrelevant. Die REIHENFOLGE der Regeln (acls/ssh) ist dagegen Teil des
+  Null-Diffs (Owner-Entscheid F4, 2026-09-11); tagOwners ist eine Zuordnung –
+  dessen Key-Reihenfolge zählt nicht (JSON-Objekt).
+- ADDITIV: neue Regeln werden als Text an ihrer Modell-Position in den
+  jeweiligen Abschnitt eingefügt (Reihenfolge aus der SSoT) – bestehende Zeilen
+  werden NIE verändert oder entfernt.
 - Selektive Anwendung: `--rule/--rules <gruppe>` fügt NUR die gewählten Gruppen
   ein; ohne Auswahl wird im APPLY-Modus abgebrochen (kein POST).
   `pending`-Regeln (deklariert, nicht Teil des Live-Solls) nur bei expliziter Wahl.
 - Verifikation nach POST: jede eingefügte Regel exakt um +1 (count==1-Gate),
   keine Bestands-Regel entfernt/geändert (semantische Multimengen-Prüfung).
+- IaC4-Vorbedingung (IaC4-first, übernommen aus HA-PR #54): die HA-Gruppen setzen
+  auf die IaC4-Baseline (`tag:ia4`) auf; geprüft wird SEMANTISCH (geparst,
+  layout-tolerant) und nur für Gruppen, die DIESER Lauf tatsächlich einfügt
+  (Scope-Kopplung). Fehlt die Basis, Abbruch OHNE POST.
 - Bei Verifikationsfehler: automatisches Rollback (POST des Backups) + exit 1.
 - `--export`: read-only GET → rohe huJSON + SHA256 als versionierbares Inventar.
 
@@ -33,8 +40,10 @@ Nutzung:
     TS_TAILNET=... TS_API_KEY=... python3 scripts/ensure-acl.py --dry-run
     TS_TAILNET=... TS_API_KEY=... python3 scripts/ensure-acl.py --rule iac4
     TS_TAILNET=... TS_API_KEY=... python3 scripts/ensure-acl.py --export --out acl/live.hujson
+    TS_TAILNET=... TS_API_KEY=... python3 scripts/ensure-acl.py --verify
+    python3 scripts/ensure-acl.py --verify acl/live-export-<sha8>.hujson   # offline, reproduzierbar
     python3 scripts/ensure-acl.py --check-model
-    python3 scripts/ensure-acl.py --file <snapshot.hujson> --dry-run   # offline
+    python3 scripts/ensure-acl.py --file <snapshot.hujson> --dry-run      # offline
 Python3, nur Standardbibliothek.
 """
 import argparse
@@ -432,7 +441,7 @@ def diff_model_vs_live(model, live):
     - foreign:  live vorhanden, im Modell unbekannt (Drift nach IaC4-Sicht)
     """
     rep = {"missing": [], "changed": [], "foreign": [], "pending_live": [],
-           "pending_missing": []}
+           "pending_missing": [], "order": []}
 
     # tagOwners (key→value, Reihenfolge irrelevant)
     mkeys = _by_key(model["tagOwners"])
@@ -477,7 +486,33 @@ def diff_model_vs_live(model, live):
         for c, n in lcnt.items():
             if c not in mcnt:
                 rep["foreign"].append((section, _short(lobj[c].obj), "unbekannt"))
+    rep["order"] = order_diff(model, live)
     return rep
+
+
+def order_diff(model, live):
+    """Regel-Reihenfolge des Live-Solls gegen Live (Owner-Entscheid F4, 2026-09-11).
+    Verglichen wird je Abschnitt die kanonische SEQUENZ der Einträge. `pending`-
+    Einträge sind nicht Teil des Live-Solls und werden in der Live-Sequenz
+    ausgelassen. Formatierung/Kommentare sowie Feld-/Listen-Reihenfolge innerhalb
+    einer Regel sind irrelevant. `tagOwners` ist eine Zuordnung (JSON-Objekt) –
+    dessen Key-Reihenfolge wird NICHT geprüft.
+    Liefert eine Liste von Abweichungs-Beschreibungen (leer = Reihenfolge ok)."""
+    problems = []
+    for section in ("acls", "ssh"):
+        mseq = [e.canon for e in model[section] if not e.pending]
+        expected = Counter(mseq)
+        got = []
+        for e in live[section]:
+            if expected.get(e.canon, 0) > 0:
+                got.append(e.canon)
+                expected[e.canon] -= 1
+        if got != mseq:
+            problems.append(
+                "%s: Regel-Reihenfolge weicht ab (Modell-Soll: %d Einträge, in Live "
+                "in dieser Reihenfolge gefunden: %d) – Formatierung ist irrelevant, "
+                "die Reihenfolge nicht" % (section, len(mseq), len(got)))
+    return problems
 
 
 def print_diff(rep):
@@ -490,15 +525,88 @@ def print_diff(rep):
         print("%s: %d" % (label, len(rows)))
         for r in rows:
             print("   - %s" % " | ".join(str(x) for x in r))
+    print("Regel-Reihenfolge (acls/ssh) abweichend: %d" % len(rep["order"]))
+    for r in rep["order"]:
+        print("   - %s" % r)
 
 
 def null_diff_ok(rep):
-    """Null-Diff (Modell ≡ Live): kein Fehlend/Geändert, keine Fremd-Einträge."""
-    return not rep["missing"] and not rep["changed"] and not rep["foreign"]
+    """Null-Diff (Modell ≡ Live): kein Fehlend/Geändert/Fremd UND identische
+    Regel-Reihenfolge (acls/ssh). Formatierung/Kommentare bleiben unberücksichtigt."""
+    return (not rep["missing"] and not rep["changed"] and not rep["foreign"]
+            and not rep["order"])
 
 
 # ---------------------------------------------------------------------------
-# Additive Einfügung (Text vor die Abschnitts-Einträge, direkt nach der Klammer)
+# IaC4-Vorbedingungen (IaC4-first) – Migration aus HA-PR #54
+# ---------------------------------------------------------------------------
+# Die HA-Gruppen setzen auf die IaC4-Baseline (`tag:ia4`) auf. Die frühere
+# Vorab-Prüfung verglich byte-exakte Textanker gegen die Live-Policy; die
+# Tailscale-API RE-SERIALISIERT die Policy (Whitespace/Block-Layout/Trailing-
+# Kommas), wodurch der Anker nicht mehr matchte (Live-Befund 2026-09-11). Der
+# HA-PR #54 hat die Vorab-Prüfung deshalb auf die GEPARSTE Struktur (huJSON→JSON)
+# umgestellt und die Prüfung an die tatsächlich eingefügten Regeln gekoppelt
+# (Scope). Beides ist hier 1:1 auf die SSoT-Gruppen abgebildet.
+PRECOND_DESC = {
+    "ha-tagowners": "IaC4-tagOwners (tag:ia4 -> autogroup:admin)",
+    "ha-ssh":       "IaC4-ssh-Block (dst tag:ia4)",
+    "ha-acl":       "IaC4-acl-Block (src tag:ia4 -> dst tag:ia4:*)",
+    "ha-runner":    "IaC4-acl-Block (src tag:ia4 -> dst tag:ia4:*)",
+    "owner-8123":   "IaC4-acl-Block (src tag:ia4 -> dst tag:ia4:*)",
+    "mqtt-1883":    "IaC4-acl-Block (src tag:ia4 -> dst tag:ia4:*)",
+    "energie-read": "IaC4-acl-Block (src tag:ia4 -> dst tag:ia4:*)",
+}
+
+
+def _list_has(v, item):
+    """True, wenn v eine Liste ist, die item enthält (None/kein-Liste = False)."""
+    return isinstance(v, list) and item in v
+
+
+def precondition_ok(pol, group):
+    """Semantische IaC4-Vorbedingung der Gruppe gegen die GEPARSTE Policy
+    (tolerant gegen Whitespace/Layout/Kommentare). Reihenfolge IaC4-first: die
+    HA-Gruppen setzen auf die `iac4`-Baseline auf. Fehlt sie -> False (der
+    Aufrufer meldet PRECOND_DESC[group] + bricht OHNE POST ab).
+      ha-tagowners -> tagOwners: 'tag:ia4' enthält 'autogroup:admin'
+      ha-ssh       -> ssh: eine Regel mit dst 'tag:ia4'
+      übrige HA    -> acls: eine Regel src 'tag:ia4' -> dst 'tag:ia4:*'
+    `iac4` (und Unbekanntes) hat keine Vorbedingung -> True."""
+    if not isinstance(pol, dict):
+        return False
+    if group == "ha-tagowners":
+        to = pol.get("tagOwners")
+        return isinstance(to, dict) and _list_has(to.get("tag:ia4"),
+                                                 "autogroup:admin")
+    if group == "ha-ssh":
+        return any(isinstance(r, dict) and _list_has(r.get("dst"), "tag:ia4")
+                   for r in (pol.get("ssh") or []))
+    if group in ("ha-acl", "ha-runner", "owner-8123", "mqtt-1883",
+                 "energie-read"):
+        return any(isinstance(r, dict) and _list_has(r.get("src"), "tag:ia4")
+                   and _list_has(r.get("dst"), "tag:ia4:*")
+                   for r in (pol.get("acls") or []))
+    return True
+
+
+def _policy_dict(entries_live, to_insert):
+    """Live-Einträge (+ geplante Einfügungen) als einfaches Policy-Dict – für
+    die Vorbedingungs-Prüfung (live + was dieser Lauf gleich einfügt)."""
+    pol = {"tagOwners": {}, "acls": [], "ssh": []}
+    for e in entries_live["tagOwners"]:
+        pol["tagOwners"][e.key] = e.obj
+    for s in ("acls", "ssh"):
+        pol[s] = [e.obj for e in entries_live[s]]
+    for e in to_insert:
+        if e.section == "tagOwners":
+            pol["tagOwners"][e.key] = e.obj
+        else:
+            pol[e.section].append(e.obj)
+    return pol
+
+
+# ---------------------------------------------------------------------------
+# Additive Einfügung (Text in den Abschnitt, ohne Bestandszeilen zu verändern)
 # ---------------------------------------------------------------------------
 def _detect_indent(text, span):
     start, end = span
@@ -517,20 +625,87 @@ def _render_rule(obj, indent):
     return "\n%s{\n%s\n%s}," % (indent, inner, indent)
 
 
-def insert_entries(raw_text, section, entries):
-    """Fügt die Einträge additiv in `raw_text` ein (nur neue Zeilen; keine
-    Bestandszeile wird verändert). Rückgabe: neuer Text."""
+def _entry_ident(e):
+    """Vergleichs-Identität eines Eintrags für die Ordnungs-Zuordnung:
+    tagOwners über den Key, acls/ssh über die kanonische Regel."""
+    return e.key if e.section == "tagOwners" else e.canon
+
+
+def _iter_section_entries(raw_text, section, start, end):
+    """Top-level Einträge eines Abschnitts in Dokument-Reihenfolge →
+    (span_start, span_end, ident). tagOwners: ident = Key; acls/ssh: ident = canon."""
+    items = []
+    if section == "tagOwners":
+        for key, _vs, ve, ks in _iter_tagowners(raw_text, start, end):
+            items.append((ks, ve, key))
+    else:
+        for os_, oe in _iter_objects(raw_text, start, end):
+            items.append((os_, oe, canon(parse_policy(raw_text[os_:oe]))))
+    return items
+
+
+def _line_start_after_prev_nl(text, pos, lo):
+    """Einfüge-Position VOR der Einrückung des Eintrags bei `pos`: der
+    vorangehende Zeilenumbruch (pos wird über die Einrückung zurückgeführt).
+    Liegt kein Umbruch davor (kompaktes JSON), bleibt `pos`. So bleiben alle
+    bestehenden Zeilen byte-unverändert (nur neue Zeilen kommen hinzu)."""
+    k = pos
+    while k > lo and text[k - 1] in " \t":
+        k -= 1
+    if k > lo and text[k - 1] == "\n":
+        return k - 1
+    return pos
+
+
+def insert_entries(raw_text, section, entries, model_entries=None):
+    """Fügt die Einträge rein additiv in `raw_text` ein (bestehende Zeilen werden
+    NIE verändert/entfernt; nur neue Zeilen kommen hinzu). Rückgabe: neuer Text.
+
+    Ist das Modell (`model_entries` = ALLE Einträge des Abschnitts in
+    SSoT-Reihenfolge) gegeben, wird jeder neue Eintrag an seiner MODELL-Position
+    relativ zu den vorhandenen Einträgen eingefügt, sodass die Regel-Reihenfolge
+    des Modells erhalten bleibt (Owner-Entscheid F4: Reihenfolge zählt). Ohne
+    Modell wird direkt nach der öffnenden Klammer eingefügt (Alt-Verhalten)."""
     span = _section_span(raw_text, section)
     if span is None:
         raise ValueError("Abschnitt %s nicht in Live-Policy gefunden" % section)
     start, end = span
     indent = _detect_indent(raw_text, span)
     if section == "tagOwners":
-        frag = "".join(_render_tagowner(e.key, e.obj, indent) for e in entries)
+        def render(e):
+            return _render_tagowner(e.key, e.obj, indent)
     else:
-        frag = "".join(_render_rule(e.obj, indent) for e in entries)
-    # direkt nach der öffnenden Klammer einfügen (vollständig additiv)
-    return raw_text[:start] + frag + raw_text[start:]
+        def render(e):
+            return _render_rule(e.obj, indent)
+
+    if model_entries is None:
+        frag = "".join(render(e) for e in entries)
+        return raw_text[:start] + frag + raw_text[start:]
+
+    order = {}
+    for i, e in enumerate(model_entries):
+        order.setdefault(_entry_ident(e), i)
+    existing = _iter_section_entries(raw_text, section, start, end)
+    # Einfüge-Position je neuem Eintrag = unmittelbar vor den ersten vorhandenen
+    # Eintrag, der im Modell NACH ihm steht; sonst ans Abschnitts-Ende. Jeweils
+    # VOR der Einrückung (nach dem vorangehenden Zeilenumbruch), damit bestehende
+    # Zeilen unverändert bleiben.
+    buckets = {}
+    for e in entries:
+        mpos = order.get(_entry_ident(e), len(model_entries))
+        anchor = end
+        for ss, _se, ident in existing:
+            if order.get(ident, -1) > mpos:
+                anchor = ss
+                break
+        target = _line_start_after_prev_nl(raw_text, anchor, start)
+        buckets.setdefault(target, []).append((mpos, e))
+    out = raw_text
+    for target in sorted(buckets, reverse=True):
+        frag = "".join(render(e)
+                       for _p, e in sorted(buckets[target], key=lambda t: t[0]))
+        out = out[:target] + frag + out[target:]
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -596,7 +771,9 @@ def parse_args():
                    help="Nur Analyse (GET/--file): semantischer Diff + geplante "
                         "Einfügungen, KEIN POST/Backup.")
     p.add_argument("--verify", action="store_true",
-                   help="Null-Diff-Prüfung: exit != 0 bei Drift (Fehlend/Geändert/Fremd).")
+                   help="Null-Diff-Prüfung (semantisch, inkl. Regel-Reihenfolge): "
+                        "exit != 0 bei Drift (Fehlend/Geändert/Fremd/Reihenfolge). "
+                        "Mit Positional <export-datei> reproduzierbar offline.")
     p.add_argument("--export", action="store_true",
                    help="Inventar: read-only GET → rohe huJSON + SHA256 nach --out.")
     p.add_argument("--out", default=None,
@@ -604,6 +781,10 @@ def parse_args():
     p.add_argument("--file", default=None,
                    help="Statt Live-GET eine lokale huJSON-Datei lesen (offline; "
                         "für --dry-run/--verify/--export-Test).")
+    p.add_argument("snapshot", nargs="?", default=None,
+                   help="Optionale Live-huJSON-Datei (Positional, wie --file); z. B. "
+                        "`--verify acl/live-export-<sha8>.hujson` für den "
+                        "reproduzierbaren Null-Diff gegen einen Export.")
     p.add_argument("--check-model", action="store_true",
                    help="Nur SSoT-Gates prüfen (Parsing, Tag-Referenzen, Marker); kein Netz.")
     p.add_argument("--confirm", default=None,
@@ -656,10 +837,11 @@ def rollback(backup_text):
 
 
 def _load_live(args):
-    """Live-Policy-Text laden – via --file (offline) oder GET (Netz)."""
-    if args.file:
-        with open(args.file, encoding="utf-8") as f:
-            return f.read(), "file:%s" % args.file
+    """Live-Policy-Text laden – via --file/Positional-<export> (offline) oder GET."""
+    path = args.file or args.snapshot
+    if path:
+        with open(path, encoding="utf-8") as f:
+            return f.read(), "file:%s" % path
     if not TAILNET or not TOKEN:
         print("❌ TS_TAILNET + (TS_TOKEN|TS_API_KEY) erforderlich (env) – "
               "oder --file für den Offline-Modus")
@@ -717,7 +899,8 @@ def main():
     if args.verify:
         print_diff(rep)
         if null_diff_ok(rep):
-            print("✅ Null-Diff: Modell ≡ Live (kein Fehlend/Geändert/Fremd)")
+            print("✅ Null-Diff: Modell ≡ Live (semantisch, inkl. Regel-Reihenfolge; "
+                  "Formatierung/Kommentare ignoriert)")
             return 0
         print("❌ Drift: Modell und Live weichen ab (siehe oben)")
         return 1
@@ -745,6 +928,20 @@ def main():
             for e in missing_entries(g):
                 to_insert.append(e)
 
+    # IaC4-Vorbedingung (IaC4-first, übernommen aus HA-PR #54): nur für Gruppen,
+    # die DIESER Lauf tatsächlich einfügt (Scope-Kopplung); semantisch gegen
+    # Live + geplante Einfügungen. Fehlt die IaC4-Baseline -> Abbruch OHNE POST.
+    groups_to_insert = {e.group for e in to_insert}
+    precond_missing = [g for g in GROUP_NAMES
+                       if g in groups_to_insert
+                       and not precondition_ok(_policy_dict(live, to_insert), g)]
+    if precond_missing:
+        for g in precond_missing:
+            print("❌ Vorbedingung fehlt für Gruppe '%s': %s nicht gefunden – "
+                  "Reihenfolge IaC4-first (zuerst 'iac4' anwenden); Abbruch OHNE POST"
+                  % (g, PRECOND_DESC[g]))
+        return 1
+
     if args.dry_run or not selected:
         print_diff(rep)
         print("--- Plan (selektiv) ---")
@@ -760,7 +957,7 @@ def main():
         removed = 0
         print("   %d Einfügung(en), %d Entfernung(en) – rein additiv"
               % (len(to_insert), removed))
-        if not args.file:
+        if not args.file and not args.snapshot:
             print("ℹ️ Kein POST ausgeführt (Dry-Run).")
         return 0
 
@@ -773,8 +970,9 @@ def main():
         print("✅ Gewählte Gruppe(n) %s bereits vollständig vorhanden – no-op "
               "(idempotent), kein POST" % ", ".join(selected))
         return 0
-    if args.file:
-        print("❌ APPLY ist mit --file deaktiviert (nur Dry-Run/Verify/Export offline).")
+    if args.file or args.snapshot:
+        print("❌ APPLY ist mit --file/--verify-Datei deaktiviert (nur Dry-Run/"
+              "Verify/Export offline).")
         return 2
 
     backup_text = live_text
@@ -783,11 +981,12 @@ def main():
     print("💾 Backup: /tmp/acl-backup.json")
 
     new_text = live_text
-    # nach Abschnitt gruppieren, kanonische Einfüge-Reihenfolge
+    # nach Abschnitt gruppieren, kanonische Einfüge-Reihenfolge; neue Einträge
+    # werden an ihrer MODELL-Position eingefügt (Regel-Reihenfolge bleibt erhalten)
     for section in SECTION_ORDER:
         ents = [e for e in to_insert if e.section == section]
         if ents:
-            new_text = insert_entries(new_text, section, ents)
+            new_text = insert_entries(new_text, section, ents, model[section])
             for e in ents:
                 print("➕ [%s] eingefügt: %s" % (e.group, e.rule_id()))
 

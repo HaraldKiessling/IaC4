@@ -48,6 +48,22 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
 
+## Null-Diff (Erfolgskriterium, Owner-Entscheid F4)
+
+`--verify` gilt als bestanden, wenn die **geparste Policy semantisch gleich** ist
+**inkl. Regel-Reihenfolge** (`acls`/`ssh`). Tags (`tagOwners`) werden als
+**Zuordnung** verglichen (Reihenfolge irrelevant); Formatierung, Kommentare und
+Trailing-Kommas bleiben unberücksichtigt. **Byte**-Gleichheit ist **nicht** das
+Kriterium (die Tailscale-API reserialisiert die Policy).
+
+## IaC4-first (Übergang, Owner-Entscheid F3/F6)
+
+Der Applier erzwingt für die HA-Gruppen die **IaC4-Baseline** (`tag:ia4`) als
+semantische Vorbedingung (aus HA-PR #54 übernommen). Neue Einträge werden an
+ihrer **Modell-Position** eingefügt (Regel-Reihenfolge bleibt erhalten). Der
+HA-Apply-Weg bleibt bis zur **Sperre nach** dem IaC4-Apply offen und wird danach
+deaktiviert (nicht gelöscht).
+
 ## Bedienung
 
 ```bash
@@ -57,8 +73,11 @@ python3 scripts/ensure-acl.py --check-model
 # Semantischer Soll/Ist-Diff (read-only, kein POST)
 TS_TAILNET=… TS_API_KEY=… python3 scripts/ensure-acl.py --dry-run
 
-# Null-Diff-Verifikation (exit != 0 bei Drift)
+# Null-Diff-Verifikation (exit != 0 bei Drift; semantisch inkl. Regel-Reihenfolge)
 TS_TAILNET=… TS_API_KEY=… python3 scripts/ensure-acl.py --verify
+
+# Null-Diff reproduzierbar gegen einen exportierten Live-Stand (Datei + SHA256)
+python3 scripts/ensure-acl.py --verify acl/live-export-<sha8>.hujson
 
 # Inventar: rohe Live-huJSON + SHA256 (read-only GET, gewinnt den fehlenden
 # versionierten Ist-Stand)
