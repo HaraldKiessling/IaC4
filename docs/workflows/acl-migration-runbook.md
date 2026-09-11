@@ -81,10 +81,10 @@ aus **Run-Logs rekonstruiert** (Lücke V2). Modell-Soll und Offline-Fixture
    Ablage erfolgt als **Workflow-Artefakt** plus eingefrorene Kopie im Workspace
    (`.gitignore`: `acl/live*.hujson`). Nur SHA256 + Zeitstempel sind der Beleg.
 3. Semantisch parsen und in die Struktur `tagOwners` / `acls` / `ssh` zerlegen.
-3. Regel-für-Regel-Zuordnung erstellen: welche Live-Blöcke gehören zu `tag:ia4`
+4. Regel-für-Regel-Zuordnung erstellen: welche Live-Blöcke gehören zu `tag:ia4`
    (IaC4), welche zu `tag:ha`/`tag:ha-ci` (HA), was ist „fremder Bestand"
    (ia3, Owner-Konsole) → Letzteres bleibt **unverändert**.
-4. **Ergebnis:** vollständiges semantisches Inventar = Ist-Referenz für M2.
+5. **Ergebnis:** vollständiges semantisches Inventar = Ist-Referenz für M2.
    Kein Schreiben.
 
 ### M2 — Modell 1:1
