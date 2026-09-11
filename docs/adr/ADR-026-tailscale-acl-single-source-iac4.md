@@ -208,8 +208,10 @@ Modell + Skript + Workflow + Doku, **Draft, kein Merge, kein Apply**.
 - ha-repo erhält einen Grenz-Hinweis (ACL wird in IaC4 verwaltet); sein ACL-Pfad
   wird nach dem Übergang **gesperrt** (deaktivieren statt löschen, F6=(a); → später
   entfernen).
-- **Voraussetzung (Lücke, nicht Auftrag):** gültiger IaC4-`TAILSCALE_API_KEY`
-  sowie ein roher Live-Export sind für M3 (Null-Diff) erforderlich; heute nicht vorhanden.
+- **Voraussetzung (Lücke):** gültiger IaC4-`TAILSCALE_API_KEY` sowie ein roher
+  Live-Export sind für M3 (Null-Diff) erforderlich — mit **2026-09-11 geschlossen**
+  (Key erneuert; Roh-Export liegt vor: `acl-live-export-20260911-post-energie.json`,
+  sha256 `52bc662a…`).
 - **Folge-Entscheidungen (separat):** Zeitpunkt des Schnitts, Prod-Ausführung,
   `--accept-routes` (nicht Teil dieser ADR). **Regel 7 (Energie)** ist mit dem
   **Owner-Go 2026-09-11 21:57 UTC** aktiviert (Gruppe `energie-read`, rein

@@ -42,9 +42,12 @@
     "unsere Regeln fallen auf). Ersetzt das frühere Block-Positions-Modell",
     "(position start|end, M2-Finding 2026-09-11).",
     "",
-    "Quelle/Beleg: eingefrorener Live-Export acl-live-export-20260911.json",
-    "(sha256 8cd58f88aee5ab180858cc7a74ea6e488a21ddeaeb3740f5165f6ea856a75b8d,",
-    "GET /api/v2/tailnet/<tailnet>/acl, 2026-09-11T17:58:11Z). Der rohe Export wird",
+    "Quelle/Beleg: eingefrorener POST-APPLY-Live-Export",
+    "acl-live-export-20260911-post-energie.json",
+    "(sha256 52bc662a587e02125d7ada5c52c65e6c283b33ccdc7f8866cb9eb3de6587993e,",
+    "GET /api/v2/tailnet/<tailnet>/acl, 2026-09-11T22:05:26Z; Run 34652410709).",
+    "Vorgänger-Anker: acl-live-export-20260911.json (sha256 8cd58f88…a75b8d,",
+    "2026-09-11T17:58:11Z, pre-energie). Der rohe Export wird",
     "NICHT versioniert (siehe .gitignore + acl/README.md). Die `layout`-Reihenfolge",
     "ist exakt die Live-Reihenfolge dieses Exports.",
     "PROVENIENZ-ANKER: `source_export_sha256` ist nicht länger nur Dokumentation –",
@@ -56,8 +59,8 @@
     "        `layout`: { acls: [Token…], ssh: [Token…] } – s. o."
   ],
   "version": 2,
-  "captured_utc": "2026-09-11T17:58:11Z",
-  "source_export_sha256": "8cd58f88aee5ab180858cc7a74ea6e488a21ddeaeb3740f5165f6ea856a75b8d",
+  "captured_utc": "2026-09-11T22:05:26Z",
+  "source_export_sha256": "52bc662a587e02125d7ada5c52c65e6c283b33ccdc7f8866cb9eb3de6587993e",
 
   "tagOwners": [],
 
