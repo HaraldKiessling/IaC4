@@ -77,7 +77,7 @@ Zuständigkeit** und werden **nicht** ins Modell aufgenommen; sie bleiben als
 **dokumentierter Fremdbestand** in `tolerated-foreign.json` (Gruppe `iac3`,
 aktiv toleriert). Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔
 `tag:ha`) stehen dort als **klar markierter, konfigurierbarer Platzhalter**
-(`owner-decision-pending`); der Owner-Entscheid steht aus (Backlog-Issue) — die
+(`owner-decision-pending`); der Owner-Entscheid steht aus (Backlog-Issue #141) — die
 Objekte werden **nicht geraten und nicht aufgenommen**. Solange sie offen sind,
 meldet das Toleranz-Verify sie als unerwarteten Fremdbestand (exit 1).
 
@@ -86,7 +86,7 @@ meldet das Toleranz-Verify sie als unerwarteten Fremdbestand (exit 1).
 > Gesamtdatei über die Live-Policy — sonst würden die nicht übernommenen
 > Einträge **gelöscht** (Pre-POST-Guard `semantic_additivity` + Post-POST-Verify).
 > **Risiko:** `tag:ia3 → 192.168.0.0/24` gewährt Zugriff ins Heimnetz (siehe
-> Backlog-Issue).
+> Backlog-Issue #141).
 
 ## IaC4-first (Übergang, Owner-Entscheid F3/F6)
 

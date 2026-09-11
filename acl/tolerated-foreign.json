@@ -70,7 +70,7 @@
       {
         "status": "tolerated",
         "group": "iac3",
-        "reason": "IaC3-Eigentum. tag:ia3 -> 192.168.0.0/24:* – RISIKO: Zugriff ins Heimnetz (siehe Backlog-Issue).",
+        "reason": "IaC3-Eigentum. tag:ia3 -> 192.168.0.0/24:* – RISIKO: Zugriff ins Heimnetz (siehe Backlog-Issue #141).",
         "obj": {
           "action": "accept",
           "src": ["tag:ia3"],

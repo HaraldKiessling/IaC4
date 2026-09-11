@@ -29,7 +29,7 @@ IaC4**: SSoT `acl/tailscale-acl.hujson`, ein semantischer Applier
 | # | Gegenstand | Festlegung |
 |---|------------|------------|
 | **G1** | IaC3-Übernahme | **„IaC3 nicht übernehmen"** – die IaC3-Einträge (`tag:ia3`-Regeln + SSH admin/member/ci → `tag:ia3`) werden **nicht** ins IaC4-Modell aufgenommen. Konsequenz: Der strikte Null-Diff entfällt; es gilt **„verwalteter Teil exakt + dokumentierter Fremdbestand unverändert"**. |
-| **G2** | Konsolen-Einträge | Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`) bleiben **offen**: klar markierter, konfigurierbarer Platzhalter in `acl/tolerated-foreign.json`; **nicht raten, nicht aufnehmen**. Backlog-Issue angelegt. |
+| **G2** | Konsolen-Einträge | Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`) bleiben **offen**: klar markierter, konfigurierbarer Platzhalter in `acl/tolerated-foreign.json`; **nicht raten, nicht aufnehmen**. Backlog-Issue **#141** angelegt. |
 | **G3** | Erfolgskriterium | „Zero-Delta" bezieht sich **nur** auf den **verwalteten Teil**. M3-Gate = Verify **mit Toleranz** (`--tolerated-foreign`). |
 | **F5=(a)** | HA-PR #54 | Inhalt (semantische Precondition) wandert ins IaC4-Werkzeug; **#54** wird als **überholt** geschlossen (Referenz-Kommentar auf PR #140 + Branch/Commit). |
 | **F6=(a)** | Sperre | HA-Workflow **deaktivieren** (nicht löschen) + **Kopfhinweis** + Doku-Eintrag; Ausführung durch den **Orchestrator nach Owner-Bestätigung**, im Migrations-Log festgehalten. |
@@ -119,8 +119,8 @@ IaC3 ist eine **eigene Zuständigkeit** und wird **nicht mitverwaltet**.
    - **Vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`): **klar
      markierter, konfigurierbarer Platzhalter** (`owner-decision-pending`) – der
      Owner-Entscheid steht aus; die Objekte werden **nicht geraten und nicht
-     aufgenommen**. Backlog-Issue: „Nicht verwalteter Fremdbestand in der
-     Tailscale-ACL (IaC3 + Konsolen-Einträge)".
+     aufgenommen**. Backlog-Issue **#141**: „Nicht verwalteter Fremdbestand in
+     der Tailscale-ACL (IaC3 + Konsolen-Einträge)".
    Die Liste pinnt je Abschnitt die **Block-Position** (`start`/`end`) und die
    Reihenfolge des Fremdbestands.
 3. Die `tag:ha`-Regeln (live) werden Teil des IaC4-Modells — ohne Änderung am

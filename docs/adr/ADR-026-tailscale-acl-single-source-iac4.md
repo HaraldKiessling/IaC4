@@ -55,7 +55,7 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
    `owner` ↔ `tag:ha`, aus der Owner-Konsole) sind dort als **klar markierter,
    konfigurierbarer Platzhalter** hinterlegt (`owner-decision-pending`) – der
    Owner-Entscheid dazu steht noch aus; sie werden **nicht geraten und nicht
-   aufgenommen**, bis der Owner entschieden hat (Backlog-Issue).
+   aufgenommen**, bis der Owner entschieden hat (Backlog-Issue #141).
 4. **Ein Apply-Weg:** `.github/workflows/00-acl-apply.yml` — ausschließlich
    manuell (`workflow_dispatch`), Inputs `export`/`confirm`/`dry_run`/`rules`,
    **kein** push-/PR-Trigger (Governance: ACL nie automatisch). Secrets-Namen
