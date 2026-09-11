@@ -1,8 +1,10 @@
 # Runbook: Tailscale `--accept-routes` (Subnetz-/Exit-Routen annehmen)
 
 > **Bezug:** IaC4-Issue **#135** („`--accept-routes` in der Tailscale-Rolle verankern").
-> **Status:** verankert in IaC (Rolle + Mini-Playbook + Workflow 02b). **Kein Apply**
-> im Rahmen dieses PRs — Ausführung nur manuell/nach Owner-Go.
+> **Status:** verankert in IaC (Rolle + Mini-Playbook + Workflow **02**, `mode=accept-routes`).
+> **Kein Apply** im Rahmen dieses PRs — Ausführung nur manuell/nach Owner-Go.
+> **Einstieg (Ausführung):** `.github/workflows/02-tailscale-bootstrap.yml`
+> mit `mode=accept-routes` — **kein** eigener Workflow.
 > **Grundsatz:** reiner, additiver Flag-/Pref-Setzer — **kein Re-Join**, kein Auth-Key,
 > kein Neustart des `tailscaled`-Dienstes.
 
@@ -34,7 +36,7 @@ wirkungslos**.
 | `ansible/roles/tailscale/tasks/main.yml` | Join setzt `--accept-routes=…`; Include der accept-routes-Task (Tag `tailscale-accept-routes`) |
 | `ansible/roles/tailscale/handlers/main.yml` | Re-Join-Handler setzt `--accept-routes=…` ebenfalls |
 | `ansible/playbooks/tailscale-accept-routes.yml` | Mini-Playbook (nur dieser Schalter, kein Re-Join) |
-| `.github/workflows/02b-tailscale-accept-routes.yml` | Ausführungspfad `workflow_dispatch` (`check` → `apply`) |
+| `.github/workflows/02-tailscale-bootstrap.yml` | Ausführungspfad `workflow_dispatch`, Input **`mode=accept-routes`** (Dry-Run immer → Anwenden nur mit `confirm=APPLY-ACCEPT-ROUTES`) |
 
 **Entscheidung – Soll-Zustand:** Nur `--accept-routes` ist Teil des
 deklarativen Soll-Zustands der Rolle (Default `true`). Alle übrigen Prefs
@@ -60,17 +62,24 @@ Die Task liest genau diese Werte (kein Schreiben im Read-Schritt) und läuft mit
 
 ## Ausführung
 
-### Variante A — GitHub-Workflow `02b` (Standard)
+### Variante A — bestehender GitHub-Workflow `02` (Standard, Einstieg)
 
-1. **Dry-Run zuerst:** Workflow `02b – Tailscale accept-routes` starten mit
-   `target=dev|prod`, **`mode=check`**. Der Lauf führt
+Einstieg ist **Workflow 02 – Tailscale Bootstrap / accept-routes**
+(`.github/workflows/02-tailscale-bootstrap.yml`) mit dem Input **`mode`**:
+
+1. **Dry-Run zuerst:** Workflow `02` starten mit `mode=accept-routes`,
+   `target=dev|prod` und **leerem** `confirm`. Der Lauf führt
    `ansible-playbook … --check --diff` aus und zeigt Ist vs. Soll
    (Debug-Zeile `accept-routes: ist=… soll=… → DRIFT/keine Änderung`). Es wird
    **nichts** geschrieben.
-2. **Apply:** denselben Workflow mit `mode=apply` und
-   `confirm=APPLY-ACCEPT-ROUTES` starten. Der Guard (Schritt 1) weist ein Apply
-   ohne exakte Bestätigung ab.
-3. Ergebnis im Step „Verifikation" (`tailscale get accept-routes`).
+2. **Anwenden:** denselben Workflow mit `mode=accept-routes` und
+   `confirm=APPLY-ACCEPT-ROUTES` starten. Der Guard (Schritt 1) weist ein
+   gesetztes, falsches Bestätigungswort ab; der Anwenden-Step ist zusätzlich an
+   `confirm=APPLY-ACCEPT-ROUTES` gebunden.
+3. Ergebnis im Step „Verifikation“ (`tailscale get accept-routes`).
+
+`mode=bootstrap` (Default) bleibt der **unveränderte** Public-IP-Pfad für einen
+frischen VPS (Phase 2a + 2b) — nicht für diesen Wartungsschritt nutzen.
 
 Verwendete Secrets/Namespaces (unverändert zu Workflows 02/03): `SSH_KEY`,
 `VPS_USER`, `TAILSCALE_OAUTH_CLIENT_ID`, `TAILSCALE_OAUTH_CLIENT_SECRET`,
@@ -114,7 +123,8 @@ Lauf zeigt `changed=0`.
 Bewusst und mit Owner-Go (Rückweg = Redeclare des Soll-Zustands):
 
 ```shell
-# Variante A: Workflow 02b mit -e tailscale_accept_routes=false
+# Variante A: Workflow 02 (mode=accept-routes) mit -e tailscale_accept_routes=false
+#   (siehe Mini-Playbook unten; der Rückweg ist derselbe Pfad mit Soll=false)
 # Variante B:
 ansible-playbook playbooks/tailscale-accept-routes.yml -i /tmp/inventory \
   -e tailscale_accept_routes=false
@@ -148,5 +158,5 @@ wirkungslos. Rollback ist **kein** Re-Join.
 
 | Datum (UTC) | Schritt | Status | Ausführender |
 |-------------|---------|--------|--------------|
-| 2026-09-11 | IaC-Verankerung: Rolle (Default + idempotente Task), Mini-Playbook, Workflow 02b (check/apply), Runbook; Draft-PR (kein Merge, kein Apply) | vorbereitet | Engineer |
+| 2026-09-11 | IaC-Verankerung: Rolle (Default + idempotente Task), Mini-Playbook, Ausführungspfad in **Workflow 02** (`mode=accept-routes`, Dry-Run → Anwenden mit Confirm), Runbook; Draft-PR (kein Merge, kein Apply) | vorbereitet | Engineer |
 | 2026-09-11 | Ausführung dev/prod (Dry-Run → Apply), Ist-Zustand live verifizieren | ausstehend — Owner-Go | Owner (prod) |
