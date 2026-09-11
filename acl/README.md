@@ -13,10 +13,10 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | Datei | Zweck |
 |-------|-------|
 | `tailscale-acl.hujson` | **SSoT**: kanonische Policy (tagOwners → acls → ssh) |
-| `tolerated-foreign.json` | **Fremdbestand-Toleranzliste** (IaC3 aktiv; Konsolen-Einträge als Platzhalter) |
-| `tests/fixtures/live-reconstructed.hujson` | Offline-Testfixture (rekonstruierter Live-Stand, nur verwalteter Teil) |
-| `tests/fixtures/live-with-foreign.hujson` | Testfixture: rekonstruierter Stand **+ aller Fremdbestand** (IaC3 + Konsolen) |
-| `tests/fixtures/live-with-tolerated-foreign.hujson` | Testfixture: rekonstruierter Stand **+ dokumentierter (IaC3) Fremdbestand** |
+| `tolerated-foreign.json` | **Fremdbestand-Toleranzliste** (nur noch IaC3 aktiv, 5 Einträge; Konsolen-Einträge sind seit 2026-09-11 19:52 UTC **ins Modell** übernommen) |
+| `tests/fixtures/live-reconstructed.hujson` | Offline-Testfixture (aktueller Live-Stand, verwalteter Teil inkl. Konsolen-Einträge) |
+| `tests/fixtures/live-with-foreign.hujson` | Testfixture: Live-Stand **+ dokumentierter (IaC3) Fremdbestand** (realer Aufbau) |
+| `tests/fixtures/live-with-tolerated-foreign.hujson` | Testfixture: Live-Stand **+ dokumentierter (IaC3) Fremdbestand** (realer Aufbau, inkl. Interleaving) |
 | `tests/offline_tests.py` | Offline-Nachweise (kein Netz, kein POST) |
 
 ## Konventionen der SSoT-Datei
@@ -46,6 +46,7 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `ha-ssh` (= HA-Regel 3) | ssh-Spiegel → tag:ha | live |
 | `ha-runner` (= HA-Regel 4) | ha-ci → ia4 (22+8123) | live |
 | `owner-8123` (= HA-Regel 5) | admin/member → ia4:8123 | live |
+| `console-owner` | Regel-1-Cluster aus der Owner-Konsole: `owner` ↔ `tag:ha` + `owner` → LAN (`192.168.0.0/24`, `192.168.2.0/24`) | **live** (Owner-Entscheid 2026-09-11 19:52 UTC: ins Modell übernommen) |
 | `mqtt-1883` (= HA-Regel 6) | ia4 → ha:1883 | **live** (Run-Log-rekonstruiert; Apply 2026-09-09) |
 | `energie-read` (= HA-Regel 7) | ia4 → 3 Energie-Ziele | **pending / nicht live** |
 
@@ -69,17 +70,44 @@ Policy). Jede Abweichung → **exit 1** mit Benennung des Eintrags.
 Der **strikte** Null-Diff (`--verify` **ohne** `--tolerated-foreign`, „Modell ≡
 Live, kein Fremdbestand“) bleibt verfügbar.
 
+### Bekannte Limitierung (Block-Position des Fremdbestands) — M2-Finding 2026-09-11
+
+Die Toleranzliste pinnt den Fremdbestand je Abschnitt als **zusammenhängenden
+Block** mit Position `start`/`end`. Der **reale** Live-Aufbau erfüllt das für
+`acls` **nicht**: die IaC3-Selbstregel (`tag:ia3 → tag:ia3:*`) steht in Live
+**vor** dem (jetzt verwalteten) Konsolen-Block, die übrigen drei IaC3-Einträge
+danach — der IaC3-Block ist also durch verwaltete Einträge **unterbrochen**.
+
+Folge: Für den eingefrorenen Export (`acl-live-export-20260911.json`) meldet
+der `--verify`
+
+- **verwalteter Teil exakt** (Fehlend/Geändert = 0), **Fremdbestand vollständig/
+  unverändert** (5 vorhanden, 0 fehlend/verändert), **kein unerwarteter Eintrag**
+  — also genau das **Erfolgskriterium** —,
+- aber **eine** Reihenfolge-Abweichung, weil die IaC3-Selbstregel nicht im
+  Block erwartet wird → **exit 1** (`Regel-Reihenfolge (acls/ssh) abweichend: 1`).
+
+Das ist **kein** Datenfehler des Modells/Toleranz, sondern eine **Limitierung des
+Block-Positions-Modells** gegenüber einem nicht-zusammenhängenden Fremdbestand.
+Behebung erfordert eine **Owner-Entscheidung**: entweder den Fremdbestand
+positions-genau (interleaving-fähig) modellieren oder die Block-Positionierung in
+der Erfolgsdefinition präzisieren. Siehe Runbook „M2-Finding" + Migrations-Log.
+
 ## Fremdbestand (nicht von IaC4 verwaltet)
 
 Owner-Entscheid 2026-09-11 (19:41 UTC): **„IaC3 nicht übernehmen“** — die
 IaC3-Einträge (`tag:ia3`-Regeln + SSH admin/member/ci → `tag:ia3`) sind **eigene
 Zuständigkeit** und werden **nicht** ins Modell aufgenommen; sie bleiben als
 **dokumentierter Fremdbestand** in `tolerated-foreign.json` (Gruppe `iac3`,
-aktiv toleriert). Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔
-`tag:ha`) stehen dort als **klar markierter, konfigurierbarer Platzhalter**
-(`owner-decision-pending`); der Owner-Entscheid steht aus (Backlog-Issue #141) — die
-Objekte werden **nicht geraten und nicht aufgenommen**. Solange sie offen sind,
-meldet das Toleranz-Verify sie als unerwarteten Fremdbestand (exit 1).
+aktiv toleriert, **5 Einträge**).
+
+Owner-Entscheid 2026-09-11 (19:52 UTC): **„Ja“** — die **vier Konsolen-Einträge**
+(Regel-1-Cluster `owner` ↔ `tag:ha`, aus der Admin-Konsole) wurden **ins Modell
+übernommen** (Gruppe `console-owner`, live) und sind damit **verwalteter Bestand**.
+Der Eintrag `owner → 192.168.2.0/24:*` (zweites Heimnetz) bleibt **ausdrücklich
+bestehen** und ist künftig modellverwaltet — eine spätere Entfernung wäre eine
+eigene, bewusste Änderung. Der frühere Platzhalter `owner-decision-pending` ist
+entfallen.
 
 > **Sicherheits-Eigenschaft:** Der Applier liest die **Live-Policy**, fügt **rein
 > additiv** ein und schreibt zurück. Er schreibt **nie** das Modell als

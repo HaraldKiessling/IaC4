@@ -102,6 +102,42 @@
     {
       "action": "accept",
       "src": [
+        "autogroup:owner"
+      ],
+      "dst": [
+        "tag:ha:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:owner"
+      ],
+      "dst": [
+        "192.168.0.0/24:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:owner"
+      ],
+      "dst": [
+        "192.168.2.0/24:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "tag:ha"
+      ],
+      "dst": [
+        "autogroup:owner:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
         "tag:ia3"
       ],
       "dst": [

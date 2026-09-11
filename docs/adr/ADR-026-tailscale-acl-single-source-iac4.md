@@ -49,13 +49,18 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
    übernehmen“):** Die IaC3-Einträge (`tag:ia3`-Regeln + SSH admin/member/ci →
    `tag:ia3`) werden **nicht** ins IaC4-Modell aufgenommen. Sie sind eine **eigene
    Zuständigkeit** (IaC3) und bleiben als **dokumentierter Fremdbestand** in
-   `acl/tolerated-foreign.json` erfasst (Gruppe `iac3`): Sie müssen vollständig und
-   unverändert an ihren Live-Positionen erhalten bleiben, unterliegen aber **nicht**
-   der IaC4-Modellierung. Die **vier Konsolen-Einträge** (Regel-1-Cluster
-   `owner` ↔ `tag:ha`, aus der Owner-Konsole) sind dort als **klar markierter,
-   konfigurierbarer Platzhalter** hinterlegt (`owner-decision-pending`) – der
-   Owner-Entscheid dazu steht noch aus; sie werden **nicht geraten und nicht
-   aufgenommen**, bis der Owner entschieden hat (Backlog-Issue #141).
+   `acl/tolerated-foreign.json` erfasst (Gruppe `iac3`, 5 Einträge): Sie müssen
+   vollständig und unverändert an ihren Live-Positionen erhalten bleiben,
+   unterliegen aber **nicht** der IaC4-Modellierung.
+
+   Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`, aus der
+   Owner-Konsole) wurden mit dem **Owner-Entscheid 2026-09-11 (19:52 UTC, „Ja“)**
+   **ins IaC4-Modell übernommen** (Gruppe `console-owner`, live) und sind damit
+   **verwalteter Bestand** (nicht mehr Fremdbestand). Der Eintrag
+   `owner → 192.168.2.0/24:*` (zweites Heimnetz) bleibt **ausdrücklich gewollt**;
+   eine spätere Entfernung wäre eine eigene, bewusste Änderung. Der frühere
+   Platzhalter (`owner-decision-pending`) ist damit entfallen (Backlog-Issue #141
+   abgeschlossen/geschlossen).
 4. **Ein Apply-Weg:** `.github/workflows/00-acl-apply.yml` — ausschließlich
    manuell (`workflow_dispatch`), Inputs `export`/`confirm`/`dry_run`/`rules`,
    **kein** push-/PR-Trigger (Governance: ACL nie automatisch). Secrets-Namen
@@ -95,6 +100,16 @@ der **gesamten** Policy nicht mehr das Ziel; das Erfolgskriterium ist der
 (c) **kein unerwarteter** Live-Eintrag (Modell ∪ Toleranzliste). Jede Abweichung
 → **exit 1** mit Nennung des betroffenen Eintrags. Der strikte Modus bleibt ohne
 `--tolerated-foreign` erhalten.
+
+**Bekannte Limitierung (M2-Finding 2026-09-11):** Die Block-Positionierung setzt
+einen **zusammenhängenden** Fremdbestand-Block je Abschnitt voraus. In der realen
+Live-Policy ist der IaC3-`acls`-Block jedoch durch den (jetzt verwalteten)
+Konsolen-Block **unterbrochen** (IaC3-Selbstregel steht davor). Folge: Der
+`--verify` erfüllt das **Erfolgskriterium** (verwalteter Teil exakt, Fremdbestand
+vollständig/unverändert, kein unerwarteter Eintrag), meldet aber eine
+Reihenfolge-Abweichung → **exit 1**. Behebung erfordert eine **Owner-Entscheidung**
+(positions-genaue Modellierung des Fremdbestands **oder** Präzisierung der
+Block-Positionierung im Erfolgskriterium). Siehe Runbook „M2-Finding“.
 
 ### Übernahme aus HA-PR #54 (F5=(a))
 
@@ -170,9 +185,9 @@ Modell + Skript + Workflow + Doku, **Draft, kein Merge, kein Apply**.
 ## Konsequenzen
 
 - Neue SSoT `acl/tailscale-acl.hujson` + Konventionen (`acl/README.md`).
-- **Fremdbestand-Toleranzliste** `acl/tolerated-foreign.json` (IaC3 aktiv;
-  4 Konsolen-Einträge als Platzhalter, Owner-Entscheid ausstehend) +
-  `--tolerated-foreign` im Verifier.
+- **Fremdbestand-Toleranzliste** `acl/tolerated-foreign.json` (nur IaC3 aktiv,
+  5 Einträge) + `--tolerated-foreign` im Verifier; die **vier Konsolen-Einträge**
+  sind seit 2026-09-11 (19:52 UTC) **Teil des Modells** (Gruppe `console-owner`).
 - `scripts/ensure-acl.py` ersetzt `ensure-acl-ia4.py` (Shim bleibt für Workflow 01).
 - Neuer manueller Workflow `.github/workflows/00-acl-apply.yml`.
 - ha-repo erhält einen Grenz-Hinweis (ACL wird in IaC4 verwaltet); sein ACL-Pfad

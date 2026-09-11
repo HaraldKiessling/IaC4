@@ -76,7 +76,7 @@ TOKEN = os.environ.get("TS_TOKEN", "") or os.environ.get("TS_API_KEY", "")
 # Gruppen → Regel-Namen (Workflow-Input `rules`), inkl. numerischer Aliase der
 # HA-Regeln 1–7 (Kontinuität zum bisherigen ha-repo-Workflow).
 GROUP_NAMES = ("iac4", "ha-tagowners", "ha-acl", "ha-ssh", "ha-runner",
-               "owner-8123", "mqtt-1883", "energie-read")
+               "owner-8123", "console-owner", "mqtt-1883", "energie-read")
 GROUP_ALIASES = {
     "iac4": "iac4",
     "1": "ha-tagowners", "ha-tagowners": "ha-tagowners", "tagowners": "ha-tagowners",
@@ -84,6 +84,7 @@ GROUP_ALIASES = {
     "3": "ha-ssh", "ha-ssh": "ha-ssh", "ssh3": "ha-ssh",
     "4": "ha-runner", "ha-runner": "ha-runner", "ha-ia4": "ha-runner",
     "5": "owner-8123", "owner-8123": "owner-8123", "owner8123": "owner-8123",
+    "console-owner": "console-owner", "console": "console-owner",
     "6": "mqtt-1883", "mqtt-1883": "mqtt-1883", "mqtt": "mqtt-1883",
     "7": "energie-read", "energie-read": "energie-read", "energie": "energie-read",
 }
@@ -903,8 +904,8 @@ def parse_args():
                    help="SSoT-Datei (default: acl/tailscale-acl.hujson)")
     p.add_argument("--rule", action="append", metavar="GRUPPE", default=None,
                    help="Regel-Auswahl (repeatable): iac4 | 1..7 | ha-tagowners | "
-                        "ha-acl | ha-ssh | ha-runner | owner-8123 | mqtt-1883 | "
-                        "energie-read | all.")
+                        "ha-acl | ha-ssh | ha-runner | owner-8123 | console-owner | "
+                        "mqtt-1883 | energie-read | all.")
     p.add_argument("--rules", default=None,
                    help="Regel-Auswahl kommagetrennt (Workflow-Input), z. B. 'iac4' "
                         "oder '1,4'. Alternativ zu wiederholtem --rule.")

@@ -106,6 +106,35 @@
       "dst": ["tag:ia4:8123"],
     },
 
+    // rule: console-owner — Owner-Konsolen-Cluster (Regel-1-Gruppe „Du zu HA
+    // & HA zu Dir"): owner ↔ tag:ha + Zugriff ins LAN. Aus der Admin-Konsole
+    // stammend (pre-IaC4-Fremdbestand), Owner-Entscheid 2026-09-11 (19:52 UTC):
+    // „Ja" – die vier Einträge werden INS MODELL übernommen und sind damit
+    // künftig modellverwaltet (verwalteter Bestand, nicht mehr Fremdbestand).
+    // Reihenfolge = echte Live-Position (zwischen owner-8123 und der IaC3-Welt).
+    // AUSDRÜCKLICH GEWOLLT: `owner → 192.168.2.0/24:*` (zweites Heimnetz) bleibt
+    // bestehen – eine spätere Entfernung wäre eine eigene, bewusste Änderung.
+    {
+      "action": "accept",
+      "src": ["autogroup:owner"],
+      "dst": ["tag:ha:*"],
+    },
+    {
+      "action": "accept",
+      "src": ["autogroup:owner"],
+      "dst": ["192.168.0.0/24:*"],
+    },
+    {
+      "action": "accept",
+      "src": ["autogroup:owner"],
+      "dst": ["192.168.2.0/24:*"],
+    },
+    {
+      "action": "accept",
+      "src": ["tag:ha"],
+      "dst": ["autogroup:owner:*"],
+    },
+
     // rule: energie-read pending — HA-Regel 7 (Energie-Lesezugriff, Owner-
     // Entscheide D1–D4 2026-09-11): BEIDE VPS (tag:ia4) → genau drei Ziele,
     // NUR LESEND (kein Schreib-Block). NICHT live – eigene Freigabe ausstehend.

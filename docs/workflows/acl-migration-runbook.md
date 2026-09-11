@@ -2,7 +2,9 @@
 
 > **Status:** Vorbereitung (Draft). Kein Merge, kein Apply. Owner-Entscheide
 > 2026-09-11 (07:27 UTC Grundsatz „ACL ist Infrastruktur → IaC4"; 07:56–11:08 UTC
-> F1–F6, siehe unten).
+> F1–F6; 19:41 UTC G1–G3; 19:52 UTC H1 – Konsolen-Einträge ins Modell, siehe unten).
+> **M2-Finding (19:52 UTC):** Block-Positions-Modell vs. nicht-zusammenhängender
+> IaC3-Fremdbestand → M3-Gate noch **rot** (Details unten).
 > **Grundsatz:** **reiner, verhaltensneutraler Umzug** + saubere Dokumentation —
 > keine zusätzlichen Anforderungen; identifizierte Lücken werden separat als
 > IaC4-Issues erfasst.
@@ -29,10 +31,16 @@ IaC4**: SSoT `acl/tailscale-acl.hujson`, ein semantischer Applier
 | # | Gegenstand | Festlegung |
 |---|------------|------------|
 | **G1** | IaC3-Übernahme | **„IaC3 nicht übernehmen"** – die IaC3-Einträge (`tag:ia3`-Regeln + SSH admin/member/ci → `tag:ia3`) werden **nicht** ins IaC4-Modell aufgenommen. Konsequenz: Der strikte Null-Diff entfällt; es gilt **„verwalteter Teil exakt + dokumentierter Fremdbestand unverändert"**. |
-| **G2** | Konsolen-Einträge | Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`) bleiben **offen**: klar markierter, konfigurierbarer Platzhalter in `acl/tolerated-foreign.json`; **nicht raten, nicht aufnehmen**. Backlog-Issue **#141** angelegt. |
+| **G2** | Konsolen-Einträge | Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`) bleiben **offen**: klar markierter, konfigurierbarer Platzhalter in `acl/tolerated-foreign.json`; **nicht raten, nicht aufnehmen**. Backlog-Issue **#141** angelegt. **→ überholt durch H1 (19:52 UTC, unten).** |
 | **G3** | Erfolgskriterium | „Zero-Delta" bezieht sich **nur** auf den **verwalteten Teil**. M3-Gate = Verify **mit Toleranz** (`--tolerated-foreign`). |
 | **F5=(a)** | HA-PR #54 | Inhalt (semantische Precondition) wandert ins IaC4-Werkzeug; **#54** wird als **überholt** geschlossen (Referenz-Kommentar auf PR #140 + Branch/Commit). |
 | **F6=(a)** | Sperre | HA-Workflow **deaktivieren** (nicht löschen) + **Kopfhinweis** + Doku-Eintrag; Ausführung durch den **Orchestrator nach Owner-Bestätigung**, im Migrations-Log festgehalten. |
+
+### Zusätzliche Owner-Entscheide (2026-09-11, 19:52 UTC)
+
+| # | Gegenstand | Festlegung |
+|---|------------|------------|
+| **H1** | Vier Konsolen-Einträge | **„Ja"** – die vier Einträge aus der Admin-Konsole (Regel-1-Cluster `owner` ↔ `tag:ha`) werden **ins Modell übernommen** (Gruppe `console-owner`, live), **nicht** nur toleriert. Der Eintrag `owner → 192.168.2.0/24:*` (zweites Heimnetz) bleibt **ausdrücklich** bestehen (kein Aufräumschritt; künftig modellverwaltet – spätere Entfernung = eigene, bewusste Änderung). **IaC3 bleibt weiterhin NICHT übernommen** (tolerierter, dokumentierter Fremdbestand). Damit enthält `acl/tolerated-foreign.json` nur noch die **5 IaC3-Einträge**; der frühere Platzhalter entfällt. |
 
 ### Zusätzliche Owner-Entscheide (2026-09-11, 17:52 UTC)
 
@@ -74,11 +82,48 @@ aus **Run-Logs rekonstruiert** (Lücke V2). Modell-Soll und Offline-Fixture
   wird diese Rekonstruktion durch den **rohen Export + `--verify`** ersetzt bzw.
   bestätigt (M3). Keine weitere Migration ohne diesen Abgleich.
 - **Roher Export (V2) liegt vor:** `acl-live-export-20260911.json` (sha256
-  `8cd58f88…`, 2026-09-11T17:58:11Z, read-only GET). Das Toleranz-Verify gegen
-  diesen Export zeigt: **verwalteter Teil fehlend/geändert = 0**, dokumentierter
-  **IaC3-Fremdbestand (5 Einträge) vorhanden/unverändert**, aber **4 undokumentierte
-  Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`) → **exit 1**, bis der
-  Owner-Entscheid vorliegt (G2). Ohne Toleranz wären alle **9** Fremd-Einträge Drift.
+  `8cd58f88…`, 2026-09-11T17:58:11Z, read-only GET). Reale `acls`-Reihenfolge:
+  verwalteter Teil (0–6), **IaC3-Selbstregel (7)**, **Konsolen-Block (8–11)**,
+  restlicher IaC3-Block (12–14) — d. h. der **IaC3-Block ist unterbrochen**.
+  Nach dem Owner-Entscheid H1 (19:52 UTC) sind die 4 Konsolen-Einträge Teil des
+  Modells; das Toleranz-Verify gegen diesen Export zeigt: **verwalteter Teil
+  fehlend/geändert = 0**, **IaC3-Fremdbestand (5) vorhanden/unverändert**, **kein
+  unerwarteter Eintrag** — also das **Erfolgskriterium** —, meldet aber **eine
+  Reihenfolge-Abweichung** infolge des Interleavings (IaC3-Selbstregel vor dem
+  Konsolen-Block) → **exit 1**. Siehe **M2-Finding** (unten). Ohne Toleranz wären
+  alle **5** Fremd-Einträge Drift.
+
+## M2-Finding (2026-09-11): Fremdbestand nicht block-konform
+
+**Beobachtung:** Der eingefrorene Live-Export zeigt für `acls` die Reihenfolge
+`[verwaltet 0–6] [IaC3-Selbstregel 7] [Konsolen-Block 8–11] [IaC3 12–14]`. Der
+IaC3-Fremdbestand ist also **nicht zusammenhängend** — er wird durch den (mit H1
+verwalteten) Konsolen-Block **unterbrochen**.
+
+**Wirkung:** Das Toleranz-Verify erfüllt das **Erfolgskriterium** (verwalteter
+Teil exakt inkl. Reihenfolge, IaC3-Fremdbestand 5/5 vorhanden/unverändert, kein
+unerwarteter Eintrag), meldet aber **eine Reihenfolge-Abweichung** und liefert
+**exit 1**, weil die Toleranzliste den Fremdbestand nur als **zusammenhängenden
+Block** (`position` `start`/`end`) abbilden kann.
+
+**Bewertung:** Kein Datenfehler im Modell/Toleranz, sondern eine **Limitierung
+des Block-Positions-Modells**. Der gemeldete Zustand ist **nicht** durch ein
+„Zurechtbiegen“ von Modell oder Toleranzliste aufzulösen (keine Anpassung „bis
+es passt“).
+
+**Optionen (Owner-Entscheidung erforderlich):**
+1. **Positions-genaue Modellierung** des Fremdbestands (Interleaving-fähig, z. B.
+   Anker je Fremdbestand-Eintrag) — Werkzeug-Erweiterung `ensure-acl.py` +
+   Toleranz-Schema.
+2. **Präzisierung des Erfolgskriteriums** (Block-Positionierung fallen lassen →
+   nur „verwalteter Teil exakt + Fremdbestand vorhanden/unverändert + kein
+   Unerwarteter“).
+3. Alternativ: IaC3-Selbstregel in die verwaltete Basis aufnehmen (widerspricht
+   G1 „IaC3 nicht übernehmen“ — **nicht** empfohlen).
+
+**Status:** M3-Gate **rot** gegen den eingefrorenen Export; **kein Merge/kein
+Apply**. Nachweis offline: `acl/tests/offline_tests.py` (Fall 8b dokumentiert die
+Limitierung).
 
 ## Ablauf
 
@@ -113,18 +158,19 @@ IaC3 ist eine **eigene Zuständigkeit** und wird **nicht mitverwaltet**.
    (Zero-Delta des verwalteten Teils).
 2. **Nicht übernommener Fremdbestand** wird **nicht** ins Modell aufgenommen,
    sondern in `acl/tolerated-foreign.json` dokumentiert:
-   - **IaC3** (Gruppe `iac3`, aktiv toleriert): `tag:ia3`-Selbstregel,
+   - **IaC3** (Gruppe `iac3`, aktiv toleriert, **5 Einträge**): `tag:ia3`-Selbstregel,
      `tag:ia3 → tag:ha`, `tag:ia3 → 192.168.0.0/24`, `tag:ha → tag:ia3` sowie
      SSH admin/member/ci → `tag:ia3`.
-   - **Vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`): **klar
-     markierter, konfigurierbarer Platzhalter** (`owner-decision-pending`) – der
-     Owner-Entscheid steht aus; die Objekte werden **nicht geraten und nicht
-     aufgenommen**. Backlog-Issue **#141**: „Nicht verwalteter Fremdbestand in
-     der Tailscale-ACL (IaC3 + Konsolen-Einträge)".
+   - Die früheren **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`)
+     sind mit **H1 (19:52 UTC)** **ins Modell übernommen** (Gruppe `console-owner`,
+     live) — der Platzhalter (`owner-decision-pending`) ist entfallen. Der Eintrag
+     `owner → 192.168.2.0/24:*` bleibt ausdrücklich bestehen (modellverwaltet).
    Die Liste pinnt je Abschnitt die **Block-Position** (`start`/`end`) und die
-   Reihenfolge des Fremdbestands.
-3. Die `tag:ha`-Regeln (live) werden Teil des IaC4-Modells — ohne Änderung am
-   Live-Zustand.
+   Reihenfolge des Fremdbestands. **Bekannte Limitierung:** Der reale `acls`-Block
+   des IaC3-Fremdbestands ist **nicht zusammenhängend** (IaC3-Selbstregel vor dem
+   Konsolen-Block) — die Block-Position kann das nicht abbilden (M2-Finding).
+3. Die `tag:ha`-Regeln (live) **und die vier Konsolen-Einträge (H1)** werden Teil
+   des IaC4-Modells — ohne Änderung am Live-Zustand.
 4. **Noch nicht angewandte Regeln** werden **nicht still mitmigriert**, sondern
    bleiben `pending` (deklariert, nicht Teil des Live-Solls):
    - `energie-read` (Regel 7 — **die neue Kostal/KSEM-Lese-Regel**, F1=(a)).
@@ -149,9 +195,16 @@ IaC3 ist eine **eigene Zuständigkeit** und wird **nicht mitverwaltet**.
    **oder** unerwartetem Fremdbestand **oder** Reihenfolge-/Positions-Abweichung.
    Hinweis: Der strikte Null-Diff (`--verify` **ohne** `--tolerated-foreign`)
    bleibt verfügbar; er fordert Modell ≡ Live ohne jeden Fremdbestand.
-   ⚠️ Solange die **vier Konsolen-Einträge** nicht entschieden/dokumentiert sind,
-   meldet auch das Toleranz-Verify **exit 1** (4 unerwartete Einträge) – M3 ist
-   daher erst nach dem Owner-Entscheid zu den Konsolen-Einträgen grün.
+   ⚠️ **M2-Finding (2026-09-11):** Mit dem Owner-Entscheid H1 sind die Konsolen-
+   Einträge Teil des Modells. Das Toleranz-Verify erfüllt gegen den eingefrorenen
+   Export das **Erfolgskriterium** (verwalteter Teil exakt, Fremdbestand 5/5
+   vorhanden/unverändert, kein unerwarteter Eintrag), meldet aber **eine**
+   Reihenfolge-Abweichung: der IaC3-`acls`-Block ist in Live **unterbrochen**
+   (IaC3-Selbstregel steht **vor** dem Konsolen-Block), die Toleranzliste pinnt
+   ihn aber als zusammenhängenden Block → **exit 1**. M3 ist damit **noch nicht**
+   grün; es braucht eine **Owner-Entscheidung** (positions-genaue Modellierung des
+   Fremdbestands **oder** Präzisierung der Block-Positionierung im
+   Erfolgskriterium). Details: Abschnitt „M2-Finding".
 2. **Reproduzierbar:** derselbe Export aus M1 (Datei + `.sha256`) ergibt denselben
    Null-Diff — der Abgleich ist wiederholbar und nicht byte-, sondern semantik-basiert
    (Tailscale-API reserialisiert).
@@ -246,6 +299,8 @@ einzubringen: `docs/reference/tailscale-acl.md` + Header-Hinweis im Apply-Workfl
 | 2026-09-11 | **E2/E4** Regel-6-live-Evidenz für Merge akzeptiert; Merge Vorstufe PR #140 freigegeben | erledigt | Engineer/Orchestrator |
 | 2026-09-11 | **G1–G3** (19:41 UTC): „IaC3 nicht übernehmen" → Fremdbestand-Toleranz umgesetzt (`acl/tolerated-foreign.json` + `--verify --tolerated-foreign`); M2 = „verwalteter Teil 1:1 + Fremdbestand toleriert/dokumentiert"; M3-Gate = Verify **mit** Toleranz | umgesetzt (Draft-PR, kein Merge) | Engineer |
 | 2026-09-11 | Verify gegen eingefrorenen Export: verwalteter Teil exakt, IaC3-Fremdbestand (5) toleriert/vorhanden, **4 Konsolen-Einträge undokumentiert → exit 1** (Owner-Entscheid G2 offen) | Befund | Engineer |
+| 2026-09-11 | **H1 (19:52 UTC):** „Ja“ – die 4 Konsolen-Einträge (Regel-1-Cluster `owner` ↔ `tag:ha`) **ins Modell übernommen** (Gruppe `console-owner`); `owner → 192.168.2.0/24:*` ausdrücklich bestätigt (künftig modellverwaltet). `acl/tolerated-foreign.json` = nur noch 5 IaC3-Einträge; Platzhalter entfallen. Doku (ADR-026/Runbook/`acl/README.md`) aktualisiert. **Kein Merge/kein Apply.** | umgesetzt (Draft-PR, kein Merge) | Engineer |
+| 2026-09-11 | Verify gegen eingefrorenen Export nach H1: verwalteter Teil exakt, IaC3-Fremdbestand (5) vorhanden/unverändert, kein Unerwarteter — **aber 1 Reihenfolge-Abweichung** (IaC3-Selbstregel vor Konsolen-Block, Block-Positions-Modell) → **exit 1**. **M2-Finding** dokumentiert; Owner-Entscheidung zu Option 1/2 offen. | Befund | Engineer |
 
 ## Offene Lücken (separat als IaC4-Issues, nicht Teil dieser Migration)
 

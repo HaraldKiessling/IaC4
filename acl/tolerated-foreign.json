@@ -8,10 +8,19 @@
     "unverändert und an seinen Live-Positionen vorhanden sein. Jede unerwartete Abweichung",
     "(fehlend / verändert / neu) führt zu exit 1.",
     "",
-    "Owner-Entscheid 2026-09-11 (19:41 UTC): „IaC3 nicht übernehmen\" – die IaC3-Einträge",
+    "Owner-Entscheid 2026-09-11 (19:41 UTC): „IaC3 nicht übernehmen“ – die IaC3-Einträge",
     "werden NICHT ins IaC4-Modell aufgenommen; sie bleiben dokumentierter Fremdbestand.",
     "Damit entfällt der strikte Null-Diff; es gilt „verwalteter Teil exakt + dokumentierter",
-    "Fremdbestand unverändert\".",
+    "Fremdbestand unverändert“.",
+    "",
+    "Owner-Entscheid 2026-09-11 (19:52 UTC): „Ja“ – die VIER Konsolen-Einträge (Regel-1-",
+    "Cluster owner ↔ tag:ha) wurden INS MODELL übernommen (Gruppe `console-owner`, live).",
+    "Sie sind damit verwalteter Bestand und NICHT mehr Teil dieser Toleranzliste. Der zuvor",
+    "hier hinterlegte Platzhalter `owner-decision-pending` ist entfallen. Der Eintrag",
+    "`owner -> 192.168.2.0/24:*` (zweites Heimnetz) bleibt ausdrücklich bestehen und ist",
+    "künftig modellverwaltet (spätere Entfernung = eigene, bewusste Änderung).",
+    "",
+    "Damit enthält diese Liste nur noch die FÜNF IaC3-Einträge (4 acls + 1 ssh).",
     "",
     "Grundlage: eingefrorener Live-Export acl-live-export-20260911.json",
     "(sha256 8cd58f88aee5ab180858cc7a74ea6e488a21ddeaeb3740f5165f6ea856a75b8d,",
@@ -49,13 +58,6 @@
           "src": ["tag:ia3"],
           "dst": ["tag:ia3:*"]
         }
-      },
-      {
-        "status": "owner-decision-pending",
-        "group": "console-owner",
-        "reason": "Regel-1-Cluster („Du zu HA & HA zu Dir\") aus der Owner-Konsole: 4 Einträge mit autogroup:owner (owner -> tag:ha:*, owner -> 192.168.0.0/24:*, owner -> 192.168.2.0/24:*, tag:ha -> autogroup:owner:*). Owner-Entscheid zur Übernahme/Bewertung steht noch aus – Objekte bewusst NICHT aufgenommen (nicht raten).",
-        "tolerate": false,
-        "entries": []
       },
       {
         "status": "tolerated",
