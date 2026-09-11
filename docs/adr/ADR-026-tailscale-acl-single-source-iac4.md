@@ -34,12 +34,44 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
    nur die fehlende Differenz **rein additiv** an (bestehende Zeilen werden nie
    verändert oder entfernt). Neue Einträge werden an ihrer **Modell-Position**
    eingefügt, sodass die Regel-Reihenfolge erhalten bleibt.
-3. **Erfolgskriterium Null-Diff (Owner-Entscheid F4=(a)):** Der Abgleich
-   `--verify <export-datei>` gilt als bestanden bei **semantischer Gleichheit der
-   geparsten Policy inkl. Regel-Reihenfolge** (`acls`/`ssh`). Tags (`tagOwners`)
-   werden als Zuordnung verglichen; Formatierung, Kommentare und Trailing-Kommas
-   bleiben unberücksichtigt. **Byte**-Gleichheit ist **nicht** das Kriterium (die
-   Tailscale-API reserialisiert die Policy).
+3. **Erfolgskriterium (Owner-Entscheid F4=(a), präzisiert 2026-09-11 19:41 UTC;
+   positionsgenau 2026-09-11 20:24 UTC):**
+   Der Abgleich `--verify <export-datei> --tolerated-foreign <liste>` gilt als
+   bestanden, wenn der **verwaltete Teil** (Modelleinträge, **inkl. der
+   `base`-Einträge** — IaC3-/pre-IaC4-Basis: `tagOwners` `tag:ia3`/`tag:ci` +
+   Basis-Regel `ci/member/admin → tag:ia3`) **semantisch exakt**
+   matcht **inkl. Regel-Reihenfolge** (`acls`/`ssh`) **und** der **dokumentierte
+   Fremdbestand** **positionsgenau** unverändert vorhanden ist (jeder Eintrag an
+   **seiner** dokumentierten Position, in **genau der** dokumentierten
+   Reihenfolge). Tags (`tagOwners`) werden als Zuordnung verglichen; Formatierung,
+   Kommentare und Trailing-Kommas bleiben unberücksichtigt. **Byte**-Gleichheit
+   ist **nicht** das Kriterium (die Tailscale-API reserialisiert die Policy).
+   Der frühere strikte **Null-Diff** („Modell ≡ Live, kein fremder Eintrag“) gilt
+   damit **nur noch für den verwalteten Teil**; er wird hier als „Zero-Delta des
+   verwalteten Teils“ verstanden, nicht als Deckungsgleichheit der gesamten Policy.
+3b. **Nicht übernommener Fremdbestand (Owner-Entscheid 2026-09-11 „IaC3 nicht
+   übernehmen“):** Die IaC3-Einträge (`tag:ia3`-Regeln + SSH admin/member/ci →
+   `tag:ia3`) werden **nicht** ins IaC4-Modell aufgenommen. Sie sind eine **eigene
+   Zuständigkeit** (IaC3) und bleiben als **dokumentierter Fremdbestand** in
+   `acl/tolerated-foreign.json` erfasst (Gruppe `iac3`, 5 Einträge): Sie müssen
+   vollständig und **positionsgenau** an ihren **Live-Positionen** erhalten
+   bleiben, unterliegen aber **nicht** der IaC4-Modellierung.
+
+   **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
+   `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
+   HA-Regeln 1–6 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
+   IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Damit ist **nicht** der *gesamte*
+   IaC3-Altbestand toleriert: die `base`-Einträge sind verwaltet und werden
+   **strenger** geprüft (`missing`/`changed`, nicht „toleriert").
+
+   Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`, aus der
+   Owner-Konsole) wurden mit dem **Owner-Entscheid 2026-09-11 (19:52 UTC, „Ja“)**
+   **ins IaC4-Modell übernommen** (Gruppe `console-owner`, live) und sind damit
+   **verwalteter Bestand** (nicht mehr Fremdbestand). Der Eintrag
+   `owner → 192.168.2.0/24:*` (zweites Heimnetz) bleibt **ausdrücklich gewollt**;
+   eine spätere Entfernung wäre eine eigene, bewusste Änderung. Der frühere
+   Platzhalter (`owner-decision-pending`) ist damit entfallen (Backlog-Issue #141
+   abgeschlossen/geschlossen).
 4. **Ein Apply-Weg:** `.github/workflows/00-acl-apply.yml` — ausschließlich
    manuell (`workflow_dispatch`), Inputs `export`/`confirm`/`dry_run`/`rules`,
    **kein** push-/PR-Trigger (Governance: ACL nie automatisch). Secrets-Namen
@@ -52,11 +84,46 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
    HA-Apply-Weg bleibt während des Übergangs als **Rückfallweg offen** und wird
    **danach** gesperrt (deaktivieren statt löschen, F6=(a)).
 6. **Kein Terraform-ACL-Resource:** ADR-010 bleibt gewahrt (Overwrite-Gefahr).
+7. **Der Applier schreibt NIE das Modell als Gesamtdatei über die Live-Policy:**
+   Er liest die **Live-Policy** (GET), fügt **rein additiv** ein und schreibt
+   zurück. Basis ist ausnahmslos die gelesene Live-Policy; das Modell liefert nur
+   die **einzufügenden** Einträge. Andernfalls würden nicht übernommene Einträge
+   (Fremdbestand: IaC3/Konsolen) **gelöscht**. Abgesichert durch den Pre-POST-Guard
+   (`semantic_additivity` vor dem POST) und den Post-POST-Verify (count==1 +
+   Additivität); bei Fehler Backup-Rollback.
 
 Der bisherige IaC4-Pfad (`ensure-acl-ia4.py`) wird auf einen dünnen
 Kompatibilitäts-Shim reduziert (leitet auf `ensure-acl.py --rule iac4`); er wird
 von **keinem** Workflow mehr aufgerufen (Workflow 01 entkoppelt, Entscheid 1) und
 bleibt nur als Migrations-/Rollback-Referenz erhalten.
+
+### Fremdbestand-Toleranz (Owner-Entscheid 2026-09-11 „IaC3 nicht übernehmen“)
+
+**Begründung:** IaC3 ist eine **eigene Zuständigkeit**. Die IaC3-Regeln wurden
+bewusst **nicht** übernommen (kein Mitverwalten). Damit ist ein strikter Null-Diff
+der **gesamten** Policy nicht mehr das Ziel; das Erfolgskriterium ist der
+**verwaltete Teil exakt + dokumentierter Fremdbestand unverändert**.
+
+**Mechanik (positionsgenau, Schema v2):** `acl/tolerated-foreign.json`
+modelliert je Abschnitt (`acls`/`ssh`) eine **geordnete Erwartung** (`layout`):
+jeder Live-Eintrag ist als `managed` (Wert aus dem Modell, in Modell-Reihenfolge
+konsumiert) oder `foreign` (eingefrorener Soll-Eintrag) klassifiziert, in genau
+dieser Reihenfolge. **Verschränkung (Interleaving) ist damit zulässig.**
+`--verify <export> --tolerated-foreign <liste>` prüft: (a) jeder `managed`-Eintrag
+≡ Modell (Wert + Position), (b) jeder `foreign`-Eintrag ≡ Soll-Wert + steht an
+seiner Position, (c) **kein unerwarteter** Live-Eintrag (Modell ∪ Toleranzliste)
+und keine Umsortierung. Jede Abweichung → **exit 1** mit Nennung des betroffenen
+Eintrags (+ Position). Der strikte Modus bleibt ohne `--tolerated-foreign` erhalten.
+
+**Aufgelöste Limitierung (M2-Finding 2026-09-11, behoben 20:24 UTC):** Das frühere
+Block-Positions-Modell (`position` `start`/`end`) setzte einen **zusammenhängenden**
+Fremdbestand-Block voraus. In der realen Live-Policy ist der IaC3-`acls`-Block
+jedoch durch den (jetzt verwalteten) Konsolen-Block **unterbrochen**
+(IaC3-Selbstregel steht davor). Der `--verify` meldete daher fälschlich eine
+Reihenfolge-Abweichung (exit 1), obwohl das **Erfolgskriterium** erfüllt war. Mit
+dem Owner-Entscheid 2026-09-11 (20:24 UTC, „1“) ist der Fremdbestand
+**positionsgenau** modelliert; Verschränkung ist erlaubt. Der `--verify` gegen den
+eingefrorenen Export ist damit **grün** (exit 0). Siehe Runbook „M2-Finding“.
 
 ### Übernahme aus HA-PR #54 (F5=(a))
 
@@ -116,9 +183,13 @@ Modell + Skript + Workflow + Doku, **Draft, kein Merge, kein Apply**.
   - **Rollback:** automatischer POST des Backups bei Verifikationsfehler;
     zusätzlich Konsolen-Rollback (`GET`-Backup `/tmp/acl-backup.json` des Laufs
     erneut `POST`). Manueller Konsolenpfad im Runbook dokumentiert.
-- **Worst-Case 2 — Überschreiben fremder Einträge** (ia3/Owner-Konsole).
-  - **Gegenmaßnahme:** semantische Additivitäts-/Multimengen-Prüfung
-    (Fremdbestand unverändert); Null-Diff-Gate in M3.
+- **Worst-Case 2 — Überschreiben fremder Einträge** (IaC3/Owner-Konsole).
+  - **Gegenmaßnahme:** Der Applier liest die Live-Policy und fügt **rein additiv**
+    ein – das Modell wird **nie** als Gesamtdatei über die Live-Policy geschrieben
+    (Pre-POST-Guard `semantic_additivity` + Post-POST-Verify). Der dokumentierte
+    Fremdbestand ist in `acl/tolerated-foreign.json` erfasst; das Toleranz-Verify
+    (M3) prüft ihn als vollständig/unverändert an seinen Live-Positionen und
+    meldet jeden unerwarteten Eintrag mit exit 1.
 - **Worst-Case 3 — Doppel-Schreiben** während des Übergangs.
   - **Gegenmaßnahme:** `concurrency`-Guard im Apply-Workflow; **IaC4-first** (der
     Applier erzwingt die IaC4-Baseline als Vorbedingung für HA-Gruppen); der
@@ -128,6 +199,9 @@ Modell + Skript + Workflow + Doku, **Draft, kein Merge, kein Apply**.
 ## Konsequenzen
 
 - Neue SSoT `acl/tailscale-acl.hujson` + Konventionen (`acl/README.md`).
+- **Fremdbestand-Toleranzliste** `acl/tolerated-foreign.json` (nur IaC3 aktiv,
+  5 Einträge) + `--tolerated-foreign` im Verifier; die **vier Konsolen-Einträge**
+  sind seit 2026-09-11 (19:52 UTC) **Teil des Modells** (Gruppe `console-owner`).
 - `scripts/ensure-acl.py` ersetzt `ensure-acl-ia4.py` (Shim bleibt für Workflow 01).
 - Neuer manueller Workflow `.github/workflows/00-acl-apply.yml`.
 - ha-repo erhält einen Grenz-Hinweis (ACL wird in IaC4 verwaltet); sein ACL-Pfad

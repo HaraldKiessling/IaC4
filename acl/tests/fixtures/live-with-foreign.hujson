@@ -1,0 +1,216 @@
+{
+  "tagOwners": {
+    "tag:ia3": [
+      "autogroup:admin"
+    ],
+    "tag:ia4": [
+      "autogroup:admin"
+    ],
+    "tag:ci": [
+      "autogroup:admin"
+    ],
+    "tag:ha": [
+      "autogroup:owner"
+    ],
+    "tag:ha-ci": [
+      "autogroup:owner"
+    ]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:admin",
+        "autogroup:member",
+        "tag:ci"
+      ],
+      "dst": [
+        "tag:ia3:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:admin",
+        "autogroup:member",
+        "tag:ci"
+      ],
+      "dst": [
+        "tag:ia4:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "tag:ia4"
+      ],
+      "dst": [
+        "tag:ia4:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:admin",
+        "autogroup:member",
+        "tag:ci",
+        "tag:ia4"
+      ],
+      "dst": [
+        "tag:ha:22",
+        "tag:ha:8123"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "tag:ia4"
+      ],
+      "dst": [
+        "tag:ha:1883"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "tag:ha-ci"
+      ],
+      "dst": [
+        "tag:ia4:22",
+        "tag:ia4:8123"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:admin",
+        "autogroup:member"
+      ],
+      "dst": [
+        "tag:ia4:8123"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "tag:ia3"
+      ],
+      "dst": [
+        "tag:ia3:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:owner"
+      ],
+      "dst": [
+        "tag:ha:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:owner"
+      ],
+      "dst": [
+        "192.168.0.0/24:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:owner"
+      ],
+      "dst": [
+        "192.168.2.0/24:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "tag:ha"
+      ],
+      "dst": [
+        "autogroup:owner:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "tag:ia3"
+      ],
+      "dst": [
+        "tag:ha:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "tag:ia3"
+      ],
+      "dst": [
+        "192.168.0.0/24:*"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "tag:ha"
+      ],
+      "dst": [
+        "tag:ia3:*"
+      ]
+    }
+  ],
+  "ssh": [
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:admin",
+        "autogroup:member",
+        "tag:ci"
+      ],
+      "dst": [
+        "tag:ia3"
+      ],
+      "users": [
+        "deploy-user",
+        "root",
+        "ubuntu"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:admin",
+        "autogroup:member",
+        "tag:ci"
+      ],
+      "dst": [
+        "tag:ia4"
+      ],
+      "users": [
+        "deploy-user",
+        "root",
+        "ubuntu"
+      ]
+    },
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:admin",
+        "autogroup:member",
+        "tag:ci"
+      ],
+      "dst": [
+        "tag:ha"
+      ],
+      "users": [
+        "deploy-user",
+        "root",
+        "ubuntu"
+      ]
+    }
+  ]
+}

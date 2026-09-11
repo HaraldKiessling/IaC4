@@ -37,8 +37,8 @@
 #                 (Backup + POST + Verify + Rollback-Pfad im Skript).
 #     - rules:    Regel-Auswahl gegen die SSoT-Gruppen. Erlaubt: iac4 | 1..7
 #                 (HA-Regeln) | Gruppennamen (ha-tagowners, ha-acl, ha-ssh,
-#                 ha-runner, owner-8123, mqtt-1883, energie-read) | all.
-#                 Default 'iac4' (IaC4-Welt). Pending-Gruppe (energie-read)
+#                 ha-runner, owner-8123, console-owner, mqtt-1883, energie-read)
+#                 | all. Default 'iac4' (IaC4-Welt). Pending-Gruppe (energie-read)
 #                 nur bei bewusster, separater Owner-Freigabe.
 #
 #   Secrets (Namen unveraendert zu Workflow 01): TAILSCALE_TAILNET +
@@ -91,7 +91,10 @@ on:
         default: true
         type: boolean
       rules:
-        description: 'Regel-Auswahl (SSoT-Gruppen), kommagetrennt – iac4 | 1..7 | ha-Gruppen | all. Default "iac4"'
+        description: >-
+          Regel-Auswahl (SSoT-Gruppen), kommagetrennt – iac4 | 1..7 |
+          ha-Gruppen | owner-8123 | console-owner | mqtt-1883 | energie-read |
+          all. Default "iac4"
         required: true
         default: 'iac4'
         type: string
@@ -146,7 +149,7 @@ jobs:
           esac
           for R in $(echo "${RULES}" | tr ',' ' '); do
             case "${R}" in
-              iac4|all|ha-tagowners|ha-acl|ha-ssh|ha-runner|owner-8123|mqtt-1883|energie-read) ;;
+              iac4|all|ha-tagowners|ha-acl|ha-ssh|ha-runner|owner-8123|console-owner|mqtt-1883|energie-read) ;;
               1|2|3|4|5|6|7) ;;
               *) echo "::error::rules enthaelt ungueltige Gruppe '${R}'."; exit 1 ;;
             esac

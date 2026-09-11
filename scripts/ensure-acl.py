@@ -23,6 +23,20 @@ Prinzip (100% Sicherheit — additiv, idempotent, failsafe):
   `pending`-Regeln (deklariert, nicht Teil des Live-Solls) nur bei expliziter Wahl.
 - Verifikation nach POST: jede eingefügte Regel exakt um +1 (count==1-Gate),
   keine Bestands-Regel entfernt/geändert (semantische Multimengen-Prüfung).
+- NIEMALS wird die Modell-Datei als Gesamtdatei über die Live-Policy geschrieben:
+  Basis ist immer die frisch gelesene Live-Policy (GET); es werden nur neue
+  Zeilen additiv eingefügt. So bleiben nicht übernommene Einträge erhalten
+  (Fremdbestand: IaC3-/Konsolen-Regeln, `acl/tolerated-foreign.json`).
+- Fremdbestand-Toleranz (Owner-Entscheid 2026-09-11 „IaC3 nicht übernehmen";
+  POSITIONSGENAU seit 2026-09-11 20:24 UTC, „1"): `--tolerated-foreign [DATEI]`
+  erlaubt bei `--verify`/`--dry-run` den dokumentierten, NICHT von IaC4
+  verwalteten Live-Bestand. Die Toleranzliste modelliert eine GEORDNETE Erwartung
+  je Abschnitt: jeder Live-Eintrag ist als `managed` (muss dem Modell entsprechen)
+  oder `foreign` (muss dem eingefrorenen Soll-Eintrag entsprechen) klassifiziert,
+  in genau dieser Reihenfolge. Verschränkung (Interleaving) verwalteter und
+  fremder Einträge ist damit ausdrücklich zulässig. Geprüft wird: (a) jedes
+  `managed` matcht das Modell, (b) jedes `foreign` matcht Soll-Wert + Position,
+  (c) jede weitere/unerwartete Änderung -> exit 1 mit Nennung des Eintrags.
 - IaC4-Vorbedingung (IaC4-first, übernommen aus HA-PR #54): die HA-Gruppen setzen
   auf die IaC4-Baseline (`tag:ia4`) auf; geprüft wird SEMANTISCH (geparst,
   layout-tolerant) und nur für Gruppen, die DIESER Lauf tatsächlich einfügt
@@ -58,6 +72,7 @@ from collections import Counter
 API = "https://api.tailscale.com/api/v2/tailnet"
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.path.join(REPO_ROOT, "acl", "tailscale-acl.hujson")
+DEFAULT_TOLERATED_PATH = os.path.join(REPO_ROOT, "acl", "tolerated-foreign.json")
 SECTION_ORDER = ("tagOwners", "acls", "ssh")
 
 TAILNET = os.environ.get("TS_TAILNET", "")
@@ -66,7 +81,7 @@ TOKEN = os.environ.get("TS_TOKEN", "") or os.environ.get("TS_API_KEY", "")
 # Gruppen → Regel-Namen (Workflow-Input `rules`), inkl. numerischer Aliase der
 # HA-Regeln 1–7 (Kontinuität zum bisherigen ha-repo-Workflow).
 GROUP_NAMES = ("iac4", "ha-tagowners", "ha-acl", "ha-ssh", "ha-runner",
-               "owner-8123", "mqtt-1883", "energie-read")
+               "owner-8123", "console-owner", "mqtt-1883", "energie-read")
 GROUP_ALIASES = {
     "iac4": "iac4",
     "1": "ha-tagowners", "ha-tagowners": "ha-tagowners", "tagowners": "ha-tagowners",
@@ -74,6 +89,7 @@ GROUP_ALIASES = {
     "3": "ha-ssh", "ha-ssh": "ha-ssh", "ssh3": "ha-ssh",
     "4": "ha-runner", "ha-runner": "ha-runner", "ha-ia4": "ha-runner",
     "5": "owner-8123", "owner-8123": "owner-8123", "owner8123": "owner-8123",
+    "console-owner": "console-owner", "console": "console-owner",
     "6": "mqtt-1883", "mqtt-1883": "mqtt-1883", "mqtt": "mqtt-1883",
     "7": "energie-read", "energie-read": "energie-read", "energie": "energie-read",
 }
@@ -183,6 +199,76 @@ def _short(obj):
         return json.dumps(obj, sort_keys=True, ensure_ascii=False)
     except (TypeError, ValueError):
         return repr(obj)
+
+
+# ---------------------------------------------------------------------------
+# Fremdbestand-Toleranzliste (nicht von IaC4 verwaltete Live-Einträge)
+# ---------------------------------------------------------------------------
+# Die Live-Tailscale-ACL enthält Einträge, die NICHT ins IaC4-Modell übernommen
+# werden (Owner-Entscheid 2026-09-11: „IaC3 nicht übernehmen"). Sie bleiben
+# „dokumentierter Fremdbestand": Der verwaltete Teil muss exakt matchen, der
+# Fremdbestand vollständig/unverändert an seinen Live-Positionen vorhanden sein.
+# Die Liste liegt in `acl/tolerated-foreign.json` (siehe `--tolerated-foreign`).
+#
+# POSITIONSGENAU (Owner-Entscheid 2026-09-11 20:24 UTC, „1"): Statt eines
+# zusammenhängenden Fremdbestand-Blocks (position start|end) wird je Abschnitt
+# eine GEORDNETE Erwartung (layout) gepflegt. Jeder Token ist `managed` (Wert aus
+# dem Modell, in Modell-Reihenfolge konsumiert) oder `foreign` (eingefrorener
+# Soll-Eintrag). Verschränkung ist damit erlaubt.
+def load_tolerated(path):
+    """Toleranzliste (positionsgenau) laden → strukturiertes Dict:
+        { "tagOwners": [key, …],
+          "sections": { section: {"entries": [{"group","obj","canon"}, …],
+                                  "layout":  [{"kind":"managed"}
+                                              | {"kind":"foreign","group","obj","canon"}, …]} },
+          "pending":  [],  # v2: keine Platzhalter mehr
+          "source": path, "source_export_sha256": str|None, "version": int }
+    `layout` = geordnete Erwartung der Live-Einträge des Abschnitts: `managed`-
+    Token werden in Modell-Reihenfolge konsumiert (ihr Wert kommt aus dem Modell),
+    `foreign`-Token tragen den eingefrorenen Soll-Eintrag. `entries` = nur die
+    Fremdbestand-Einträge (Multimengen-/Positions-Prüfung). Wirft ValueError bei
+    ungültigem Schema (das frühere Block-Format `position` wird nicht mehr
+    unterstützt – erwartet wird das `layout`-Format, s. acl/tolerated-foreign.json)."""
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    tol = {"tagOwners": [],
+           "sections": {s: {"entries": [], "layout": []}
+                        for s in ("acls", "ssh")},
+           "pending": [],
+           "source": path,
+           # Provenienz-Anker: SHA256 des Exports, aus dem die Liste abgeleitet
+           # wurde. Wird gegen den verifizierten Export geprüft (s. main).
+           "source_export_sha256": (data.get("source_export_sha256") or "").strip() or None,
+           "version": int(data.get("version", 1))}
+    for key in data.get("tagOwners", []) or []:
+        tol["tagOwners"].append(key)
+    layout = data.get("layout")
+    if not isinstance(layout, dict):
+        raise ValueError("Toleranzliste: Feld 'layout' fehlt/ungültig "
+                         "(positionsgenaues Schema erwartet)")
+    for section in ("acls", "ssh"):
+        for item in layout.get(section, []) or []:
+            if not isinstance(item, dict):
+                raise ValueError("Abschnitt %s: Layout-Token ist kein Objekt: %r"
+                                 % (section, item))
+            kind = str(item.get("kind", "")).strip().lower()
+            if kind == "managed":
+                tol["sections"][section]["layout"].append({"kind": "managed"})
+            elif kind == "foreign":
+                obj = item.get("obj")
+                if not isinstance(obj, dict):
+                    raise ValueError("Abschnitt %s: foreign-Token ohne \"obj\""
+                                     % section)
+                tol["sections"][section]["layout"].append(
+                    {"kind": "foreign", "group": item.get("group"),
+                     "obj": obj, "canon": canon(obj)})
+                tol["sections"][section]["entries"].append(
+                    {"group": item.get("group"), "obj": obj, "canon": canon(obj)})
+            else:
+                raise ValueError("Abschnitt %s: unbekannter Layout-Token kind=%r "
+                                 "(erwartet 'managed'|'foreign')"
+                                 % (section, item.get("kind")))
+    return tol
 
 
 # ---------------------------------------------------------------------------
@@ -434,14 +520,28 @@ def _by_key(entries):
     return d
 
 
-def diff_model_vs_live(model, live):
+def diff_model_vs_live(model, live, tolerated=None):
     """Semantischer Soll/Ist-Vergleich. Liefert ein Report-Dict.
     - expected: base + nicht-pending Regeln (Teil des Live-Solls)
     - pending:  deklariert, nicht Teil des Solls
-    - foreign:  live vorhanden, im Modell unbekannt (Drift nach IaC4-Sicht)
+    - foreign:  live vorhanden, im Modell UND in der Toleranzliste unbekannt
+                (= unerwarteter Fremdbestand → Drift)
+    - extra:    live enthält MEHR Kopien eines Eintrags als das Modell-Soll
+                (managed) bzw. als das Toleranz-Soll (foreign) – also ein
+                Duplikat/Zusatz. Exakt-Zählung: ein Duplikat ist Drift (exit 1).
+    - tolerated_present: dokumentierter Fremdbestand, live vorhanden/unverändert
+    - tolerated_missing: dokumentierter Fremdbestand fehlt/verändert (Drift)
+    Ist `tolerated` (aus `load_tolerated`) gesetzt, wird der dokumentierte
+    Fremdbestand aus `foreign` herausgenommen und separat ausgewiesen.
     """
-    rep = {"missing": [], "changed": [], "foreign": [], "pending_live": [],
-           "pending_missing": [], "order": []}
+    rep = {"missing": [], "changed": [], "foreign": [], "extra": [],
+           "tolerated_present": [], "tolerated_missing": [],
+           "pending_live": [], "pending_missing": [], "order": [],
+           "tolerance_active": bool(tolerated)}
+    tol_to = set(tolerated["tagOwners"]) if tolerated else set()
+    tol_sec = ({s: {t["canon"] for t in tolerated["sections"][s]["entries"]}
+                for s in ("acls", "ssh")} if tolerated
+               else {"acls": set(), "ssh": set()})
 
     # tagOwners (key→value, Reihenfolge irrelevant)
     mkeys = _by_key(model["tagOwners"])
@@ -465,62 +565,157 @@ def diff_model_vs_live(model, live):
         del expected, base
     for key in lkeys:
         if key not in mkeys:
-            rep["foreign"].append(("tagOwners", key, lkeys[key][0].canon))
+            if key in tol_to:
+                rep["tolerated_present"].append(("tagOwners", key, "toleriert"))
+            else:
+                rep["foreign"].append(("tagOwners", key, lkeys[key][0].canon))
+    for key in tol_to:
+        if key not in lkeys:
+            rep["tolerated_missing"].append(("tagOwners", key, "fehlt"))
 
-    # acls/ssh (Multimenge, Reihenfolge irrelevant)
+    # acls/ssh — EXAKT-Zählung (Major-Auflage PR #142): ein Eintrag muss GENAU so
+    # oft wie im Modell (managed, == Modell-Soll) bzw. GENAU so oft wie im
+    # Toleranz-Layout (foreign) vorkommen. Jede zusätzliche/doppelte Kopie ist
+    # Drift ("Zusatz") → exit 1 mit Nennung. Damit bleibt die Doku-Zusage "jeder
+    # Zusatz → Abbruch" wahr (Duplikate sind in Tailscale idempotent, werden aber
+    # als Abweichung gewertet).
     for section in ("acls", "ssh"):
-        mcnt = Counter(e.canon for e in model[section])
+        # Soll-Zählung je Kanon: managed (nicht-pending) == Modell …
+        m_soll = Counter(e.canon for e in model[section] if not e.pending)
+        # … pending wird separat geführt (deklariert, NICHT Teil des Live-Solls).
+        p_decl = Counter(e.canon for e in model[section] if e.pending)
+        # … Fremdbestand-Soll je Kanon = Anzahl foreign-Token im positionsgenauen
+        # Layout (derzeit je Kanon genau 1).
+        f_soll = Counter()
+        if tolerated:
+            for t in tolerated["sections"][section]["entries"]:
+                f_soll[t["canon"]] += 1
         lcnt = Counter(e.canon for e in live[section])
         mobj = {e.canon: e for e in model[section]}
-        for c, n in mcnt.items():
+        lobj = {e.canon: e for e in live[section]}
+
+        # (1) managed: exakt das Modell-Soll (==, nicht >=).
+        for c, n in m_soll.items():
             e = mobj[c]
             have = lcnt.get(c, 0)
             if have < n:
-                if e.pending:
-                    rep["pending_missing"].append((section, _short(e.obj), "fehlt"))
-                else:
-                    rep["missing"].append((section, _short(e.obj), "fehlt"))
-            elif e.pending and have >= n:
+                rep["missing"].append((section, _short(e.obj), "fehlt"))
+            elif have > n:
+                rep["extra"].append(
+                    (section, _short(e.obj),
+                     "Duplikat/Zusatz (managed): %d× live, Modell-Soll %d" % (have, n)))
+        # (2) pending: deklariert, nicht Teil des Solls (Präsenz = pending_live).
+        for c, n in p_decl.items():
+            e = mobj[c]
+            have = lcnt.get(c, 0)
+            if have < n:
+                rep["pending_missing"].append((section, _short(e.obj), "fehlt"))
+            else:
                 rep["pending_live"].append((section, _short(e.obj), "vorhanden"))
-        lobj = {e.canon: e for e in live[section]}
+        # (3) Fremdbestand: GENAU das Toleranz-Soll (==, nicht >=). Unbekannte
+        #     Live-Einträge (weder Modell noch Toleranz) → foreign; Überschuss
+        #     eines tolerierten Eintrags → Duplikat/Zusatz.
         for c, n in lcnt.items():
-            if c not in mcnt:
+            if c in m_soll or c in p_decl:
+                continue  # verwalteter/pending Bestand (oben geprüft)
+            if c in tol_sec[section]:
+                cn = _short(lobj[c].obj)
+                rep["tolerated_present"].append((section, cn, "toleriert"))
+                exp_n = f_soll.get(c, 1)
+                if n > exp_n:
+                    rep["extra"].append(
+                        (section, cn,
+                         "Duplikat/Zusatz (Fremdbestand): %d× live, Toleranz-Soll %d"
+                         % (n, exp_n)))
+            else:
                 rep["foreign"].append((section, _short(lobj[c].obj), "unbekannt"))
-    rep["order"] = order_diff(model, live)
+        if tolerated:
+            for t in tolerated["sections"][section]["entries"]:
+                if t["canon"] in m_soll or t["canon"] in p_decl:
+                    continue
+                if lcnt.get(t["canon"], 0) < 1:
+                    rep["tolerated_missing"].append(
+                        (section, _short(t["obj"]), "fehlt/verändert"))
+    rep["order"] = order_diff(model, live, tolerated)
     return rep
 
 
-def order_diff(model, live):
-    """Regel-Reihenfolge des Live-Solls gegen Live (Owner-Entscheid F4, 2026-09-11).
-    Verglichen wird je Abschnitt die kanonische SEQUENZ der Einträge. `pending`-
-    Einträge sind nicht Teil des Live-Solls und werden in der Live-Sequenz
-    ausgelassen. Formatierung/Kommentare sowie Feld-/Listen-Reihenfolge innerhalb
-    einer Regel sind irrelevant. `tagOwners` ist eine Zuordnung (JSON-Objekt) –
-    dessen Key-Reihenfolge wird NICHT geprüft.
-    Gemeldet wird NUR eine ECHTE Umsortierung: die kanonische Sequenz weicht ab,
-    obwohl ALLE Soll-Einträge vorhanden sind (Multimengen gleich). Fehlt dagegen
-    ein Soll-Eintrag oder ist etwas fremd (Multimenge != Soll), ist die Ursache
-    'Fehlend'/'Fremd' – das wird bereits in rep["missing"]/rep["foreign"]
-    berichtet und hier NICHT zusätzlich irreführend als Reihenfolge-Abweichung.
+def expected_sequence(model, section, tolerated=None):
+    """Geordnete Erwartung der Live-Einträge eines Abschnitts.
+    Ohne `tolerated`: nur die nicht-pending Modelleinträge in Modell-Reihenfolge.
+    Mit `tolerated`: die positionsgenaue `layout`-Sequenz – `managed`-Token werden
+    in Modell-Reihenfolge konsumiert (Wert aus dem Modell), `foreign`-Token tragen
+    den eingefrorenen Soll-Eintrag. Liefert (tokens, error); `error` != None, wenn
+    das Layout nicht konsistent zum Modell ist (zu viele/zu wenige managed-Token).
+    Jedes Token: {"kind", "obj", "canon", "group"}."""
+    mseq = [e for e in model[section] if not e.pending]
+    if not tolerated:
+        return ([{"kind": "managed", "obj": e.obj, "canon": e.canon,
+                  "group": e.group} for e in mseq], None)
+    layout = tolerated["sections"][section].get("layout") or []
+    out, mi, err = [], 0, None
+    for tok in layout:
+        if tok["kind"] == "managed":
+            if mi >= len(mseq):
+                err = ("Layout %s: mehr managed-Token als Modell-Einträge (%d)"
+                       % (section, len(mseq)))
+                break
+            e = mseq[mi]
+            mi += 1
+            out.append({"kind": "managed", "obj": e.obj, "canon": e.canon,
+                        "group": e.group})
+        else:
+            out.append({"kind": "foreign", "obj": tok["obj"],
+                        "canon": tok["canon"], "group": tok.get("group")})
+    if err is None and mi != len(mseq):
+        err = ("Layout %s: managed-Token (%d) != Modell-Einträge des Solls (%d)"
+               % (section, mi, len(mseq)))
+    return out, err
+
+
+def order_diff(model, live, tolerated=None):
+    """Regel-Reihenfolge des Live-Solls gegen Live. Verglichen wird je Abschnitt
+    die kanonische SEQUENZ der Einträge. `pending`-Einträge sind nicht Teil des
+    Live-Solls und werden ausgelassen. Formatierung/Kommentare sowie Feld-/
+    Listen-Reihenfolge innerhalb einer Regel sind irrelevant; `tagOwners` ist eine
+    Zuordnung (JSON-Objekt) – dessen Key-Reihenfolge wird NICHT geprüft.
+    Mit `tolerated` (aus `load_tolerated`) wird die POSITIONSGENAUE `layout`-
+    Sequenz erzwungen: verwaltete und fremde Einträge in genau der dokumentierten
+    Reihenfolge (Verschränkung zulässig). Eine Abweichung nennt Position +
+    erwarteten + gefundenen Eintrag.
+    Gemeldet wird NUR eine echte Umsortierung/Verschiebung: die Sequenz weicht ab,
+    obwohl ALLE Soll-/Fremdbestand-Einträge vorhanden sind (Multimengen gleich).
+    Fehlt/ändert sich etwas (Multimenge != Soll), ist die Ursache
+    'Fehlend'/'Fremd'/'Tolerierter Fremdbestand fehlt o. verändert' – bereits in
+    rep["missing"]/["foreign"]/["tolerated_missing"] berichtet und hier NICHT
+    zusätzlich irreführend als Reihenfolge-Abweichung.
     Liefert eine Liste von Abweichungs-Beschreibungen (leer = Reihenfolge ok)."""
     problems = []
     for section in ("acls", "ssh"):
-        mseq = [e.canon for e in model[section] if not e.pending]
-        expected = Counter(mseq)
+        exp, err = expected_sequence(model, section, tolerated)
+        if err:
+            problems.append("%s: %s – Toleranz-Layout inkonsistent" % (section, err))
+            continue
+        exp_canon = [t["canon"] for t in exp]
+        expected = Counter(exp_canon)
         got = []
         for e in live[section]:
             if expected.get(e.canon, 0) > 0:
-                got.append(e.canon)
+                got.append(e)
                 expected[e.canon] -= 1
+        got_canon = [e.canon for e in got]
         # Ursache-Trennung: weicht die Multimenge ab, fehlt/fremdelt ein Eintrag
-        # (bereits als Fehlend/Fremd gemeldet) – KEINE Reihenfolge-Abweichung.
-        if Counter(got) != Counter(mseq):
+        # (bereits als Fehlend/Fremd/Toleranz-Fehler gemeldet) – KEINE
+        # Reihenfolge-Abweichung.
+        if Counter(got_canon) != Counter(exp_canon):
             continue
-        if got != mseq:
+        if got_canon != exp_canon:
+            i = next(k for k in range(len(exp_canon))
+                     if got_canon[k] != exp_canon[k])
             problems.append(
-                "%s: Regel-Reihenfolge weicht ab (Modell-Soll: %d Einträge, in Live "
-                "in dieser Reihenfolge gefunden: %d) – Formatierung ist irrelevant, "
-                "die Reihenfolge nicht" % (section, len(mseq), len(got)))
+                "%s: Regel-Reihenfolge weicht ab – Position %d: erwartet %s, "
+                "live %s" % (section, i, _short(exp[i]["obj"]),
+                             _short(got[i].obj)))
     return problems
 
 
@@ -528,7 +723,10 @@ def print_diff(rep):
     print("--- Semantischer Soll/Ist-Diff (Modell ↔ Live) ---")
     for label, rows in (("Fehlend (Soll, nicht live)", rep["missing"]),
                         ("Geändert (Soll != live)", rep["changed"]),
-                        ("Fremd in live (im Modell unbekannt)", rep["foreign"]),
+                        ("Unerwartet fremd in live (Modell+Toleranz unbekannt)", rep["foreign"]),
+                        ("Zusatz/Duplikat (mehr als Modell-/Toleranz-Soll)", rep["extra"]),
+                        ("Tolerierter Fremdbestand (vorhanden/unverändert)", rep["tolerated_present"]),
+                        ("Tolerierter Fremdbestand fehlt/verändert", rep["tolerated_missing"]),
                         ("Pending deklariert, live vorhanden", rep["pending_live"]),
                         ("Pending deklariert, nicht live", rep["pending_missing"])):
         print("%s: %d" % (label, len(rows)))
@@ -540,10 +738,48 @@ def print_diff(rep):
 
 
 def null_diff_ok(rep):
-    """Null-Diff (Modell ≡ Live): kein Fehlend/Geändert/Fremd UND identische
-    Regel-Reihenfolge (acls/ssh). Formatierung/Kommentare bleiben unberücksichtigt."""
+    """STRENGER Null-Diff (Modell ≡ Live): kein Fehlend/Geändert/Fremd/Zusatz UND
+    identische Regel-Reihenfolge (acls/ssh). Formatierung/Kommentare bleiben
+    unberücksichtigt. Kein dokumentierter Fremdbestand toleriert."""
     return (not rep["missing"] and not rep["changed"] and not rep["foreign"]
+            and not rep["extra"] and not rep["order"])
+
+
+def tolerant_diff_ok(rep):
+    """Toleranz-Null-Diff (Owner-Entscheide 2026-09-11, 19:41 + 20:24 UTC):
+    Verwalteter Teil exakt (kein Fehlend/Geändert/Zusatz) + dokumentierter
+    Fremdbestand vollständig/unverändert (kein tolerated_missing, kein Duplikat)
+    + kein unerwarteter Fremdbestand (kein foreign) + POSITIONSGENAUE
+    Reihenfolge inkl. verschränktem Fremdbestand eingehalten (kein order).
+    Formatierung/Kommentare bleiben unberücksichtigt. EXAKT-Zählung: jede
+    zusätzliche/doppelte Kopie ist Drift (rep["extra"]) → exit 1."""
+    return (not rep["missing"] and not rep["changed"] and not rep["foreign"]
+            and not rep["extra"] and not rep["tolerated_missing"]
             and not rep["order"])
+
+
+def print_tolerance_info(tol, path):
+    """Kompakte Zusammenfassung der aktiven Toleranzliste (nur Doku)."""
+    n_tol = sum(len(tol["sections"][s]["entries"]) for s in ("acls", "ssh")) \
+        + len(tol["tagOwners"])
+    print("--- Fremdbestand-Toleranzliste (positionsgenau) ---")
+    print("Quelle: %s (aktive Fremdbestand-Einträge: %d)" % (path, n_tol))
+    for section in ("acls", "ssh"):
+        blk = tol["sections"][section]
+        managed = sum(1 for t in blk["layout"] if t["kind"] == "managed")
+        foreign = sum(1 for t in blk["layout"] if t["kind"] == "foreign")
+        groups = {}
+        for t in blk["entries"]:
+            groups[t["group"]] = groups.get(t["group"], 0) + 1
+        detail = (", ".join("%s=%d" % (g, n) for g, n in sorted(groups.items())))
+        print("   %s: %d Positionen (managed=%d, foreign=%d%s)"
+              % (section, len(blk["layout"]), managed, foreign,
+                 (", " + detail) if detail else ""))
+    if tol["pending"]:
+        print("   ⚠️  %d offener Platzhalter (NICHT toleriert, Owner-Entscheid ausstehend):"
+              % len(tol["pending"]))
+        for p in tol["pending"]:
+            print("      - [%s/%s] %s" % (p["section"], p["group"], p["reason"]))
 
 
 # ---------------------------------------------------------------------------
@@ -771,8 +1007,8 @@ def parse_args():
                    help="SSoT-Datei (default: acl/tailscale-acl.hujson)")
     p.add_argument("--rule", action="append", metavar="GRUPPE", default=None,
                    help="Regel-Auswahl (repeatable): iac4 | 1..7 | ha-tagowners | "
-                        "ha-acl | ha-ssh | ha-runner | owner-8123 | mqtt-1883 | "
-                        "energie-read | all.")
+                        "ha-acl | ha-ssh | ha-runner | owner-8123 | console-owner | "
+                        "mqtt-1883 | energie-read | all.")
     p.add_argument("--rules", default=None,
                    help="Regel-Auswahl kommagetrennt (Workflow-Input), z. B. 'iac4' "
                         "oder '1,4'. Alternativ zu wiederholtem --rule.")
@@ -782,7 +1018,20 @@ def parse_args():
     p.add_argument("--verify", action="store_true",
                    help="Null-Diff-Prüfung (semantisch, inkl. Regel-Reihenfolge): "
                         "exit != 0 bei Drift (Fehlend/Geändert/Fremd/Reihenfolge). "
-                        "Mit Positional <export-datei> reproduzierbar offline.")
+                        "Mit Positional <export-datei> reproduzierbar offline. "
+                        "Mit --tolerated-foreign wird dokumentierter Fremdbestand "
+                        "positionsgenau toleriert (verwalteter Teil exakt + "
+                        "Fremdbestand positionsgenau unverändert, Verschränkung zulässig).")
+    p.add_argument("--tolerated-foreign", nargs="?", default=None,
+                   const=DEFAULT_TOLERATED_PATH, metavar="DATEI",
+                   help="Fremdbestand-Toleranzliste (JSON) für --verify/--dry-run; "
+                        "ohne Wert: %s. Verifiziert EXAKT: jeder managed-Eintrag "
+                        "== Modell-Soll, jeder foreign-Eintrag genau wie im Layout "
+                        "(Duplikat/Zusatz -> exit 1). Wird gegen eine Export-Datei "
+                        "geprüft, muss deren SHA256 == source_export_sha256 sein "
+                        "(Provenienz-Anker). Ohne dieses Flag bleibt der strikte "
+                        "Null-Diff (jeder Fremdbestand = Drift)."
+                        % DEFAULT_TOLERATED_PATH)
     p.add_argument("--export", action="store_true",
                    help="Inventar: read-only GET → rohe huJSON + SHA256 nach --out.")
     p.add_argument("--out", default=None,
@@ -904,9 +1153,48 @@ def main():
         print("🔑 SHA256: %s" % sha)
         return 0
 
-    rep = diff_model_vs_live(model, live)
+    # Fremdbestand-Toleranzliste (optional): erlaubt --verify/--dry-run mit
+    # dokumentiertem, nicht verwaltetem Live-Bestand (Owner-Entscheid 2026-09-11).
+    tol = None
+    if args.tolerated_foreign is not None:
+        try:
+            tol = load_tolerated(args.tolerated_foreign)
+        except (OSError, ValueError) as exc:
+            print("❌ Toleranzliste nicht lesbar/ungültig (%s): %s"
+                  % (args.tolerated_foreign, exc))
+            return 1
+        # Provenienz-Anker (Minor-Auflage PR #142): die Toleranzliste ist an einen
+        # konkreten, eingefrorenen Export gebunden. Wird gegen eine Export-DATEI
+        # verifiziert, MUSS deren SHA256 zu `source_export_sha256` passen – sonst
+        # bestätigt sich die Toleranzliste strukturell selbst (der Anker wäre nur
+        # Dokumentation). Mismatch → Abbruch OHNE Auswertung.
+        anchor = tol.get("source_export_sha256")
+        export_file = args.file or args.snapshot
+        if anchor and export_file:
+            actual = _sha256(live_text)
+            if actual != anchor:
+                print("❌ Provenienz-Anker verletzt: SHA256 der Export-Datei (%s) "
+                      "!= source_export_sha256 der Toleranzliste (%s) – Abbruch "
+                      "(die Toleranzliste passt nicht zum verifizierten Export)."
+                      % (actual, anchor))
+                return 1
+            print("🔒 Provenienz-Anker ok: Export-SHA256 == source_export_sha256 "
+                  "(%s)" % actual)
+
+    rep = diff_model_vs_live(model, live, tol)
     if args.verify:
         print_diff(rep)
+        if tol is not None:
+            print_tolerance_info(tol, args.tolerated_foreign)
+            if tolerant_diff_ok(rep):
+                print("✅ Verify (mit Toleranz): verwalteter Teil ≡ Modell "
+                      "(semantisch, inkl. Reihenfolge); dokumentierter Fremdbestand "
+                      "positionsgenau unverändert an seinen Live-Positionen "
+                      "(Verschränkung zulässig); kein unerwarteter Fremdbestand")
+                return 0
+            print("❌ Drift (mit Toleranz): verwalteter Teil und/oder dokumentierter "
+                  "Fremdbestand weichen ab (siehe oben)")
+            return 1
         if null_diff_ok(rep):
             print("✅ Null-Diff: Modell ≡ Live (semantisch, inkl. Regel-Reihenfolge; "
                   "Formatierung/Kommentare ignoriert)")
@@ -953,6 +1241,8 @@ def main():
 
     if args.dry_run or not selected:
         print_diff(rep)
+        if tol is not None:
+            print_tolerance_info(tol, args.tolerated_foreign)
         print("--- Plan (selektiv) ---")
         if not selected:
             print("ℹ️ Keine Gruppe gewählt (--rule/--rules) – reine Analyse. "
@@ -984,6 +1274,12 @@ def main():
               "Verify/Export offline).")
         return 2
 
+    # SICHERHEITS-EIGENSCHAFT (bindend, nicht verhandelbar): Der Applier liest die
+    # LIVE-Policy und fügt rein additiv ein – er schreibt NIE die Modell-Datei als
+    # Gesamtdatei über die Live-Policy. Sonst würden nicht übernommene Einträge
+    # (Fremdbestand: IaC3-/Konsolen-Regeln, siehe acl/tolerated-foreign.json) GELÖSCHT.
+    # Basis ist ausschließlich `live_text` (GET); `new_text` entsteht daraus durch
+    # additive Text-Einfügungen (insert_entries verändert keine Bestandszeilen).
     backup_text = live_text
     with open("/tmp/acl-backup.json", "w", encoding="utf-8") as f:
         f.write(backup_text)
@@ -998,6 +1294,19 @@ def main():
             new_text = insert_entries(new_text, section, ents, model[section])
             for e in ents:
                 print("➕ [%s] eingefügt: %s" % (e.group, e.rule_id()))
+
+    # Pre-POST-Guard (defensiv): beweist VOR dem POST, dass die Einfügung rein
+    # additiv ist – kein Bestands-Eintrag (inkl. Fremdbestand) entfernt/geändert,
+    # nur die gewählten Einträge hinzugefügt. Schlägt er fehl -> Abbruch OHNE POST.
+    ok_pre, det_pre = semantic_additivity(live_text, new_text, to_insert)
+    if not ok_pre:
+        print("❌ Pre-POST-Guard: Einfügung wäre NICHT rein additiv "
+              "(Bestands-Eintrag würde entfernt/geändert) – Abbruch OHNE POST")
+        for d in det_pre:
+            print("   - " + d)
+        return 1
+    print("✅ Pre-POST-Guard: rein additiv (kein Bestands-/Fremdbestand-Eintrag "
+          "entfernt/geändert)")
 
     code, resp = api("POST", new_text.encode("utf-8"))
     if code != 200:
