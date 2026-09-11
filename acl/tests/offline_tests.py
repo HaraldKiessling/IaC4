@@ -18,6 +18,11 @@ Prüft:
  7. `--verify <export-datei>` (Positional) = reproduzierbarer Null-Diff.
 
 Aufruf: python3 acl/tests/offline_tests.py
+
+ 8. Fremdbestand-Toleranz (`--tolerated-foreign`): verwalteter Teil exakt +
+    dokumentierter Fremdbestand unverändert/an Live-Positionen; jeder
+    unerwartete Fremdbestand (fehlt/verändert/neu/falsche Position) -> exit 1.
+    Toleranzliste: acl/tolerated-foreign.json (IaC3 aktiv, Konsolen-Platzhalter).
 """
 import importlib.util
 import json
@@ -30,6 +35,9 @@ from collections import Counter
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MODEL = os.path.join(ROOT, "acl", "tailscale-acl.hujson")
 FIXTURE = os.path.join(ROOT, "acl", "tests", "fixtures", "live-reconstructed.hujson")
+TOLERATED = os.path.join(ROOT, "acl", "tolerated-foreign.json")
+FIXTURE_FULL = os.path.join(ROOT, "acl", "tests", "fixtures", "live-with-foreign.hujson")
+FIXTURE_TOL = os.path.join(ROOT, "acl", "tests", "fixtures", "live-with-tolerated-foreign.hujson")
 
 _failures = []
 
@@ -213,6 +221,113 @@ def main():
     rc = os.system("%s %s --verify %s >/dev/null" % (
         sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"), FIXTURE))
     check("--verify <export-datei>: Null-Diff gegen Snapshot (exit 0)", rc == 0)
+
+    # ----------------------------------------------------------------------
+    # 8) Fremdbestand-Toleranz (Owner-Entscheid 2026-09-11 „IaC3 nicht übernehmen"):
+    #    verwalteter Teil exakt + dokumentierter Fremdbestand unverändert/
+    #    an Live-Positionen; jede unerwartete Abweichung -> exit 1.
+    # ----------------------------------------------------------------------
+    tol = m.load_tolerated(TOLERATED)
+    n_tol = sum(len(tol["sections"][s]["entries"]) for s in ("acls", "ssh"))
+    check("Toleranzliste parst; 5 aktive IaC3-Einträge (4 acls + 1 ssh)",
+          n_tol == 5 and len(tol["sections"]["acls"]["entries"]) == 4
+          and len(tol["sections"]["ssh"]["entries"]) == 1, "n=%d" % n_tol)
+    check("Toleranzliste: 1 offener Platzhalter (Konsolen/owner) – NICHT toleriert",
+          len(tol["pending"]) == 1
+          and tol["pending"][0]["group"] == "console-owner",
+          "pending=%d" % len(tol["pending"]))
+    check("Toleranzliste: Block-Positionen (acls=end, ssh=start)",
+          tol["sections"]["acls"]["position"] == "end"
+          and tol["sections"]["ssh"]["position"] == "start")
+
+    ttmp = tempfile.mkdtemp()
+
+    def verify(path, tolerated=True):
+        cmd = [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
+               "--verify", path]
+        if tolerated:
+            cmd += ["--tolerated-foreign", TOLERATED]
+        return subprocess.run(cmd, capture_output=True, text=True)
+
+    def write_live(name, mutate):
+        with open(FIXTURE_TOL, encoding="utf-8") as f:
+            d = json.load(f)
+        mutate(d)
+        p = os.path.join(ttmp, name)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(d, f, indent=2)
+        return p
+
+    # 8a) Positive: alle Live-Einträge dokumentiert (Modell + Toleranz) -> exit 0
+    p = verify(FIXTURE_TOL)
+    check("Toleranz-Verify: dokumentierter Fremdbestand vorhanden -> exit 0",
+          p.returncode == 0,
+          "rc=%d" % p.returncode)
+    check("Toleranz-Verify: verwalteter Teil exakt (Fehlend/Geändert/Fremd=0)",
+          "Fehlend (Soll, nicht live): 0" in p.stdout
+          and "Geändert (Soll != live): 0" in p.stdout
+          and "Unerwartet fremd in live (Modell+Toleranz unbekannt): 0" in p.stdout)
+    check("Toleranz-Verify: 5 tolerierte Einträge als vorhanden gemeldet",
+          "Tolerierter Fremdbestand (vorhanden/unverändert): 5" in p.stdout)
+
+    # 8b) Realer Live-Zustand (voll): 4 Konsolen-Einträge sind NICHT toleriert
+    #     (Platzhalter, Owner-Entscheid ausstehend) -> exit 1, klar benannt.
+    p_full = verify(FIXTURE_FULL)
+    check("Toleranz-Verify: 4 nicht tolerierte Konsolen-Einträge -> exit 1",
+          p_full.returncode == 1,
+          "rc=%d" % p_full.returncode)
+    check("Toleranz-Verify: genau 4 unerwartete Fremd-Einträge benannt",
+          "Unerwartet fremd in live (Modell+Toleranz unbekannt): 4" in p_full.stdout
+          and "autogroup:owner" in p_full.stdout)
+
+    # 8c) Ohne Toleranz (strikt): derselbe Live-Zustand -> alle 9 Fremd-Einträge = Drift
+    p_strict = verify(FIXTURE_FULL, tolerated=False)
+    check("Strikter Verify (ohne Toleranz): 9 Fremd-Einträge -> exit 1",
+          p_strict.returncode == 1
+          and "Unerwartet fremd in live (Modell+Toleranz unbekannt): 9" in p_strict.stdout,
+          "rc=%d" % p_strict.returncode)
+
+    # 8d) Tolerierter Fremdbestand FEHLT (gelöscht) -> exit 1
+    p_miss = write_live("tol-missing.hujson", lambda d: d.__setitem__(
+        "acls", [r for r in d["acls"]
+                 if not (r.get("src") == ["tag:ia3"] and r.get("dst") == ["tag:ia3:*"])]))
+    p = verify(p_miss)
+    check("Toleranz-Verify: tolerierter Fremdbestand fehlt -> exit 1",
+          p.returncode == 1
+          and "Tolerierter Fremdbestand fehlt/verändert: 1" in p.stdout,
+          "rc=%d" % p.returncode)
+
+    # 8e) Tolerierter Fremdbestand VERÄNDERT -> exit 1
+    def _mutate_changed(d):
+        for r in d["acls"]:
+            if r.get("src") == ["tag:ia3"] and r.get("dst") == ["tag:ha:*"]:
+                r["dst"] = ["tag:ha:22"]
+    p_chg = write_live("tol-changed.hujson", _mutate_changed)
+    p = verify(p_chg)
+    check("Toleranz-Verify: tolerierter Fremdbestand verändert -> exit 1",
+          p.returncode == 1
+          and "Tolerierter Fremdbestand fehlt/verändert: 1" in p.stdout,
+          "rc=%d" % p.returncode)
+
+    # 8f) UNERWARTETER neuer Fremdbestand -> exit 1
+    p_new = write_live("tol-extra.hujson", lambda d: d["acls"].append(
+        {"action": "accept", "src": ["autogroup:member"], "dst": ["tag:ia4:9999"]}))
+    p = verify(p_new)
+    check("Toleranz-Verify: unerwarteter neuer Eintrag -> exit 1",
+          p.returncode == 1
+          and "Unerwartet fremd in live (Modell+Toleranz unbekannt): 1" in p.stdout,
+          "rc=%d" % p.returncode)
+
+    # 8g) Fremdbestand an FALSCHER Live-Position (ssh?) -> exit 1 (Reihenfolge/Position)
+    def _mutate_moved(d):
+        e = d["ssh"].pop(0)
+        d["ssh"].append(e)
+    p_moved = write_live("tol-moved.hujson", _mutate_moved)
+    p = verify(p_moved)
+    check("Toleranz-Verify: Fremdbestand an falscher Position -> exit 1",
+          p.returncode == 1
+          and "Regel-Reihenfolge (acls/ssh) abweichend: 1" in p.stdout,
+          "rc=%d" % p.returncode)
 
     print("")
     if _failures:

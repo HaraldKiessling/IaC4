@@ -1,0 +1,109 @@
+{
+  "_doc": [
+    "Fremdbestand-Toleranzliste für `scripts/ensure-acl.py --verify <export> --tolerated-foreign`.",
+    "",
+    "Zweck: Die LIVE-Tailscale-ACL enthält Einträge, die NICHT von IaC4 verwaltet werden",
+    "(Fremdbestand). Der verwaltete Teil (das Modell `acl/tailscale-acl.hujson`) muss exakt",
+    "matchen (inkl. Reihenfolge); der hier gelistete Fremdbestand muss vollständig,",
+    "unverändert und an seinen Live-Positionen vorhanden sein. Jede unerwartete Abweichung",
+    "(fehlend / verändert / neu) führt zu exit 1.",
+    "",
+    "Owner-Entscheid 2026-09-11 (19:41 UTC): „IaC3 nicht übernehmen\" – die IaC3-Einträge",
+    "werden NICHT ins IaC4-Modell aufgenommen; sie bleiben dokumentierter Fremdbestand.",
+    "Damit entfällt der strikte Null-Diff; es gilt „verwalteter Teil exakt + dokumentierter",
+    "Fremdbestand unverändert\".",
+    "",
+    "Grundlage: eingefrorener Live-Export acl-live-export-20260911.json",
+    "(sha256 8cd58f88aee5ab180858cc7a74ea6e488a21ddeaeb3740f5165f6ea856a75b8d,",
+    "GET /api/v2/tailnet/<tailnet>/acl, 2026-09-11T17:58:11Z). Der rohe Export wird NICHT",
+    "versioniert (siehe .gitignore + acl/README.md).",
+    "",
+    "Schema je Abschnitt (acls/ssh):",
+    "  \"position\": \"start\" | \"end\"  – Lage des Fremdbestand-Blocks relativ zu den",
+    "                                     verwalteten Einträgen (Live-Position).",
+    "  \"entries\":  geordnete Liste der Block-Einträge. Jeder Eintrag hat:",
+    "     status: \"tolerated\"              -> aktiver, tolerierter Fremdbestand",
+    "             \"owner-decision-pending\"  -> Platzhalter; NICHT tolerant (nicht geraten,",
+    "                                          nicht aufgenommen). Erst nach Owner-Entscheid",
+    "                                          in `tolerated` + Objekte eintragen.",
+    "     group:  Zuordnung (z. B. iac3, console-owner)",
+    "     reason: Begründung (nur Doku)",
+    "     obj:    der huJSON-Eintrag (nur bei status=tolerated)",
+    "  `tagOwners`: Liste tolerierter Fremd-Keys (Zuordnung; aktuell leer)."
+  ],
+  "version": 1,
+  "captured_utc": "2026-09-11T17:58:11Z",
+  "source_export_sha256": "8cd58f88aee5ab180858cc7a74ea6e488a21ddeaeb3740f5165f6ea856a75b8d",
+
+  "tagOwners": [],
+
+  "acls": {
+    "position": "end",
+    "entries": [
+      {
+        "status": "tolerated",
+        "group": "iac3",
+        "reason": "IaC3-Eigentum (eigene Zuständigkeit, Owner-Entscheid 2026-09-11 „IaC3 nicht übernehmen\"). tag:ia3 -> tag:ia3:* (Selbstzugriff).",
+        "obj": {
+          "action": "accept",
+          "src": ["tag:ia3"],
+          "dst": ["tag:ia3:*"]
+        }
+      },
+      {
+        "status": "owner-decision-pending",
+        "group": "console-owner",
+        "reason": "Regel-1-Cluster („Du zu HA & HA zu Dir\") aus der Owner-Konsole: 4 Einträge mit autogroup:owner (owner -> tag:ha:*, owner -> 192.168.0.0/24:*, owner -> 192.168.2.0/24:*, tag:ha -> autogroup:owner:*). Owner-Entscheid zur Übernahme/Bewertung steht noch aus – Objekte bewusst NICHT aufgenommen (nicht raten).",
+        "tolerate": false,
+        "entries": []
+      },
+      {
+        "status": "tolerated",
+        "group": "iac3",
+        "reason": "IaC3-Eigentum. tag:ia3 -> tag:ha:* (ia3-Geräte -> Home Assistant).",
+        "obj": {
+          "action": "accept",
+          "src": ["tag:ia3"],
+          "dst": ["tag:ha:*"]
+        }
+      },
+      {
+        "status": "tolerated",
+        "group": "iac3",
+        "reason": "IaC3-Eigentum. tag:ia3 -> 192.168.0.0/24:* – RISIKO: Zugriff ins Heimnetz (siehe Backlog-Issue).",
+        "obj": {
+          "action": "accept",
+          "src": ["tag:ia3"],
+          "dst": ["192.168.0.0/24:*"]
+        }
+      },
+      {
+        "status": "tolerated",
+        "group": "iac3",
+        "reason": "IaC3-Eigentum. tag:ha -> tag:ia3:* (Rückweg Home Assistant -> ia3).",
+        "obj": {
+          "action": "accept",
+          "src": ["tag:ha"],
+          "dst": ["tag:ia3:*"]
+        }
+      }
+    ]
+  },
+
+  "ssh": {
+    "position": "start",
+    "entries": [
+      {
+        "status": "tolerated",
+        "group": "iac3",
+        "reason": "IaC3-Eigentum: SSH admin/member/ci -> tag:ia3 (users deploy-user/root/ubuntu).",
+        "obj": {
+          "action": "accept",
+          "src": ["autogroup:admin", "autogroup:member", "tag:ci"],
+          "dst": ["tag:ia3"],
+          "users": ["deploy-user", "root", "ubuntu"]
+        }
+      }
+    ]
+  }
+}

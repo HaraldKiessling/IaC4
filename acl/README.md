@@ -13,7 +13,10 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | Datei | Zweck |
 |-------|-------|
 | `tailscale-acl.hujson` | **SSoT**: kanonische Policy (tagOwners → acls → ssh) |
-| `tests/fixtures/live-reconstructed.hujson` | Offline-Testfixture (rekonstruierter Live-Stand) |
+| `tolerated-foreign.json` | **Fremdbestand-Toleranzliste** (IaC3 aktiv; Konsolen-Einträge als Platzhalter) |
+| `tests/fixtures/live-reconstructed.hujson` | Offline-Testfixture (rekonstruierter Live-Stand, nur verwalteter Teil) |
+| `tests/fixtures/live-with-foreign.hujson` | Testfixture: rekonstruierter Stand **+ aller Fremdbestand** (IaC3 + Konsolen) |
+| `tests/fixtures/live-with-tolerated-foreign.hujson` | Testfixture: rekonstruierter Stand **+ dokumentierter (IaC3) Fremdbestand** |
 | `tests/offline_tests.py` | Offline-Nachweise (kein Netz, kein POST) |
 
 ## Konventionen der SSoT-Datei
@@ -48,13 +51,42 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
 
-## Null-Diff (Erfolgskriterium, Owner-Entscheid F4)
+## Verify mit Toleranz (Erfolgskriterium, Owner-Entscheide F4 + G1–G3, 2026-09-11)
 
-`--verify` gilt als bestanden, wenn die **geparste Policy semantisch gleich** ist
-**inkl. Regel-Reihenfolge** (`acls`/`ssh`). Tags (`tagOwners`) werden als
-**Zuordnung** verglichen (Reihenfolge irrelevant); Formatierung, Kommentare und
-Trailing-Kommas bleiben unberücksichtigt. **Byte**-Gleichheit ist **nicht** das
-Kriterium (die Tailscale-API reserialisiert die Policy).
+`--verify <export> --tolerated-foreign <liste>` gilt als bestanden, wenn
+
+- der **verwaltete Teil** (Modelleinträge) **exakt** matcht **inkl. Reihenfolge**
+  (`acls`/`ssh`) — Zero-Delta **nur** des verwalteten Teils;
+- der **dokumentierte Fremdbestand** (siehe `tolerated-foreign.json`) vollständig,
+  unverändert und an seinen **Live-Positionen** vorhanden ist;
+- **kein unerwarteter** Live-Eintrag existiert (Modell ∪ Toleranzliste).
+
+Tags (`tagOwners`) werden als **Zuordnung** verglichen (Reihenfolge irrelevant);
+Formatierung, Kommentare und Trailing-Kommas bleiben unberücksichtigt. **Byte**-
+Gleichheit ist **nicht** das Kriterium (die Tailscale-API reserialisiert die
+Policy). Jede Abweichung → **exit 1** mit Benennung des Eintrags.
+
+Der **strikte** Null-Diff (`--verify` **ohne** `--tolerated-foreign`, „Modell ≡
+Live, kein Fremdbestand“) bleibt verfügbar.
+
+## Fremdbestand (nicht von IaC4 verwaltet)
+
+Owner-Entscheid 2026-09-11 (19:41 UTC): **„IaC3 nicht übernehmen“** — die
+IaC3-Einträge (`tag:ia3`-Regeln + SSH admin/member/ci → `tag:ia3`) sind **eigene
+Zuständigkeit** und werden **nicht** ins Modell aufgenommen; sie bleiben als
+**dokumentierter Fremdbestand** in `tolerated-foreign.json` (Gruppe `iac3`,
+aktiv toleriert). Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔
+`tag:ha`) stehen dort als **klar markierter, konfigurierbarer Platzhalter**
+(`owner-decision-pending`); der Owner-Entscheid steht aus (Backlog-Issue) — die
+Objekte werden **nicht geraten und nicht aufgenommen**. Solange sie offen sind,
+meldet das Toleranz-Verify sie als unerwarteten Fremdbestand (exit 1).
+
+> **Sicherheits-Eigenschaft:** Der Applier liest die **Live-Policy**, fügt **rein
+> additiv** ein und schreibt zurück. Er schreibt **nie** das Modell als
+> Gesamtdatei über die Live-Policy — sonst würden die nicht übernommenen
+> Einträge **gelöscht** (Pre-POST-Guard `semantic_additivity` + Post-POST-Verify).
+> **Risiko:** `tag:ia3 → 192.168.0.0/24` gewährt Zugriff ins Heimnetz (siehe
+> Backlog-Issue).
 
 ## IaC4-first (Übergang, Owner-Entscheid F3/F6)
 
@@ -78,6 +110,11 @@ TS_TAILNET=… TS_API_KEY=… python3 scripts/ensure-acl.py --verify
 
 # Null-Diff reproduzierbar gegen einen exportierten Live-Stand (Datei + SHA256)
 python3 scripts/ensure-acl.py --verify acl/live-export-<sha8>.hujson
+
+# Verify MIT Fremdbestand-Toleranz (M3-Gate): verwalteter Teil exakt +
+# dokumentierter Fremdbestand unverändert/an Live-Positionen
+python3 scripts/ensure-acl.py --verify acl/live-export-<sha8>.hujson \
+    --tolerated-foreign acl/tolerated-foreign.json
 
 # Inventar: rohe Live-huJSON + SHA256 (read-only GET, gewinnt den fehlenden
 # versionierten Ist-Stand)
