@@ -185,4 +185,5 @@ wirkungslos. Rollback ist **kein** Re-Join.
 |-------------|---------|--------|--------------|
 | 2026-09-11 | IaC-Verankerung: Rolle (Default + idempotente Task), Mini-Playbook, Ausführungspfad in **Workflow 02** (`mode=accept-routes`, Dry-Run → Anwenden mit Confirm), Runbook; Draft-PR (kein Merge, kein Apply) | vorbereitet | Engineer |
 | 2026-09-11 | Review-Auflagen PR #144 umgesetzt: Rollback-Input **`accept_routes`** (Default `true`) in Workflow 02 → als Extra-Var an Step 10/11; Doku präzisiert (B3 stale `02b`, B4 „bootstrap unverändert“); IPv4-Auswahl (B6); `bool`-Härtung der Join-/Handler-`ternary`. Kein Apply. | vorbereitet | Engineer |
+| 2026-09-11 | Fix nach Dry-Run dev: Step (7) schreibt den SSH-Key mit Trailing-Newline (`printf '%s\n'`) — zuvor `printf '%s'` → OpenSSH `error in libcrypto`, Dry-Run nicht ausführbar. Kein VPS-Eingriff. | vorbereitet | Engineer |
 | 2026-09-11 | Ausführung dev/prod (Dry-Run → Apply), Ist-Zustand live verifizieren | ausstehend — Owner-Go | Owner (prod) |
