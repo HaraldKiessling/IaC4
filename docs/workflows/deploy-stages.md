@@ -66,3 +66,11 @@ aus dem Node-Hostnamen (`vps-dev`) auf – ein `VPS_DEV_HOST`-Secret ist dafür 
    via `04-service-deploy` playbook=openclaw, deployed 2026-08-01 – siehe
    `docs/plans/iac4-migration.md`; Workflow 05 = Freigabe + Geräte-Verwaltung
    (Telegram-Pairing + Device-Approve, v3.6 – siehe `tools/device-approve/README.md`)
+
+## On-Demand-Wartung (nicht Teil der Reihenfolge)
+
+- `02b-tailscale-accept-routes.yml` → setzt **nur** den Client-Pref `--accept-routes`
+  auf vps-dev/vps-prod (kein Re-Join, läuft über Tailscale). `mode=check` zuerst
+  (Dry-Run, `--check --diff`), dann `mode=apply` mit `confirm=APPLY-ACCEPT-ROUTES`.
+  Siehe `docs/workflows/tailscale-accept-routes-runbook.md` (Issue #135).
+  **Prod (`target=prod`) führt der Owner aus.**
