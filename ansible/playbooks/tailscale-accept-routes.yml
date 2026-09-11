@@ -1,0 +1,30 @@
+---
+# =============================================================================
+# Tailscale – accept-routes setzen (Issue #135)
+#
+# Setzt AUSSCHLIESSLICH den Client-Pref `--accept-routes` (bzw. `=false` als
+# Rückweg). Kein Re-Join (`tailscale up`), kein Auth-Key, kein Dienst-Neustart.
+# Idempotent: 2. Lauf = 1. Lauf.
+#
+# Erst Dry-Run, dann Apply (durchgeführt via Tailscale-SSH, da die Public-IP
+# nach Workflow 02/Phase 2b geschlossen ist):
+#
+#   ansible-playbook playbooks/tailscale-accept-routes.yml -i <inventory> --check --diff
+#   ansible-playbook playbooks/tailscale-accept-routes.yml -i <inventory>
+#
+# Rückweg (nur bewusst, mit Owner-Go):
+#   ansible-playbook playbooks/tailscale-accept-routes.yml -i <inventory> \
+#     -e tailscale_accept_routes=false
+#
+# Siehe docs/workflows/tailscale-accept-routes-runbook.md.
+# =============================================================================
+
+- name: Tailscale – accept-routes (nur Flag, kein Re-Join)
+  hosts: vps
+  become: true
+  gather_facts: false
+  tasks:
+    - name: accept-routes-Teil der Tailscale-Rolle ausführen
+      ansible.builtin.include_role:
+        name: tailscale
+        tasks_from: accept-routes
