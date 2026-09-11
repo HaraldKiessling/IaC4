@@ -1,6 +1,7 @@
 ---
 - name: tailscale auth
   ansible.builtin.shell: |
-    tailscale up --auth-key={{ tailscale_auth_key }} --hostname={{ inventory_hostname }}
+    tailscale up --auth-key={{ tailscale_auth_key }} --hostname={{ inventory_hostname }} \
+      --accept-routes={{ tailscale_accept_routes | default(true) | ternary('true', 'false') }}
   register: ts_up_result
   changed_when: ts_up_result.rc == 0
