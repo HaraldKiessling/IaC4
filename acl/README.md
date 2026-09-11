@@ -83,18 +83,20 @@ Live, kein Fremdbestand“) bleibt verfügbar.
 ### Positionsgenaue Modellierung (M2-Finding behoben, Owner-Entscheid 2026-09-11 20:24 UTC)
 
 Der **reale** Live-Aufbau ist **verschränkt**: `acls` =
-`[verwaltet 0–6] [IaC3-Selbstregel 7] [Konsolen-Block 8–11] [IaC3 12–14]` — die
-IaC3-Selbstregel steht **zwischen** den verwalteten Einträgen. Das frühere
+`[verwaltet 0–6] [IaC3-Selbstregel 7] [Konsolen-Block 8–11] [IaC3 12–14]
+[energie-read 15]` — die IaC3-Selbstregel steht **zwischen** den verwalteten
+Einträgen; mit der Regel-7-Aktivierung kommt `energie-read` als letzter
+verwalteter Eintrag an Position 15, **nach** dem IaC3-Fremdbestand. Das frühere
 Block-Positions-Modell (`position` `start`/`end`) konnte das nicht abbilden und
 meldete fälschlich eine Reihenfolge-Abweichung (**M2-Finding**, 19:52 UTC).
 
 Mit dem Owner-Entscheid **20:24 UTC („1“)** ist der Fremdbestand **positionsgenau**
 modelliert (`acl/tolerated-foreign.json`, Schema v2, geordnetes `layout`).
 Verschränkung ist damit erlaubt; das Werkzeug geht **nicht** mehr von einem Block
-aus. Der `--verify` gegen den eingefrorenen Export
-(`acl-live-export-20260911.json`) ist damit **grün** (exit 0): verwalteter Teil
-exakt, Fremdbestand 5/5 positionsgenau vorhanden/unverändert, kein unerwarteter
-Eintrag, Reihenfolge ok.
+aus. Der `--verify` gegen den eingefrorenen **POST-APPLY**-Export
+(`acl-live-export-20260911-post-energie.json`, sha256 `52bc662a…`) ist damit
+**grün** (exit 0): verwalteter Teil exakt (inkl. `energie-read`), Fremdbestand
+5/5 positionsgenau vorhanden/unverändert, kein unerwarteter Eintrag, Reihenfolge ok.
 
 ## Fremdbestand (nicht von IaC4 verwaltet)
 
@@ -182,13 +184,14 @@ python3 acl/tests/offline_tests.py
 - Der Applier ist **rein additiv** (bestehende Zeilen werden nie verändert/entfernt)
   mit Backup + Auto-Rollback bei Verifikationsfehler.
 
-## Bekannte Lücke (Voraussetzung, kein Auftrag)
+## Bekannte Lücke (geschlossen 2026-09-11)
 
 Ohne gültigen `TAILSCALE_API_KEY` (IaC4-Key seit 2026-07-31 **401**) und ohne
-rohen Live-Export ist die **Null-Diff-Verifikation** ([Runbook](../docs/workflows/acl-migration-runbook.md)
-M3) nicht ausführbar. Diese Lücke gehört in den Runbook-Kopf, nicht in diese
-Migration.
+rohen Live-Export war die **Null-Diff-Verifikation** ([Runbook](../docs/workflows/acl-migration-runbook.md)
+M3) nicht ausführbar. **Beide Voraussetzungen sind mit 2026-09-11 geschlossen:**
+Key erneuert (V1) und roher Live-Export liegt vor (V2) — Anker
+`acl-live-export-20260911-post-energie.json` (sha256 `52bc662a…`), s. o.
 
 Der Soll/Ist-Bestand (Modell-Soll + Fixture `tests/fixtures/live-reconstructed.hujson`)
-ist derzeit eine **Run-Log-Rekonstruktion** (kein roher Export). Nach Schließen der
-Lücke (V2) ist er durch den **rohen Export + `--verify`** zu ersetzen/bestätigen.
+war eine **Run-Log-Rekonstruktion** (kein roher Export) und ist durch den **rohen
+Export + `--verify`** bestätigt/ersetzt.

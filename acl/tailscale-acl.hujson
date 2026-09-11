@@ -22,14 +22,17 @@
   //   3. Kommentare sind huJSON-Kommentare (// oder /* */); Trailing-Kommas sind
   //      erlaubt. `scripts/ensure-acl.py` parst die Datei semantisch (huJSON→JSON).
   //
-  // Live-Bezug (Stand 2026-09-11, aus Run-Logs rekonstruiert):
+  // Live-Bezug (Stand 2026-09-11, roher Live-Export):
   //   live = base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner
   //          + owner-8123 + console-owner + ha-ssh + energie-read
   //          (HA-Regeln 1–7; energie-read aktiviert: Owner-Go 2026-09-11 21:57 UTC)
-  //   Der Live-Bestand ist derzeit eine Run-Log-Rekonstruktion – KEIN roher
-  //   huJSON-Export vorhanden (Governance-Lücke V2, siehe Runbook). Nach Schließen
-  //   der Lücke durch den rohen Export + `--verify` zu ersetzen/bestätigen.
-  //   Die IaC4-Gewähr endet am 31.07.2026 (API-Key seither 401).
+  //   Anker: roher Live-Export acl-live-export-20260911-post-energie.json
+  //   (sha256 52bc662a…7993e, 2026-09-11T22:05:26Z, Run 34652410709 – POST-APPLY
+  //   nach Regel 7). `--verify --tolerated-foreign` gegen diesen Export ist
+  //   grün (exit 0). Der rohe Export wird NICHT versioniert (.gitignore; Kopie
+  //   im Workspace; siehe acl/README.md + Runbook). V1/V2 (Key, Roh-Export) sind
+  //   damit geschlossen.
+  //   Die IaC4-Gewähr endet am 31.07.2026 (seither kein IaC4-Apply bis 2026-09-11).
   // ===========================================================================
 
   "tagOwners": {

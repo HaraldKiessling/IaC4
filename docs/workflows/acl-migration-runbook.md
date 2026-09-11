@@ -76,8 +76,8 @@ IaC4**: SSoT `acl/tailscale-acl.hujson`, ein semantischer Applier
 
 ## Live-Bestand (Run-Log-Rekonstruktion, Stand 2026-09-11)
 
-Der aktuelle Live-Bestand ist **nicht** aus einem rohen huJSON-Export, sondern
-aus **Run-Logs rekonstruiert** (Lücke V2). Modell-Soll und Offline-Fixture
+Der Live-Bestand war zunächst **nicht** aus einem rohen huJSON-Export, sondern
+aus **Run-Logs rekonstruiert** (Lücke V2 — mit dem rohen Export **geschlossen**). Modell-Soll und Offline-Fixture
 (`acl/tests/fixtures/live-reconstructed.hujson`) bilden diesen Stand ab:
 `base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner + owner-8123 + console-owner + ha-ssh`
 (HA-Regeln **1–6**; Regel 7 mit Owner-Go 2026-09-11 21:57 UTC **aktiviert**).
@@ -93,16 +93,23 @@ aus **Run-Logs rekonstruiert** (Lücke V2). Modell-Soll und Offline-Fixture
   wird diese Rekonstruktion durch den **rohen Export + `--verify`** ersetzt bzw.
   bestätigt (M3). Keine weitere Migration ohne diesen Abgleich.
 - **Roher Export (V2) liegt vor:** `acl-live-export-20260911.json` (sha256
-  `8cd58f88…`, 2026-09-11T17:58:11Z, read-only GET). Reale `acls`-Reihenfolge:
-  verwalteter Teil (0–6), **IaC3-Selbstregel (7)**, **Konsolen-Block (8–11)**,
-  restlicher IaC3-Block (12–14) — d. h. der **IaC3-Block ist unterbrochen**.
-  Nach dem Owner-Entscheid H1 (19:52 UTC) sind die 4 Konsolen-Einträge Teil des
-  Modells. Mit dem Owner-Entscheid **J1 (20:24 UTC)** ist der Fremdbestand
-  **positionsgenau** modelliert; das Toleranz-Verify gegen diesen Export ist
-  **grün (exit 0)**: **verwalteter Teil fehlend/geändert = 0**, **IaC3-Fremdbestand
-  (5) positionsgenau vorhanden/unverändert**, **kein unerwarteter Eintrag**,
-  **Reihenfolge ok** — also das **Erfolgskriterium** erfüllt. Ohne Toleranz wären
-  alle **5** Fremd-Einträge Drift.
+  `8cd58f88…`, 2026-09-11T17:58:11Z, read-only GET, **pre-energie**). Reale
+  `acls`-Reihenfolge: verwalteter Teil (0–6), **IaC3-Selbstregel (7)**,
+  **Konsolen-Block (8–11)**, restlicher IaC3-Block (12–14) — d. h. der
+  **IaC3-Block ist unterbrochen**. Nach dem Owner-Entscheid H1 (19:52 UTC) sind
+  die 4 Konsolen-Einträge Teil des Modells; mit **J1 (20:24 UTC)** ist der
+  Fremdbestand **positionsgenau** modelliert; das Toleranz-Verify gegen diesen
+  Export war **grün (exit 0)**.
+- **POST-APPLY-Export nach Regel 7 (2026-09-11T22:05:26Z, Run 34652410709):**
+  `acl-live-export-20260911-post-energie.json` (sha256 `52bc662a…7993e`).
+  `acls` = o. g. Reihenfolge **+ `energie-read` an Position 15** (nach dem
+  IaC3-Fremdbestand). Das Toleranz-Verify gegen **diesen** Export ist
+  **grün (exit 0)**: **verwalteter Teil fehlend/geändert = 0** (inkl.
+  `energie-read`), **IaC3-Fremdbestand (5) positionsgenau vorhanden/unverändert**,
+  **kein unerwarteter Eintrag**, **Reihenfolge ok** — also das
+  **Erfolgskriterium** erfüllt. Ohne Toleranz wären alle **5** Fremd-Einträge
+  Drift. Der Provenienz-Anker `source_export_sha256` der Toleranzliste zeigt auf
+  diesen Export.
 
 ## M2-Finding (2026-09-11) → behoben durch J1 (20:24 UTC)
 
@@ -326,7 +333,9 @@ einzubringen: `docs/reference/tailscale-acl.md` + Header-Hinweis im Apply-Workfl
 | 2026-09-11 | Verify gegen eingefrorenen Export nach H1: verwalteter Teil exakt, IaC3-Fremdbestand (5) vorhanden/unverändert, kein Unerwarteter — **aber 1 Reihenfolge-Abweichung** (IaC3-Selbstregel vor Konsolen-Block, Block-Positions-Modell) → **exit 1**. **M2-Finding** dokumentiert; Owner-Entscheidung zu Option 1/2 offen. | Befund | Engineer |
 | 2026-09-11 | **J1 (20:24 UTC):** „1“ – Fremdbestand **positionsgenau** modelliert (Verschränkung erlaubt). Toleranzliste auf Schema v2 (`layout`) umgestellt; `ensure-acl.py` (`load_tolerated`/`expected_sequence`/`order_diff`) positionsgenau; Offline-Tests 8a–8g erweitert (verschränkt → grün; verschoben/verändert/fehlend/Zusatz/Managed-verschoben → exit 1). **M2-Finding behoben.** | umgesetzt (Draft-PR, kein Merge) | Engineer |
 | 2026-09-11 | Verify gegen eingefrorenen Export nach J1: verwalteter Teil exakt, IaC3-Fremdbestand (5) **positionsgenau** vorhanden/unverändert, kein Unerwarteter, Reihenfolge ok → **grün (exit 0)**. `--check-model` + `py_compile` + `offline_tests.py` grün. | erledigt | Engineer |
-| 2026-09-11 | **Regel 7 (`energie-read`) aktiviert** (Owner-Go 21:57 UTC): Modell `pending` → live-gewollt (rein lesend, genau drei Ziele); Doku (`README`/`ADR-026`/Runbook) konsistent. Aktivierung geprüfter Inhalte aus PR #140/#142 — keine neue Semantik. **Kein Apply in diesem Schritt.** | umgesetzt (Branch) | Engineer |
+| 2026-09-11 | **Regel 7 (`energie-read`) aktiviert** (Owner-Go 21:57 UTC): Modell `pending` → live-gewollt (rein lesend, genau drei Ziele); Doku (`README`/`ADR-026`/Runbook) konsistent. Aktivierung geprüfter Inhalte aus PR #140/#142 — keine neue Semantik. Applier-Fix (kommentar-sicheres `insert_entries`, Regressionstest 3b). Merge PR **#145** (Merge-Commit `c9a947e`). | gemergt | Engineer |
+| 2026-09-11 | **M4 IaC4-Apply (Regel 7):** Dry-Run auf `main` (`dry_run=true`) mit `rules=energie-read` (Run [34652301825](https://github.com/HaraldKiessling/IaC4/actions/runs/34652301825)) = **1 Einfügung / 0 Entfernungen**; Idempotenz-Gegenprobe `rules=all` (Run [34652333765](https://github.com/HaraldKiessling/IaC4/actions/runs/34652333765)) = **1 Einfügung / 0**. Apply (Run [34652367043](https://github.com/HaraldKiessling/IaC4/actions/runs/34652367043), `dry_run=false`, `confirm=APPLY-ACL`, `rules=energie-read`): ➕ `energie-read` eingefügt, Pre-POST-Guard rein additiv, `count==1`-Gate ✅, Additivität ✅. | **live** | Engineer |
+| 2026-09-11 | **POST-APPLY-Export** (Run [34652410709](https://github.com/HaraldKiessling/IaC4/actions/runs/34652410709), read-only GET): sha256 `52bc662a…7993e`, 2026-09-11T22:05:26Z; im Workspace `acl-live-export-20260911-post-energie.json`. Diff vs. pre-energie-Export = **genau 1 Zusatz (energie-read), 0 Entfernungen**. `--verify --tolerated-foreign` gegen diesen Export **grün (exit 0)** (verwalteter Teil exakt inkl. Regel 7; IaC3-Fremdbestand 5 positionsgenau). Anker `source_export_sha256` aktualisiert. | verifiziert | Engineer |
 
 ## Offene Lücken (separat als IaC4-Issues, nicht Teil dieser Migration)
 
