@@ -5,10 +5,20 @@
 - Nie `overwrite_existing_content = true` ohne vollständige ACL mit ia3+ia4+ha
 - OAuth-Client verwendet `tag:ci` + `tag:ia4` (IaC3-Muster: 1 Client, beide Tags – Tag-Ownership)
 - IaC4-VPS-Ziel-Tag ist `tag:ia4` (Original-ACL-Design); Auth-Key joint frische VPS direkt mit tag:ia4 (kein Re-Tag-Workaround); Re-Tag-Step = Korrektur für Bestands-Nodes
-- Additive IaC4-ACL-Erweiterung (tag:ia4) ausschließlich via `scripts/ensure-acl-ia4.py` (Workflow 01, idempotent, Backup+Rollback) – nie manuell/Terraform überschreiben
+- Additive ACL-Erweiterung ausschließlich über `scripts/ensure-acl.py` (SSoT `acl/tailscale-acl.hujson`, semantisch, idempotent, Backup+Rollback; Apply manuell via `00-acl-apply.yml`) – nie manuell/Terraform überschreiben; `scripts/ensure-acl-ia4.py` ist nur noch Kompatibilitäts-Shim (→ `--rule iac4`) und wird von keinem Workflow mehr aufgerufen (Workflow 01 entkoppelt, Owner-Entscheid 2026-09-11)
 
 ## Owner-Governance (Owner-Regel, 2026-09-06)
 
 - **KEINE Änderung der Tailscale-ACL ohne ausdrückliche Zustimmung des Owners** – auch nicht in Feature-Branches und auch dann nicht, wenn die Änderung über GitHub Actions auf einem Branch ausgeführt würde (ACLs sind zentral und produktionsrelevant)
 - Vor jeder Vorlage zur Owner-Entscheidung müssen die Auswirkungen detailliert ermittelt UND reviewed worden sein (Autor ≠ Reviewer). Die Vorlage dokumentiert: exakter ACL-Diff, betroffene Quellen/Ziele/Ports/Aktionen, Verifikation, dass fremde Bestände unverändert bleiben, Rollback-Pfad
-- ACL-Änderungen laufen ausschließlich additiv über die ensure-*-Skripte (`scripts/ensure-acl-ia4.py`) – niemals überschreiben
+- ACL-Änderungen laufen ausschließlich additiv über die ensure-*-Skripte – niemals überschreiben
+
+## Single Source (Owner-Entscheid, 2026-09-11)
+
+- **Tailscale-ACL ist Infrastruktur und wird in IaC4 verwaltet** – eine Regelquelle für BEIDE Tag-Welten (`tag:ia4` + `tag:ha`/`tag:ha-ci`)
+- SSoT: `acl/tailscale-acl.hujson` (feste Reihenfolge `tagOwners → acls → ssh`), Applier: `scripts/ensure-acl.py` (semantisch, additiv), einziger Apply-Weg: `.github/workflows/00-acl-apply.yml` (manuell, `dry_run`/`confirm`, **kein** push-/PR-Trigger)
+- Null-Diff = **semantische** Gleichheit der geparsten Policy **inkl. Regel-Reihenfolge** (`--verify <export-datei>`); Byte-Gleichheit ist **nicht** das Kriterium (Tailscale-API reserialisiert)
+- Legacy-Trigger **entkoppelt**: `01-tailscale-terraform.yml` löst **keinen** `tag:ia4`-Apply mehr aus (kein push-/PR-Auslöser); Roh-Export wird **nicht** versioniert (Artefakt statt Commit)
+- Übergang **IaC4-first** (HA-Apply bleibt bis zur Sperre als Rückfallweg offen); danach **Sperre** des ha-repo-ACL-Wegs: Workflow **deaktivieren** (nicht löschen) + Kopfhinweis + Doku-Eintrag (F3/F6)
+- Der bisherige Pfad `scripts/ensure-acl-ia4.py` ist ein Kompatibilitäts-Shim → `ensure-acl.py --rule iac4`; der ha-repo-ACL-Pfad wird nach der Migration nicht mehr verwendet (Deprecated→Gesperrt→Entfernt)
+- Details: ADR-026 (`docs/adr/ADR-026-tailscale-acl-single-source-iac4.md`), Runbook (`docs/workflows/acl-migration-runbook.md`), Konventionen (`acl/README.md`)

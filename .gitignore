@@ -38,3 +38,10 @@ build/
 
 # Temp
 /tmp/
+
+# ACL-Rohexport (roher Live-Stand) – wird NICHT versioniert.
+# Quelle: `scripts/ensure-acl.py --export` (read-only GET) / Workflow 00 (export=true).
+# Ablage stattdessen als Artefakt (Workflow) + eingefrorene Kopie im Workspace.
+# Siehe docs/workflows/acl-migration-runbook.md (Entscheid 3, 2026-09-11).
+acl/live*.hujson
+acl/live*.hujson.sha256

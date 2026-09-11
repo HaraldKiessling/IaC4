@@ -1,0 +1,257 @@
+---
+# =============================================================================
+# 00 – ACL (Tailscale, SSoT in IaC4) — Export (read-only) + Dry-Run + Apply
+#
+#   Export/Inventar (read-only): Input `export=true` fuehrt
+#   `scripts/ensure-acl.py --export` aus: reiner GET der Live-Policy → rohe
+#   huJSON + SHA256, hochgeladen als ARTEFAKT. KEIN POST, kein Backup, kein
+#   Commit. Der Roh-Export wird NICHT versioniert (siehe .gitignore); die Kopie
+#   lebt im Workspace/Artefakt. Damit ist der frueher fehlende rohe Ist-Stand
+#   (Runbook V2/M1, Null-Diff-Grundlage M3) reproduzierbar abrufbar.
+#
+#   Dry-Run/Apply: fuehrt scripts/ensure-acl.py mit der Single Source of Truth
+#   acl/tailscale-acl.hujson aus: rein additive, SEMANTISCHE Tailscale-ACL-
+#   Erweiterung fuer BEIDE Tag-Welten (tag:ia4 + tag:ha/tag:ha-ci).
+#
+#   GOVERNANCE (Owner 2026-09-06 / Owner-Entscheid 2026-09-11):
+#     ACLs sind zentral und produktionsrelevant. Ein ACL-Apply laeuft NIE
+#     automatisch – KEIN push-/PR-/schedule-/issue_comment-Trigger. Nur manuell
+#     (workflow_dispatch) und erst nach
+#       1) Wirkungs-Analyse (--dry-run-Diff + Modell-Gates),
+#       2) Review (Autor != Reviewer),
+#       3) ausdruecklicher Owner-Zustimmung.
+#     Ausfuehrung ausschliesslich hier; der Applier ist rein additiv (bestehende
+#     Zeilen werden NIE veraendert/entfernt) mit Backup + Auto-Rollback bei
+#     Verifikationsfehler.
+#
+#   Doppelte Sicherung ueber die Inputs:
+#     - export:   Default false. true = read-only Inventar (GET → rohe huJSON +
+#                 SHA256 als Artefakt); schliesst den Schreibpfad strukturell aus
+#                 (verlangt dry_run=true). NIEMALS mit apply kombinieren.
+#     - confirm:  muss exakt "APPLY-ACL" sein – NUR fuer den echten Apply
+#                 (dry_run=false); sonst Abbruch in Schritt (1) VOR dem POST. Ein
+#                 reiner Trockenlauf (dry_run=true) braucht KEIN Apply-Wort.
+#     - dry_run:  Default true -> Schritt (2b): Wirkungs-Analyse (GET + Diff +
+#                 Gate-Bericht), KEIN POST. Erst nach freigegebener Analyse auf
+#                 false stellen; dann fuehrt Schritt (3) den Apply aus
+#                 (Backup + POST + Verify + Rollback-Pfad im Skript).
+#     - rules:    Regel-Auswahl gegen die SSoT-Gruppen. Erlaubt: iac4 | 1..7
+#                 (HA-Regeln) | Gruppennamen (ha-tagowners, ha-acl, ha-ssh,
+#                 ha-runner, owner-8123, mqtt-1883, energie-read) | all.
+#                 Default 'iac4' (IaC4-Welt). Pending-Gruppe (energie-read)
+#                 nur bei bewusster, separater Owner-Freigabe.
+#
+#   Secrets (Namen unveraendert zu Workflow 01): TAILSCALE_TAILNET +
+#   TAILSCALE_API_KEY. Werte werden NIE ausgegeben; zusaetzlich explizite
+#   ::add-mask (Defense-in-depth).
+#
+#   Verifikation: jeder eingefuegte Eintrag exakt +1 (count==1-Gate), keine
+#   Bestands-Regel entfernt/geaendert (semantische Multimengen-Pruefung); neue
+#   Eintraege werden an ihrer MODELL-Position eingefuegt (Regel-Reihenfolge bleibt
+#   erhalten). IaC4-Vorbedingung (tag:ia4) wird SEMANTISCH und nur fuer die
+#   tatsaechlich eingefuegten Gruppen geprueft (IaC4-first; uebernommen aus
+#   HA-PR #54). Der Erfolgs-Abgleich ("Null-Diff") laeuft ueber
+#   `python3 scripts/ensure-acl.py --verify <export-datei>`: semantisch inkl.
+#   Regel-Reihenfolge (acls/ssh); Formatierung/Kommentare bleiben unberuecksichtigt.
+#   Der Export dieses Workflows (Input `export=true`) liefert genau diese
+#   export-datei + SHA256 als Artefakt.
+#
+#   Uebergang (Owner-Entscheid F3=(b)/F6=(a)): IaC4-first – der ha-repo-ACL-Weg
+#   bleibt bis zur Sperre als Rueckfallweg offen und wird danach deaktiviert
+#   (nicht geloescht, mit Kopfhinweis). Siehe
+#   docs/workflows/acl-migration-runbook.md.
+#
+#   Rollback: automatisch bei Verifikationsfehler (POST des Backups). Zusaetzlich
+#   Backup-Datei des Laufs /tmp/acl-backup.json (Runner-Dateisystem); manueller
+#   Konsolen-Rollback-Pfad siehe Runbook docs/workflows/acl-migration-runbook.md.
+#
+#   Hinweis (Luecke, kein Auftrag): Ohne gueltigen TAILSCALE_API_KEY (IaC4-Key
+#   seit 2026-07-31 401) und ohne rohen Live-Export ist die Null-Diff-
+#   Verifikation (Runbook M3) nicht ausfuehrbar. Voraussetzung vor M3/M4.
+# =============================================================================
+name: "00 – ACL (Tailscale SSoT: Export read-only, Dry-Run, Apply + Owner-Go)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      export:
+        description: 'Read-only Inventar: GET → rohe huJSON + SHA256 als Artefakt (kein POST). Verlangt dry_run=true.'
+        default: false
+        type: boolean
+      confirm:
+        description: 'Governance-Bestaetigung – exakt "APPLY-ACL" NUR fuer den echten Apply (dry_run=false); Dry-Run braucht kein Apply-Wort'
+        required: true
+        default: 'NEIN'
+        type: choice
+        options:
+          - 'NEIN'
+          - 'APPLY-ACL'
+      dry_run:
+        description: 'true = Wirkungs-Analyse (semantischer Diff, KEIN POST); false = echter Apply (nur nach Analyse + Review + Owner-Go)'
+        default: true
+        type: boolean
+      rules:
+        description: 'Regel-Auswahl (SSoT-Gruppen), kommagetrennt – iac4 | 1..7 | ha-Gruppen | all. Default "iac4"'
+        required: true
+        default: 'iac4'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acl-apply
+  cancel-in-progress: false
+
+jobs:
+  acl-apply:
+    name: "ACL-Apply (nur manuell, confirm + Owner-Go)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: "(1) Governance-Guard – export/confirm + rules-Validierung"
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          EXPORT: ${{ inputs.export }}
+          RULES: ${{ inputs.rules }}
+        run: |
+          set -euo pipefail
+          if [ "${EXPORT}" = "true" ]; then
+            MODUS="EXPORT (read-only Inventar, kein POST)"
+          elif [ "${DRY_RUN}" = "false" ]; then
+            MODUS="APPLY (POST)"
+          else
+            MODUS="DRY-RUN (Wirkungs-Analyse, kein POST)"
+          fi
+          # Export ist strikt read-only und schliesst den Schreibpfad aus.
+          if [ "${EXPORT}" = "true" ] && [ "${DRY_RUN}" = "false" ]; then
+            echo "::error::export=true verlangt dry_run=true – Export ist read-only und darf NIE mit dem Schreibpfad kombiniert werden."
+            exit 1
+          fi
+          if [ "${EXPORT}" = "true" ] && [ "${CONFIRM}" = "APPLY-ACL" ]; then
+            echo "::error::export=true ist read-only – kein Apply-Wort zulaessig."
+            exit 1
+          fi
+          # confirm nur fuer den echten Apply verlangen (dry_run=false). Ein reiner
+          # Trockenlauf braucht kein Apply-Wort; der Schreibpfad bleibt hart durch
+          # dry_run gegated (Schritt 3: if !inputs.dry_run).
+          if [ "${DRY_RUN}" = "false" ] && [ "${CONFIRM}" != "APPLY-ACL" ]; then
+            echo "::error::Abbruch: confirm='${CONFIRM}' ist nicht 'APPLY-ACL'."
+            echo "::error::Governance: ACL-Apply laeuft NIE automatisch – nur manuell nach Wirkungs-Analyse + Review + Owner-Go."
+            exit 1
+          fi
+          case "${RULES}" in
+            ''|*[!A-Za-z0-9,._-]*) echo "::error::rules='${RULES}' ungultig – erlaubt: iac4|1..7|Gruppennamen|all (kommagetrennt)."; exit 1 ;;
+          esac
+          for R in $(echo "${RULES}" | tr ',' ' '); do
+            case "${R}" in
+              iac4|all|ha-tagowners|ha-acl|ha-ssh|ha-runner|owner-8123|mqtt-1883|energie-read) ;;
+              1|2|3|4|5|6|7) ;;
+              *) echo "::error::rules enthaelt ungueltige Gruppe '${R}'."; exit 1 ;;
+            esac
+          done
+          echo "✅ Governance-Guard ok – Modus: ${MODUS}, Regel-Auswahl: ${RULES}"
+
+      - uses: actions/checkout@v4
+
+      - name: "(2a) Vorbedingungen – SSoT + Skript vorhanden + Secrets gesetzt"
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${TS_API_KEY}"
+          FAIL=0
+          [ -f "acl/tailscale-acl.hujson" ] || { echo "::error::acl/tailscale-acl.hujson fehlt (SSoT)."; FAIL=1; }
+          [ -f "scripts/ensure-acl.py" ] || { echo "::error::scripts/ensure-acl.py fehlt."; FAIL=1; }
+          [ -n "${TS_TAILNET}" ] || { echo "::error::Secret TAILSCALE_TAILNET fehlt – [OWNER] setzen."; FAIL=1; }
+          [ -n "${TS_API_KEY}" ] || { echo "::error::Secret TAILSCALE_API_KEY fehlt/abgelaufen (401 seit 2026-07-31) – [OWNER] erneuern."; FAIL=1; }
+          [ "${FAIL}" -eq 0 ] || exit 1
+          python3 scripts/ensure-acl.py --check-model
+          echo "✅ Vorbedingungen ok (SSoT-Gates bestanden, Secrets gesetzt) – Werte werden bewusst nicht ausgegeben."
+
+      - name: "(2b) Dry-Run – semantischer Soll/Ist-Diff (KEIN POST)"
+        # boolean-Input direkt pruefen (GitHub loose equality bei Typ-Mix – kein String-Literal).
+        if: ${{ !inputs.export && inputs.dry_run }}
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+          RULES: ${{ inputs.rules }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${TS_API_KEY}"
+          echo "ℹ️ Dry-Run: nur GET (read-only) – kein POST, kein Backup, ACL unveraendert."
+          python3 scripts/ensure-acl.py --dry-run --rules "${RULES}"
+
+      - name: "(2c) Export – read-only Inventar (rohe huJSON + SHA256, KEIN POST)"
+        if: ${{ inputs.export }}
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${TS_API_KEY}"
+          echo "ℹ️ Export: nur GET (read-only) – kein POST, kein Backup, ACL unveraendert."
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          OUT="$RUNNER_TEMP/acl-live-export-${TS}.hujson"
+          python3 scripts/ensure-acl.py --export --out "$OUT"
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$(basename "$OUT")" > "$OUT.sha256"
+          {
+            echo "# ACL-Live-Export (read-only) – NICHT versioniert (siehe .gitignore)"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "time_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "source=GET /api/v2/tailnet/<tailnet>/acl"
+            echo "file=$(basename "$OUT")"
+            echo "sha256=${SHA}"
+          } > "$RUNNER_TEMP/acl-export-info.txt"
+          echo "🔑 SHA256: ${SHA}"
+          cat "$RUNNER_TEMP/acl-export-info.txt"
+
+      - name: "(2d) Artefakt-Upload – roher Export + SHA256 + Info (nicht versioniert)"
+        if: ${{ inputs.export }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: acl-live-export-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/acl-live-export-*.hujson
+            ${{ runner.temp }}/acl-live-export-*.hujson.sha256
+            ${{ runner.temp }}/acl-export-info.txt
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: "(3) APPLY – nur wenn dry_run=false (confirm-Guard aus Schritt 1 greift)"
+        if: ${{ !inputs.export && !inputs.dry_run }}
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+          RULES: ${{ inputs.rules }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${TS_API_KEY}"
+          echo "⚠️  Owner-Go bestaetigt (confirm=APPLY-ACL, dry_run=false)."
+          echo "⚠️  Regel-Auswahl: ${RULES} – nur die gewaehlten Gruppen werden eingefuegt (kein POST ohne Auswahl)."
+          echo "⚠️  Ablauf: Backup /tmp/acl-backup.json -> POST -> Verify (count==1 je Eintrag) -> Rollback bei Fehler."
+          python3 scripts/ensure-acl.py --rules "${RULES}" --confirm APPLY-ACL
+
+      - name: "(4) Zusammenfassung (kompakt, keine Secrets)"
+        run: |
+          echo "──────────────────────────────────────────────────────────────"
+          if [ "${{ inputs.export }}" = "true" ]; then
+            echo "Modus:   EXPORT – read-only Inventar (ACL unveraendert)."
+            echo "Artefakt: acl-live-export-${{ github.run_id }} (rohe huJSON + SHA256 + Info)."
+            echo "Hinweis: Roh-Export wird NICHT versioniert (.gitignore); Kopie im Workspace ablegen."
+          elif [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "Modus:   DRY-RUN – ACL unveraendert."
+            echo "Regeln:  ${{ inputs.rules }} (nicht gewaehlte Gruppen unveraendert)."
+            echo "Naechster Schritt: Diff reviewen; Apply erst nach Review + Owner-Go"
+            echo "erneut dispatchen mit dry_run=false + confirm=APPLY-ACL."
+          else
+            echo "Modus:   APPLY – Ergebnis (count==1-Gates + Additivitaet) siehe Schritt (3)."
+            echo "Regeln:  ${{ inputs.rules }} (nicht gewaehlte Gruppen unveraendert)."
+            echo "Rollback: automatisch bei Verifikationsfehler; Backup /tmp/acl-backup.json dieses Laufs."
+          fi
+          echo "Governance: kein automatischer ACL-Apply – jeder Lauf ist manuell (Runbook docs/workflows/acl-migration-runbook.md)."
+          echo "Pending-Gruppe (energie-read) nur nach separater Owner-Freigabe."

@@ -32,6 +32,7 @@
 | ADR-023 | **Embedding: nomic-embed-text (768d, nur ZooCode)** | ADR-021 | CPU-tauglich, bewährt; Qdrant bleibt 3072d (ADR-011). Detail: [docs/adr/ADR-023](adr/ADR-023-ollama-embedding-modell.md) | 2026-07-31 |
 | ADR-024 | **Ein Service-Deploy-Workflow (Playbook-Selektion)** | ADR-014 | Ein Wartungspunkt; Migration zu Reusable ab 5 Playbooks. Detail: [docs/adr/ADR-024](adr/ADR-024-service-deploy-workflow.md) | 2026-07-31 |
 | ADR-025 | **OpenClaw-Gateway als Docker-Container, Multi-Instanz (OC1-OC3)** | ADR-004, ADR-015, ADR-017 | Container (gepinnt) je Instanz, TS-Serve-TLS, Docker-DNS zu Ollama/Qdrant; löst IaC3-Altlasten-Problem, Multi-Instanz für Untersuchungen. Detail: [docs/adr/ADR-025](adr/ADR-025-openclaw-deployment.md) | 2026-08-01 |
+| ADR-026 | **Tailscale-ACL: Single Source of Truth in IaC4** | ADR-010, ADR-014 | Zwei additive Schreibpfade (IaC4 `tag:ia4` + ha-repo `tag:ha`) → eine Regelquelle `acl/tailscale-acl.hujson` + semantischer Applier `scripts/ensure-acl.py` + ein manueller Apply-Workflow `00-acl-apply.yml`. Owner-Entscheid 2026-09-11. Detail: [docs/adr/ADR-026](adr/ADR-026-tailscale-acl-single-source-iac4.md) | 2026-09-11 |
 
 ## Abhängigkeitsgraph (vereinfacht)
 ```
