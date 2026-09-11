@@ -222,7 +222,7 @@ def load_tolerated(path):
                                   "layout":  [{"kind":"managed"}
                                               | {"kind":"foreign","group","obj","canon"}, …]} },
           "pending":  [],  # v2: keine Platzhalter mehr
-          "source": path, "version": int }
+          "source": path, "source_export_sha256": str|None, "version": int }
     `layout` = geordnete Erwartung der Live-Einträge des Abschnitts: `managed`-
     Token werden in Modell-Reihenfolge konsumiert (ihr Wert kommt aus dem Modell),
     `foreign`-Token tragen den eingefrorenen Soll-Eintrag. `entries` = nur die
@@ -236,6 +236,9 @@ def load_tolerated(path):
                         for s in ("acls", "ssh")},
            "pending": [],
            "source": path,
+           # Provenienz-Anker: SHA256 des Exports, aus dem die Liste abgeleitet
+           # wurde. Wird gegen den verifizierten Export geprüft (s. main).
+           "source_export_sha256": (data.get("source_export_sha256") or "").strip() or None,
            "version": int(data.get("version", 1))}
     for key in data.get("tagOwners", []) or []:
         tol["tagOwners"].append(key)
@@ -523,12 +526,15 @@ def diff_model_vs_live(model, live, tolerated=None):
     - pending:  deklariert, nicht Teil des Solls
     - foreign:  live vorhanden, im Modell UND in der Toleranzliste unbekannt
                 (= unerwarteter Fremdbestand → Drift)
+    - extra:    live enthält MEHR Kopien eines Eintrags als das Modell-Soll
+                (managed) bzw. als das Toleranz-Soll (foreign) – also ein
+                Duplikat/Zusatz. Exakt-Zählung: ein Duplikat ist Drift (exit 1).
     - tolerated_present: dokumentierter Fremdbestand, live vorhanden/unverändert
     - tolerated_missing: dokumentierter Fremdbestand fehlt/verändert (Drift)
     Ist `tolerated` (aus `load_tolerated`) gesetzt, wird der dokumentierte
     Fremdbestand aus `foreign` herausgenommen und separat ausgewiesen.
     """
-    rep = {"missing": [], "changed": [], "foreign": [],
+    rep = {"missing": [], "changed": [], "foreign": [], "extra": [],
            "tolerated_present": [], "tolerated_missing": [],
            "pending_live": [], "pending_missing": [], "order": [],
            "tolerance_active": bool(tolerated)}
@@ -567,34 +573,67 @@ def diff_model_vs_live(model, live, tolerated=None):
         if key not in lkeys:
             rep["tolerated_missing"].append(("tagOwners", key, "fehlt"))
 
-    # acls/ssh (Multimenge, Reihenfolge irrelevant)
+    # acls/ssh — EXAKT-Zählung (Major-Auflage PR #142): ein Eintrag muss GENAU so
+    # oft wie im Modell (managed, == Modell-Soll) bzw. GENAU so oft wie im
+    # Toleranz-Layout (foreign) vorkommen. Jede zusätzliche/doppelte Kopie ist
+    # Drift ("Zusatz") → exit 1 mit Nennung. Damit bleibt die Doku-Zusage "jeder
+    # Zusatz → Abbruch" wahr (Duplikate sind in Tailscale idempotent, werden aber
+    # als Abweichung gewertet).
     for section in ("acls", "ssh"):
-        mcnt = Counter(e.canon for e in model[section])
+        # Soll-Zählung je Kanon: managed (nicht-pending) == Modell …
+        m_soll = Counter(e.canon for e in model[section] if not e.pending)
+        # … pending wird separat geführt (deklariert, NICHT Teil des Live-Solls).
+        p_decl = Counter(e.canon for e in model[section] if e.pending)
+        # … Fremdbestand-Soll je Kanon = Anzahl foreign-Token im positionsgenauen
+        # Layout (derzeit je Kanon genau 1).
+        f_soll = Counter()
+        if tolerated:
+            for t in tolerated["sections"][section]["entries"]:
+                f_soll[t["canon"]] += 1
         lcnt = Counter(e.canon for e in live[section])
         mobj = {e.canon: e for e in model[section]}
-        for c, n in mcnt.items():
+        lobj = {e.canon: e for e in live[section]}
+
+        # (1) managed: exakt das Modell-Soll (==, nicht >=).
+        for c, n in m_soll.items():
             e = mobj[c]
             have = lcnt.get(c, 0)
             if have < n:
-                if e.pending:
-                    rep["pending_missing"].append((section, _short(e.obj), "fehlt"))
-                else:
-                    rep["missing"].append((section, _short(e.obj), "fehlt"))
-            elif e.pending and have >= n:
+                rep["missing"].append((section, _short(e.obj), "fehlt"))
+            elif have > n:
+                rep["extra"].append(
+                    (section, _short(e.obj),
+                     "Duplikat/Zusatz (managed): %d× live, Modell-Soll %d" % (have, n)))
+        # (2) pending: deklariert, nicht Teil des Solls (Präsenz = pending_live).
+        for c, n in p_decl.items():
+            e = mobj[c]
+            have = lcnt.get(c, 0)
+            if have < n:
+                rep["pending_missing"].append((section, _short(e.obj), "fehlt"))
+            else:
                 rep["pending_live"].append((section, _short(e.obj), "vorhanden"))
-        lobj = {e.canon: e for e in live[section]}
-        found_tol = Counter()
+        # (3) Fremdbestand: GENAU das Toleranz-Soll (==, nicht >=). Unbekannte
+        #     Live-Einträge (weder Modell noch Toleranz) → foreign; Überschuss
+        #     eines tolerierten Eintrags → Duplikat/Zusatz.
         for c, n in lcnt.items():
-            if c in mcnt:
-                continue
+            if c in m_soll or c in p_decl:
+                continue  # verwalteter/pending Bestand (oben geprüft)
             if c in tol_sec[section]:
-                found_tol[c] += n
-                rep["tolerated_present"].append((section, _short(lobj[c].obj), "toleriert"))
+                cn = _short(lobj[c].obj)
+                rep["tolerated_present"].append((section, cn, "toleriert"))
+                exp_n = f_soll.get(c, 1)
+                if n > exp_n:
+                    rep["extra"].append(
+                        (section, cn,
+                         "Duplikat/Zusatz (Fremdbestand): %d× live, Toleranz-Soll %d"
+                         % (n, exp_n)))
             else:
                 rep["foreign"].append((section, _short(lobj[c].obj), "unbekannt"))
         if tolerated:
             for t in tolerated["sections"][section]["entries"]:
-                if found_tol.get(t["canon"], 0) < 1:
+                if t["canon"] in m_soll or t["canon"] in p_decl:
+                    continue
+                if lcnt.get(t["canon"], 0) < 1:
                     rep["tolerated_missing"].append(
                         (section, _short(t["obj"]), "fehlt/verändert"))
     rep["order"] = order_diff(model, live, tolerated)
@@ -685,6 +724,7 @@ def print_diff(rep):
     for label, rows in (("Fehlend (Soll, nicht live)", rep["missing"]),
                         ("Geändert (Soll != live)", rep["changed"]),
                         ("Unerwartet fremd in live (Modell+Toleranz unbekannt)", rep["foreign"]),
+                        ("Zusatz/Duplikat (mehr als Modell-/Toleranz-Soll)", rep["extra"]),
                         ("Tolerierter Fremdbestand (vorhanden/unverändert)", rep["tolerated_present"]),
                         ("Tolerierter Fremdbestand fehlt/verändert", rep["tolerated_missing"]),
                         ("Pending deklariert, live vorhanden", rep["pending_live"]),
@@ -698,22 +738,24 @@ def print_diff(rep):
 
 
 def null_diff_ok(rep):
-    """STRENGER Null-Diff (Modell ≡ Live): kein Fehlend/Geändert/Fremd UND
+    """STRENGER Null-Diff (Modell ≡ Live): kein Fehlend/Geändert/Fremd/Zusatz UND
     identische Regel-Reihenfolge (acls/ssh). Formatierung/Kommentare bleiben
     unberücksichtigt. Kein dokumentierter Fremdbestand toleriert."""
     return (not rep["missing"] and not rep["changed"] and not rep["foreign"]
-            and not rep["order"])
+            and not rep["extra"] and not rep["order"])
 
 
 def tolerant_diff_ok(rep):
     """Toleranz-Null-Diff (Owner-Entscheide 2026-09-11, 19:41 + 20:24 UTC):
-    Verwalteter Teil exakt (kein Fehlend/Geändert) + dokumentierter Fremdbestand
-    vollständig/unverändert (kein tolerated_missing) + kein unerwarteter
-    Fremdbestand (kein foreign) + POSITIONSGENAUE Reihenfolge inkl. verschränktem
-    Fremdbestand eingehalten (kein order). Formatierung/Kommentare bleiben
-    unberücksichtigt."""
+    Verwalteter Teil exakt (kein Fehlend/Geändert/Zusatz) + dokumentierter
+    Fremdbestand vollständig/unverändert (kein tolerated_missing, kein Duplikat)
+    + kein unerwarteter Fremdbestand (kein foreign) + POSITIONSGENAUE
+    Reihenfolge inkl. verschränktem Fremdbestand eingehalten (kein order).
+    Formatierung/Kommentare bleiben unberücksichtigt. EXAKT-Zählung: jede
+    zusätzliche/doppelte Kopie ist Drift (rep["extra"]) → exit 1."""
     return (not rep["missing"] and not rep["changed"] and not rep["foreign"]
-            and not rep["tolerated_missing"] and not rep["order"])
+            and not rep["extra"] and not rep["tolerated_missing"]
+            and not rep["order"])
 
 
 def print_tolerance_info(tol, path):
@@ -983,9 +1025,13 @@ def parse_args():
     p.add_argument("--tolerated-foreign", nargs="?", default=None,
                    const=DEFAULT_TOLERATED_PATH, metavar="DATEI",
                    help="Fremdbestand-Toleranzliste (JSON) für --verify/--dry-run; "
-                        "ohne Wert: %s. Nur Einträge mit status='tolerated' werden "
-                        "toleriert. Ohne dieses Flag bleibt der strikte Null-Diff "
-                        "(jeder Fremdbestand = Drift)." % DEFAULT_TOLERATED_PATH)
+                        "ohne Wert: %s. Verifiziert EXAKT: jeder managed-Eintrag "
+                        "== Modell-Soll, jeder foreign-Eintrag genau wie im Layout "
+                        "(Duplikat/Zusatz -> exit 1). Wird gegen eine Export-Datei "
+                        "geprüft, muss deren SHA256 == source_export_sha256 sein "
+                        "(Provenienz-Anker). Ohne dieses Flag bleibt der strikte "
+                        "Null-Diff (jeder Fremdbestand = Drift)."
+                        % DEFAULT_TOLERATED_PATH)
     p.add_argument("--export", action="store_true",
                    help="Inventar: read-only GET → rohe huJSON + SHA256 nach --out.")
     p.add_argument("--out", default=None,
@@ -1117,6 +1163,23 @@ def main():
             print("❌ Toleranzliste nicht lesbar/ungültig (%s): %s"
                   % (args.tolerated_foreign, exc))
             return 1
+        # Provenienz-Anker (Minor-Auflage PR #142): die Toleranzliste ist an einen
+        # konkreten, eingefrorenen Export gebunden. Wird gegen eine Export-DATEI
+        # verifiziert, MUSS deren SHA256 zu `source_export_sha256` passen – sonst
+        # bestätigt sich die Toleranzliste strukturell selbst (der Anker wäre nur
+        # Dokumentation). Mismatch → Abbruch OHNE Auswertung.
+        anchor = tol.get("source_export_sha256")
+        export_file = args.file or args.snapshot
+        if anchor and export_file:
+            actual = _sha256(live_text)
+            if actual != anchor:
+                print("❌ Provenienz-Anker verletzt: SHA256 der Export-Datei (%s) "
+                      "!= source_export_sha256 der Toleranzliste (%s) – Abbruch "
+                      "(die Toleranzliste passt nicht zum verifizierten Export)."
+                      % (actual, anchor))
+                return 1
+            print("🔒 Provenienz-Anker ok: Export-SHA256 == source_export_sha256 "
+                  "(%s)" % actual)
 
     rep = diff_model_vs_live(model, live, tol)
     if args.verify:

@@ -37,7 +37,9 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
 3. **Erfolgskriterium (Owner-Entscheid F4=(a), präzisiert 2026-09-11 19:41 UTC;
    positionsgenau 2026-09-11 20:24 UTC):**
    Der Abgleich `--verify <export-datei> --tolerated-foreign <liste>` gilt als
-   bestanden, wenn der **verwaltete Teil** (Modelleinträge) **semantisch exakt**
+   bestanden, wenn der **verwaltete Teil** (Modelleinträge, **inkl. der
+   `base`-Einträge** — IaC3-/pre-IaC4-Basis: `tagOwners` `tag:ia3`/`tag:ci` +
+   Basis-Regel `ci/member/admin → tag:ia3`) **semantisch exakt**
    matcht **inkl. Regel-Reihenfolge** (`acls`/`ssh`) **und** der **dokumentierte
    Fremdbestand** **positionsgenau** unverändert vorhanden ist (jeder Eintrag an
    **seiner** dokumentierten Position, in **genau der** dokumentierten
@@ -54,6 +56,13 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
    `acl/tolerated-foreign.json` erfasst (Gruppe `iac3`, 5 Einträge): Sie müssen
    vollständig und **positionsgenau** an ihren **Live-Positionen** erhalten
    bleiben, unterliegen aber **nicht** der IaC4-Modellierung.
+
+   **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
+   `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
+   HA-Regeln 1–6 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
+   IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Damit ist **nicht** der *gesamte*
+   IaC3-Altbestand toleriert: die `base`-Einträge sind verwaltet und werden
+   **strenger** geprüft (`missing`/`changed`, nicht „toleriert").
 
    Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`, aus der
    Owner-Konsole) wurden mit dem **Owner-Entscheid 2026-09-11 (19:52 UTC, „Ja“)**

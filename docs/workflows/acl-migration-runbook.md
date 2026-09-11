@@ -162,6 +162,13 @@ Teil 1:1** (Zero-Delta des verwalteten Teils) **+ dokumentierter Fremdbestand
 unverändert**. Owner-Entscheid 2026-09-11 (19:41 UTC): „IaC3 nicht übernehmen" –
 IaC3 ist eine **eigene Zuständigkeit** und wird **nicht mitverwaltet**.
 
+> **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
+> `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
+> HA-Regeln 1–6 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
+> IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Es ist **nicht** der *gesamte*
+> IaC3-Altbestand toleriert — die `base`-Einträge sind verwaltet und werden
+> **strenger** geprüft (`missing`/`changed`, nicht „toleriert").
+
 1. `acl/tailscale-acl.hujson` für den **verwalteten Teil** 1:1 aus dem Inventar
    ableiten. Ziel: der verwaltete Teil matcht Live **exakt inkl. Reihenfolge**
    (Zero-Delta des verwalteten Teils).
@@ -206,7 +213,13 @@ IaC3 ist eine **eigene Zuständigkeit** und wird **nicht mitverwaltet**.
      *innerhalb* einer Regel bleiben **unberücksichtigt**.
    exit != 0 bei Fehlend/Geändert **oder** fehlendem/verändertem/verschobenem
    Fremdbestand **oder** unerwartetem Fremdbestand **oder** Positions-/Reihenfolge-
-   Abweichung (mit Nennung des Eintrags).
+   Abweichung (mit Nennung des Eintrags). **Exakt-Zählung (PR-#142-Auflage):** jede
+   **zusätzliche/doppelte Kopie** eines bekannten Eintrags (verwaltet **oder**
+   fremd; `extra`) ist Drift → exit 1 — die Zusage „jeder Zusatz → Abbruch" gilt
+   damit auch für Duplikate. **Provenienz-Anker:** Wird gegen eine Export-Datei
+   verifiziert, prüft das Skript deren SHA256 gegen `source_export_sha256` der
+   Toleranzliste; Mismatch → Abbruch (die Liste bestätigt sich nicht strukturell
+   selbst).
    Hinweis: Der strikte Null-Diff (`--verify` **ohne** `--tolerated-foreign`)
    bleibt verfügbar; er fordert Modell ≡ Live ohne jeden Fremdbestand.
    ✅ **M3-Status (20:24 UTC, J1):** Mit der positionsgenauen Modellierung ist das

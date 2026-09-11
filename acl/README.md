@@ -56,7 +56,9 @@ Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
 
 `--verify <export> --tolerated-foreign <liste>` gilt als bestanden, wenn
 
-- der **verwaltete Teil** (Modelleinträge) **exakt** matcht **inkl. Reihenfolge**
+- der **verwaltete Teil** (Modelleinträge, **inkl. der `base`-Einträge** — der
+  IaC3-/pre-IaC4-Basis: `tagOwners` `tag:ia3`/`tag:ci` **und** die Basis-Regel
+  `ci/member/admin → tag:ia3`) **exakt** matcht **inkl. Reihenfolge**
   (`acls`/`ssh`) — Zero-Delta **nur** des verwalteten Teils;
 - der **dokumentierte Fremdbestand** (siehe `tolerated-foreign.json`)
   **positionsgenau** unverändert vorhanden ist — jeder Fremdbestand-Eintrag an
@@ -101,6 +103,13 @@ IaC3-Einträge (`tag:ia3`-Regeln + SSH admin/member/ci → `tag:ia3`) sind **eig
 Zuständigkeit** und werden **nicht** ins Modell aufgenommen; sie bleiben als
 **dokumentierter Fremdbestand** in `tolerated-foreign.json` (Gruppe `iac3`,
 aktiv toleriert, **5 Einträge**).
+
+> **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
+> `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
+> HA-Regeln 1–6 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
+> IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Es ist also **nicht** der *gesamte*
+> IaC3-Altbestand toleriert: die `base`-Einträge sind verwaltet und werden
+> **strenger** geprüft (als `missing`/`changed`, nicht „toleriert“).
 
 Owner-Entscheid 2026-09-11 (19:52 UTC): **„Ja“** — die **vier Konsolen-Einträge**
 (Regel-1-Cluster `owner` ↔ `tag:ha`, aus der Admin-Konsole) wurden **ins Modell

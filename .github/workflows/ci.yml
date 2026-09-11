@@ -60,3 +60,9 @@ jobs:
             echo "❌ arc42 unvollständig – Living Docs pflegen (P4)"
             exit 1
           fi
+
+      - name: ACL-Modell-Gates (SSoT, offline; Auflage PR142)
+        run: python3 scripts/ensure-acl.py --check-model
+
+      - name: ACL-Offline-Nachweise (kein Netz, kein POST; Auflage PR142)
+        run: python3 acl/tests/offline_tests.py

@@ -29,9 +29,16 @@ Aufruf: python3 acl/tests/offline_tests.py
       (iii) Foreign-Eintrag VERÄNDERT -> exit 1;
       (iv) unerwarteter ZUSATZ-Eintrag -> exit 1;
       (v)  Foreign-Eintrag FEHLT -> exit 1.
+ 8h/8i. EXAKT-Zählung (Major-Auflage PR #142): ein DUPLIKAT eines bekannten
+    Eintrags ist Drift (exit 1 mit Nennung) – verwaltet (8h) wie fremd (8i).
+    Damit bleibt die Doku-Zusage "jeder Zusatz -> Abbruch" wahr.
+ 8j. Provenienz-Anker: `source_export_sha256` der Toleranzliste wird gegen die
+    verifizierte Export-Datei geprüft; Mismatch -> exit 1 (die Liste bestätigt
+    sich nicht mehr strukturell selbst).
     Toleranzliste: acl/tolerated-foreign.json (nur IaC3 aktiv, 5 Einträge;
     die 4 Konsolen-Einträge sind seit 2026-09-11 19:52 UTC Teil des Modells).
 """
+import hashlib
 import importlib.util
 import json
 import os
@@ -262,11 +269,27 @@ def main():
 
     ttmp = tempfile.mkdtemp()
 
-    def verify(path, tolerated=True):
+    def _sha_text(t):
+        return hashlib.sha256(t.encode("utf-8")).hexdigest()
+
+    def tol_matching(path):
+        """Toleranzliste (Kopie) mit `source_export_sha256` passend zur
+        Zieldatei – damit der Provenienz-Anker (PR-#142-Auflage) hält und die
+        Drift-Fälle unabhängig davon geprüft werden."""
+        with open(TOLERATED, encoding="utf-8") as f:
+            d = json.load(f)
+        with open(path, encoding="utf-8") as f:
+            d["source_export_sha256"] = _sha_text(f.read())
+        p = os.path.join(ttmp, "tol-%s" % os.path.basename(path))
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False)
+        return p
+
+    def verify(path, tolerated=True, tol=None):
         cmd = [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
                "--verify", path]
         if tolerated:
-            cmd += ["--tolerated-foreign", TOLERATED]
+            cmd += ["--tolerated-foreign", tol or tol_matching(path)]
         return subprocess.run(cmd, capture_output=True, text=True)
 
     def write_live(name, mutate, base=None):
@@ -361,6 +384,37 @@ def main():
           p_strict.returncode == 1
           and "Unerwartet fremd in live (Modell+Toleranz unbekannt): 5" in p_strict.stdout,
           "rc=%d" % p_strict.returncode)
+
+    # 8h) EXAKT-Zählung (Major-Auflage PR #142): Duplikat eines VERWALTETEN
+    #     Eintrags -> exit 1 (managed == Modell-Soll, NICHT >=).
+    p_dup_m = write_live("tol-dup-managed.hujson", lambda d: d["acls"].append(
+        {"action": "accept", "src": ["tag:ha"], "dst": ["autogroup:owner:*"]}))
+    p = verify(p_dup_m)
+    check("(8h) Duplikat eines verwalteten Eintrags -> exit 1",
+          p.returncode == 1, "rc=%d" % p.returncode)
+    check("(8h) gemeldet als Zusatz/Duplikat (managed)",
+          "Zusatz/Duplikat (mehr als Modell-/Toleranz-Soll): 1" in p.stdout
+          and "Duplikat/Zusatz (managed)" in p.stdout, "nicht gemeldet")
+
+    # 8i) EXAKT-Zählung: Duplikat eines FREMD-Eintrags -> exit 1 (foreign genau 1×).
+    p_dup_f = write_live("tol-dup-foreign.hujson", lambda d: d["acls"].append(
+        {"action": "accept", "src": ["tag:ia3"], "dst": ["tag:ia3:*"]}))
+    p = verify(p_dup_f)
+    check("(8i) Duplikat eines Fremdbestand-Eintrags -> exit 1",
+          p.returncode == 1, "rc=%d" % p.returncode)
+    check("(8i) gemeldet als Zusatz/Duplikat (Fremdbestand)",
+          "Duplikat/Zusatz (Fremdbestand)" in p.stdout, "nicht gemeldet")
+
+    # 8j) Provenienz-Anker: Toleranzliste (source_export_sha256 = eingefrorener
+    #     Export) gegen eine ANDERE Datei -> exit 1 (Mismatch -> Abbruch; die
+    #     Liste bestätigt sich nicht mehr strukturell selbst).
+    p = subprocess.run(
+        [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
+         "--verify", FIXTURE_TOL, "--tolerated-foreign", TOLERATED],
+        capture_output=True, text=True)
+    check("(8j) Provenienz-Mismatch (Toleranz != Export-Datei) -> exit 1",
+          p.returncode == 1 and "Provenienz-Anker" in p.stdout,
+          "rc=%d" % p.returncode)
 
     print("")
     if _failures:
