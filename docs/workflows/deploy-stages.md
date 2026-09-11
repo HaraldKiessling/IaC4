@@ -60,9 +60,27 @@ aus dem Node-Hostnamen (`vps-dev`) auf – ein `VPS_DEV_HOST`-Secret ist dafür 
 
 1. `00-generate-ssh-key.yml`           → SSH-Key-Paar generieren + Secrets anlegen (einmalig)
 2. `01-tailscale-terraform.yml`        → Tailscale OAuth + ACLs (Terraform Plan/Apply, einmalig)
-3. `02-tailscale-bootstrap.yml`        → Phase 2a + 2b (via Public-IP, schliesst SSH 🔒)
+3. `02-tailscale-bootstrap.yml`        → `mode=bootstrap`: Phase 2a + 2b (via Public-IP, schliesst SSH 🔒)
 4. `03-baseline-deploy.yml`            → Phase 1 (via Tailscale-IP 🔒)
 5. Danach: weitere Services via Tailscale (04-service-deploy; OpenClaw-Instanz-Deployment
    via `04-service-deploy` playbook=openclaw, deployed 2026-08-01 – siehe
    `docs/plans/iac4-migration.md`; Workflow 05 = Freigabe + Geräte-Verwaltung
    (Telegram-Pairing + Device-Approve, v3.6 – siehe `tools/device-approve/README.md`)
+
+> **Hinweis (Issue #135):** Der Workflow-**Pfad** `mode=bootstrap` bleibt
+> unverändert (Phase 2a + 2b). Die **Tailscale-Rolle** ändert sich jedoch: der
+> Join (`ansible/roles/tailscale/tasks/main.yml`) setzt `tailscale up …` nun
+> zusätzlich `--accept-routes` (Default `true`, vgl. `group_vars/all.yml`) —
+> gewollt für künftige VPS.
+
+## On-Demand-Wartung (nicht Teil der Reihenfolge)
+
+- `02-tailscale-bootstrap.yml` mit **`mode=accept-routes`** → setzt **nur** den
+  Client-Pref `--accept-routes` auf vps-dev/vps-prod (kein Re-Join, läuft
+  ausschließlich über das Tailnet; die Public-IP ist nach Phase 2b geschlossen).
+  Soll-Wert über Input **`accept_routes`** (`true|false`, Default `true`;
+  `false` = Rückweg/Rollback). Erst **Dry-Run** (`--check --diff`, immer), dann
+  **Anwenden nur mit `confirm=APPLY-ACCEPT-ROUTES`**. Einstieg ist also
+  **Workflow 02** (kein eigener Workflow). Siehe
+  `docs/workflows/tailscale-accept-routes-runbook.md` (Issue #135).
+  **Prod (`target=prod`) + Anwenden führt der Owner aus.**

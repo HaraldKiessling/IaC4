@@ -344,4 +344,8 @@ einzubringen: `docs/reference/tailscale-acl.md` + Header-Hinweis im Apply-Workfl
 3. Tag→Node-Inventar (ha1/ha3, vps-dev/vps-prod) für den Blast-Radius.
 4. ~~Doku-Widerspruch „Regel 6 live?" per Live-GET klären.~~ **aufgelöst 2026-09-11**
    (Regel 6 = Live-Soll, belegt per Run-Log; siehe „Live-Bestand").
-5. `--accept-routes` in IaC verankern (separater Task, nicht hier).
+5. ~~`--accept-routes` in IaC verankern (separater Task, nicht hier).~~ **verankert
+   2026-09-11** (Issue #135): idempotente Rolle-Task + Mini-Playbook
+   `ansible/playbooks/tailscale-accept-routes.yml` + Ausführungspfad in
+   **Workflow 02** (`02-tailscale-bootstrap.yml`, `mode=accept-routes`); Runbook
+   `docs/workflows/tailscale-accept-routes-runbook.md`. Kein Apply/Re-Join.

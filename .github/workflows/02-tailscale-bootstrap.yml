@@ -1,16 +1,44 @@
 ---
 # =============================================================================
-# 02 – Tailscale Bootstrap — MUSS VOR Workflow 03 (Baseline-Deploy) laufen!
-#   Läuft über Public-IP (einziger offener Weg beim frischen VPS).
-#   Schließt SSH auf der Public-IP (UFW), Allow nur für Tailscale-CGNAT.
-#   Cleanup: offline vps-<target>-Nodes → umbenennen (NIE löschen).
+# 02 – Tailscale Bootstrap / accept-routes — Bootstrap MUSS VOR Workflow 03
+#      (Baseline-Deploy) laufen!
+#
+#   Modi (Input `mode`):
+#     bootstrap     (Default) – frischer VPS, Phase 2a + 2b über die Public-IP
+#                     (einziger offener Weg beim frischen VPS): Tailscale
+#                     installieren + joinen, SSH auf der Public-IP schließen
+#                     (UFW, Allow nur für Tailscale-CGNAT).
+#                     Cleanup: offline vps-<target>-Nodes → umbenennen (NIE löschen).
+#     accept-routes – NUR der Client-Pref `--accept-routes` auf einem BESTEHENDEN,
+#                     bereits gejointen Knoten (vps-dev/vps-prod); KEIN Re-Join
+#                     (`tailscale up`), kein Auth-Key, kein Dienst-Neustart.
+#                     Läuft ausschließlich über das Tailnet (die Public-IP ist nach
+#                     Phase 2b geschlossen). Reihenfolge: erst Dry-Run
+#                     (`--check --diff`, zeigt nur Ist vs. Soll, ändert nichts),
+#                     dann Anwenden nur mit `confirm=APPLY-ACCEPT-ROUTES`.
+#                     Soll-Wert über Input `accept_routes` (true|false, Default true)
+#                     → geht als Extra-Var `-e tailscale_accept_routes=…` an Step 10/11;
+#                     `accept_routes=false` ist der dokumentierte Rückweg (Rollback).
+#                     PROD-REGEL (Owner): `target=prod` + Anwenden führt der OWNER
+#                     aus (Harald). Siehe
+#                     docs/workflows/tailscale-accept-routes-runbook.md (Issue #135).
+#
+#   Governance: ausschließlich manuell (`workflow_dispatch`) – KEIN push/PR/schedule.
 # Siehe docs/workflows/deploy-stages.md
 # =============================================================================
-name: "02 – Tailscale Bootstrap (Phase 2a + 2b, via Public-IP)"
+name: "02 – Tailscale Bootstrap / accept-routes (Public-IP bzw. Tailnet)"
 
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'bootstrap = frischer VPS über Public-IP (Phase 2a+2b); accept-routes = nur Client-Pref auf bestehendem Knoten (Tailnet, kein Re-Join)'
+        required: true
+        default: 'bootstrap'
+        type: choice
+        options:
+          - bootstrap
+          - accept-routes
       target:
         description: 'Ziel-VPS'
         required: true
@@ -19,13 +47,30 @@ on:
         options:
           - dev
           - prod
+      confirm:
+        description: 'Nur mode=accept-routes + Anwenden erforderlich: exakt APPLY-ACCEPT-ROUTES (der Dry-Run braucht kein Wort)'
+        required: false
+        default: ''
+        type: string
+      accept_routes:
+        description: 'Nur mode=accept-routes: Soll-Wert für --accept-routes (true = Routen annehmen; false = Rückweg/Rollback)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 permissions:
   contents: write
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # mode=bootstrap – unveränderter Public-IP-Pfad (Phase 2a + 2b)
+  # ---------------------------------------------------------------------------
   tailscale-bootstrap:
     name: "Tailscale install + join + restrict SSH"
+    if: inputs.mode == 'bootstrap'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -210,7 +255,7 @@ jobs:
           NODE="vps-${{ inputs.target }}"
           TS_IP=$(curl -s \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
-            -H "Authorization: Bearer ${TS_TOKEN}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+            -H "Authorization: Bearer ${TS_TOKEN}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0] | (.addresses // []) | ((map(select(startswith("100."))) | .[0]) // .[0]) // empty' | head -1)
           echo "SSH-Verifikation via Tailscale-IP: ${TS_IP}"
           echo "TS_IP=${TS_IP}" >> $GITHUB_ENV
           sleep 15
@@ -254,3 +299,156 @@ jobs:
           if [ "$DELETED" = "0" ]; then
             echo "Keine verwaisten ${NODE}-old-* Nodes vorhanden"
           fi
+
+  # ---------------------------------------------------------------------------
+  # mode=accept-routes – Issue #135: NUR Client-Pref setzen, ohne Re-Join.
+  # Läuft ausschließlich über das Tailnet (Public-IP ist nach Phase 2b zu).
+  # Reihenfolge: Dry-Run immer → Anwenden nur mit confirm=APPLY-ACCEPT-ROUTES.
+  # ---------------------------------------------------------------------------
+  accept-routes:
+    name: "accept-routes (${{ inputs.target }}, via Tailnet, ohne Re-Join)"
+    if: inputs.mode == 'accept-routes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "(1) Governance-Guard – mode/confirm"
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+          TARGET: ${{ inputs.target }}
+          ACCEPT_ROUTES: ${{ inputs.accept_routes }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            bootstrap|accept-routes) ;;
+            *) echo "::error::Ungültiger mode='$MODE' (erlaubt: bootstrap|accept-routes)"; exit 1 ;;
+          esac
+          case "$ACCEPT_ROUTES" in
+            true|false) ;;
+            *) echo "::error::Ungültiger accept_routes='$ACCEPT_ROUTES' (erlaubt: true|false)"; exit 1 ;;
+          esac
+          # Der Dry-Run braucht KEIN Bestätigungswort. Nur ein gesetztes, falsches
+          # Wort wird abgewiesen (Anwenden läuft zusätzlich über den Step-if).
+          if [ -n "$CONFIRM" ] && [ "$CONFIRM" != "APPLY-ACCEPT-ROUTES" ]; then
+            echo "::error::Anwenden verlangt confirm='APPLY-ACCEPT-ROUTES' – '$CONFIRM' ist ungültig."
+            exit 1
+          fi
+          if [ "$TARGET" = "prod" ]; then
+            echo "⚠️  target=prod – PROD-REGEL: Das Anwenden führt der OWNER aus (Harald)."
+          fi
+          echo "✅ Guard ok (target=$TARGET, mode=$MODE, accept_routes=$ACCEPT_ROUTES, apply=$([ "$CONFIRM" = "APPLY-ACCEPT-ROUTES" ] && echo ja || echo nein), actor=${{ github.actor }})"
+
+      - name: "(2) Vorbedingungen prüfen"
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          set -euo pipefail
+          FAIL=0
+          [ -n "$SSH_KEY" ] || { echo "❌ Secret SSH_KEY fehlt"; FAIL=1; }
+          [ -n "$VPS_USER" ] || { echo "❌ Secret VPS_USER fehlt"; FAIL=1; }
+          [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt"; FAIL=1; }
+          [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt"; FAIL=1; }
+          [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
+          [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
+          echo "✅ Vorbedingungen ok (kein VPS_*_PUBLIC_IP nötig – Weg über Tailnet)"
+
+      - name: "(3) Runner ins Tailnet (MagicDNS)"
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: "(4) Netmap-Sync abwarten"
+        run: sleep 15
+
+      - name: "(5) Tailscale OAuth-Token holen (IaC3-Verfahren)"
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          echo "::add-mask::${TS_TOKEN}"
+          echo "TS_TOKEN=${TS_TOKEN}" >> "$GITHUB_ENV"
+
+      - name: "(6) VPS Tailscale-IP ermitteln (Tailscale-API)"
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          set -euo pipefail
+          NODE="vps-${{ inputs.target }}"
+          API_RESP=$(curl -sS -w "\nHTTP_CODE:%{http_code}" \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            -H "Authorization: Bearer ${TS_TOKEN}")
+          HTTP_CODE=$(printf '%s' "$API_RESP" | tail -1 | cut -d: -f2)
+          API_BODY=$(printf '%s' "$API_RESP" | sed '$d')
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ API-Fehler (HTTP ${HTTP_CODE}):"
+            printf '%s\n' "$API_BODY" | head -5
+            exit 1
+          fi
+          TS_IP=$(printf '%s' "$API_BODY" | jq -r --arg n "$NODE" \
+            '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0] | (.addresses // []) | ((map(select(startswith("100."))) | .[0]) // .[0]) // empty' | head -1)
+          if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
+            echo "❌ Keine Tailscale-IP für Node ${NODE} gefunden (Node nicht gejoint?)."
+            echo "   Vorbedingung: Workflow 02 mode=bootstrap muss zuerst gelaufen sein."
+            exit 1
+          fi
+          echo "VPS_TS_IP=${TS_IP}" >> "$GITHUB_ENV"
+          echo "✅ ${NODE} → ${TS_IP}"
+
+      - name: "(7) SSH-Key vorbereiten"
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_TS_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: "(8) Ansible installieren"
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
+
+      - name: "(9) Inventory-Datei erstellen (Tailscale-IP)"
+        run: |
+          set -euo pipefail
+          printf '[vps]\n%s ansible_host=%s ansible_user=%s\n' \
+            "vps-${{ inputs.target }}" "$VPS_TS_IP" "$VPS_USER" > /tmp/inventory
+          cat /tmp/inventory
+
+      - name: "(10) accept-routes – Dry-Run (--check --diff, immer)"
+        working-directory: ansible
+        run: |
+          set -euo pipefail
+          ansible-playbook playbooks/tailscale-accept-routes.yml \
+            -i /tmp/inventory --check --diff \
+            -e '{"tailscale_accept_routes": ${{ inputs.accept_routes }}}'
+
+      - name: "(11) accept-routes – Anwenden (nur mit confirm=APPLY-ACCEPT-ROUTES)"
+        if: inputs.confirm == 'APPLY-ACCEPT-ROUTES'
+        working-directory: ansible
+        run: |
+          set -euo pipefail
+          echo "⚠️  Owner-Go bestätigt (confirm=APPLY-ACCEPT-ROUTES, target=${{ inputs.target }}, accept_routes=${{ inputs.accept_routes }})."
+          ansible-playbook playbooks/tailscale-accept-routes.yml \
+            -i /tmp/inventory \
+            -e '{"tailscale_accept_routes": ${{ inputs.accept_routes }}}'
+
+      - name: "(12) Verifikation (Ist-Zustand via Tailscale-SSH)"
+        run: |
+          set -euo pipefail
+          echo "--- accept-routes Ist-Wert (via Tailscale-SSH):"
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+            "$VPS_USER@$VPS_TS_IP" \
+            "tailscale get accept-routes; tailscale ip -4"
+          echo "✅ Fertig. Ohne confirm=APPLY-ACCEPT-ROUTES wurde nichts geschrieben (Dry-Run)."

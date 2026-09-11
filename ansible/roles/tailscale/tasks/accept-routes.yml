@@ -1,0 +1,89 @@
+---
+# =============================================================================
+# Tailscale-Rolle – accept-routes deklarativ + idempotent (Issue #135)
+#
+# Zweck: Subnetz-/Exit-Routen, die andere Tailnet-Knoten bewerben (z. B. ha1
+# bewirbt 192.168.0.0/24), müssen auf vps-dev/vps-prod angenommen werden. Ohne
+# `--accept-routes` bleibt die zugehörige Energie-Regel wirkungslos.
+#
+# WICHTIG:
+#   * REINER Pref-Setzer – KEIN `tailscale up`-Re-Join, KEIN Auth-Key, KEIN
+#     Dienst-Neustart. Der bestehende, laufende Zustand bleibt erhalten.
+#   * Idempotent: 2. Lauf = 1. Lauf (kein `changed`, wenn Soll == Ist).
+#   * Read-only-Read läuft auch im `--check`-Modus (Drift wird gemeldet, das
+#     Setzen selbst wird im `--check` korrekt übersprungen).
+#
+# Soll-Zustand (dokumentiert; nur dieses Flag):
+#   tailscale_accept_routes → `--accept-routes` (Default: true; vgl. group_vars/all.yml)
+# Bewusst NICHT gesetzt (kein Eingriff, bleibt manuell):
+#   --exit-node, --accept-dns, --shields-up, --advertise-*
+#
+# Evidenz: `tailscale get --json accept-routes` → {"accept-routes": <bool>}
+# (Pref RouteAll); `tailscale set --accept-routes[=false]`.
+# Quelle: https://tailscale.com/kb/1080/cli (Tailscale CLI, `get`/`set`).
+# =============================================================================
+
+- name: "accept-routes – Ist-Wert lesen (read-only, auch im --check)"
+  ansible.builtin.command: tailscale get --json accept-routes
+  register: tailscale_accept_routes_get
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: "accept-routes – Ist-Wert lesen (Fallback: debug prefs, ältere Clients)"
+  ansible.builtin.command: tailscale debug prefs
+  register: tailscale_accept_routes_prefs
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: tailscale_accept_routes_get.rc | default(1) != 0
+
+- name: "accept-routes – Tailscale-Zustand lesbar? (sonst Blocker)"
+  ansible.builtin.assert:
+    that:
+      - (tailscale_accept_routes_get.rc | default(1) == 0)
+        or (tailscale_accept_routes_prefs.rc | default(1) == 0)
+    fail_msg: >-
+      Tailscale-Zustand nicht lesbar (`tailscale get accept-routes` und
+      `tailscale debug prefs` fehlgeschlagen). Ist Tailscale installiert und
+      der Client verbunden? (Kein Re-Join durch diese Task – separater Schritt.)
+    success_msg: "Tailscale-Zustand lesbar."
+
+- name: "accept-routes – Ist-Wert bestimmen"
+  ansible.builtin.set_fact:
+    tailscale_accept_routes_current: >-
+      {{
+        ((tailscale_accept_routes_get.stdout | from_json)['accept-routes'] | bool)
+        if (tailscale_accept_routes_get.rc | default(1) == 0)
+        else ((tailscale_accept_routes_prefs.stdout | from_json).RouteAll | default(false) | bool)
+      }}
+
+- name: "accept-routes – Zielzustand bestimmen"
+  ansible.builtin.set_fact:
+    tailscale_accept_routes_desired: "{{ tailscale_accept_routes | default(true) | bool }}"
+
+- name: "accept-routes – Zustand prüfen (Idempotenz-Nachweis)"
+  ansible.builtin.debug:
+    msg: >-
+      accept-routes: ist={{ tailscale_accept_routes_current }}
+      soll={{ tailscale_accept_routes_desired }} →
+      {{ 'DRIFT – wird gesetzt' if (tailscale_accept_routes_current != tailscale_accept_routes_desired) else 'keine Änderung (idempotent)' }}
+
+- name: "accept-routes setzen (nur bei Drift; kein Re-Join)"
+  # `changed_when: true` ist korrekt: die `when`-Bedingung lässt die Task nur bei
+  # echtem Drift laufen (nur dann ändern wir den Pref).
+  ansible.builtin.command: >-
+    tailscale set --accept-routes={{
+    tailscale_accept_routes_desired | ternary('true', 'false') }}
+  when: tailscale_accept_routes_current != tailscale_accept_routes_desired
+  changed_when: true
+  register: tailscale_accept_routes_set
+
+- name: "accept-routes – Ergebnis verifizieren"
+  ansible.builtin.assert:
+    that:
+      - (tailscale_accept_routes_set is not defined)
+        or (tailscale_accept_routes_set.skipped | default(false))
+        or (tailscale_accept_routes_set.rc | default(0) == 0)
+    success_msg: "accept-routes Soll={{ tailscale_accept_routes_desired }} – Ist stimmt mit Soll überein."
+    fail_msg: "accept-routes konnte nicht gesetzt werden (rc != 0)."
