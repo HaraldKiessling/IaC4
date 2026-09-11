@@ -158,6 +158,27 @@ def main():
     check("Regel-Reihenfolge nach Einfügung erhalten (acls/ssh)", ord_problems == [],
           "; ".join(ord_problems))
 
+    # 3b) Kommentare in der Live-Policy (z. B. auskommentierte `//{ … //},`-Blöcke
+    #     aus der Tailscale-Owner-Konsole) dürfen die strukturelle Einfügung NICHT
+    #     stören. Live-Befund 2026-09-11: `_iter_objects` zählte die Klammern in
+    #     Kommentaren mit -> `insert_entries`-Absturz VOR dem POST. Fix:
+    #     kommentar-maskendes Scannen (`_mask_comments`).
+    commented = minus_text.replace(
+        '"acls": [',
+        '"acls": [\n    //{\n    //  "action": "accept",\n    //  "src": ["*"],\n    //  "dst": ["*:*"],\n    //},')
+    check("3b: Kommentar-Blöcke ändern die geparste Policy nicht",
+          len(m.parse_live(commented)["acls"]) == len(minus_live["acls"]))
+    ctext = commented
+    for section in m.SECTION_ORDER:
+        ents = [e for e in iac4 if e.section == section]
+        if ents:
+            ctext = m.insert_entries(ctext, section, ents, model[section])
+    ok_c, det_c = m.semantic_additivity(commented, ctext, iac4)
+    check("3b: Einfügen in kommentierte Live-Policy rein additiv (kein Absturz)",
+          ok_c, "; ".join(det_c))
+    check("3b: Reihenfolge in kommentierter Policy erhalten",
+          m.order_diff(model, m.parse_live(ctext)) == [])
+
     # 4) Negativ-Test: entfernte Bestandsregel wird erkannt
     broken = json.loads(new_text)
     broken["acls"] = broken["acls"][1:]  # erste Regel (base ia3) entfernen
