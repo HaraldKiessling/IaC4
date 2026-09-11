@@ -1,7 +1,7 @@
 # ADR-Detailblätter (IaC4)
 
-> **SSoT:** Alle Architekturentscheidungen werden in `docs/arc42/09_architekturentscheidungen.md` geführt (Tabelle ADR-001..024).
-> Diese Dateien sind die **Detailblätter** zu den Entscheidungen ab 2026-07-31 (ADR-015..024, Docker/Traefik/Ollama) — mit Optionen, fachlichen Auswirkungen, Evidenz, Worst-Case/Rollback.
+> **SSoT:** Alle Architekturentscheidungen werden in `docs/arc42/09_architekturentscheidungen.md` geführt (Tabelle ADR-001..026).
+> Diese Dateien sind die **Detailblätter** zu den Entscheidungen ab 2026-07-31 (ADR-015..026, Docker/Traefik/Ollama/ACL) — mit Optionen, fachlichen Auswirkungen, Evidenz, Worst-Case/Rollback.
 > Status: `Vorgeschlagen` → (Harald-Entscheidung) → `Akzeptiert` → ggf. `Superseded`.
 > **Review:** 5W-Prüfung (AGENTS.md P3) + Konsistenz-Check durch 🏗️ Architect (2026-07-31) — Befunde vollständig eingearbeitet (Worst-Case/Rollback, Supersedes, Quellen).
 
@@ -18,6 +18,7 @@
 | ADR-023 | [023](ADR-023-ollama-embedding-modell.md) | Embedding-Modell | Vorgeschlagen | nomic-embed-text (nur ZooCode; Qdrant bleibt 3072d) |
 | ADR-024 | [024](ADR-024-service-deploy-workflow.md) | Deploy-Workflow | Vorgeschlagen | Ein Workflow + Playbook-Selektion |
 | ADR-025 | [025](ADR-025-openclaw-deployment.md) | OpenClaw-Deployment | Vorgeschlagen | Nativ/systemd (Docker nur Sandbox) |
+| ADR-026 | [026](ADR-026-tailscale-acl-single-source-iac4.md) | Tailscale-ACL SSoT in IaC4 | Vorgeschlagen | SSoT `acl/tailscale-acl.hujson` + semantischer Applier + manueller Apply |
 
 **Offene Punkte vor Akzeptanz:**
 1. ~~Harald: VPS-Spec bestätigen (ADR-022)~~ → **erledigt 2026-07-31** (6 vCore / 8 GB / 240 GB NVMe)

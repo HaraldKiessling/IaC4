@@ -1,0 +1,173 @@
+---
+# =============================================================================
+# 00 – ACL-Apply (Tailscale, SSoT in IaC4) — NUR manuell + Owner-Go
+#
+#   Fuehrt scripts/ensure-acl.py mit der Single Source of Truth
+#   acl/tailscale-acl.hujson aus: rein additive, SEMANTISCHE Tailscale-ACL-
+#   Erweiterung fuer BEIDE Tag-Welten (tag:ia4 + tag:ha/tag:ha-ci).
+#
+#   GOVERNANCE (Owner 2026-09-06 / Owner-Entscheid 2026-09-11):
+#     ACLs sind zentral und produktionsrelevant. Ein ACL-Apply laeuft NIE
+#     automatisch – KEIN push-/PR-/schedule-/issue_comment-Trigger. Nur manuell
+#     (workflow_dispatch) und erst nach
+#       1) Wirkungs-Analyse (--dry-run-Diff + Modell-Gates),
+#       2) Review (Autor != Reviewer),
+#       3) ausdruecklicher Owner-Zustimmung.
+#     Ausfuehrung ausschliesslich hier; der Applier ist rein additiv (bestehende
+#     Zeilen werden NIE veraendert/entfernt) mit Backup + Auto-Rollback bei
+#     Verifikationsfehler.
+#
+#   Doppelte Sicherung ueber die Inputs:
+#     - confirm:  muss exakt "APPLY-ACL" sein (sonst Abbruch in Schritt (1),
+#                 VOR jedem anderen Schritt – auch vor dem Dry-Run).
+#     - dry_run:  Default true -> Schritt (2b): Wirkungs-Analyse (GET + Diff +
+#                 Gate-Bericht), KEIN POST. Erst nach freigegebener Analyse auf
+#                 false stellen; dann fuehrt Schritt (3) den Apply aus
+#                 (Backup + POST + Verify + Rollback-Pfad im Skript).
+#     - rules:    Regel-Auswahl gegen die SSoT-Gruppen. Erlaubt: iac4 | 1..7
+#                 (HA-Regeln) | Gruppennamen (ha-tagowners, ha-acl, ha-ssh,
+#                 ha-runner, owner-8123, mqtt-1883, energie-read) | all.
+#                 Default 'iac4' (IaC4-Welt). Pending-Gruppen (mqtt-1883,
+#                 energie-read) nur bei bewusster, separater Owner-Freigabe.
+#
+#   Secrets (Namen unveraendert zu Workflow 01): TAILSCALE_TAILNET +
+#   TAILSCALE_API_KEY. Werte werden NIE ausgegeben; zusaetzlich explizite
+#   ::add-mask (Defense-in-depth).
+#
+#   Verifikation: jeder eingefuegte Eintrag exakt +1 (count==1-Gate), keine
+#   Bestands-Regel entfernt/geaendert (semantische Multimengen-Pruefung),
+#   IaC4-Vorbedingungen (tag:ia4) fuer eingefuegte Regeln vorhanden.
+#
+#   Rollback: automatisch bei Verifikationsfehler (POST des Backups). Zusaetzlich
+#   Backup-Datei des Laufs /tmp/acl-backup.json (Runner-Dateisystem); manueller
+#   Konsolen-Rollback-Pfad siehe Runbook docs/workflows/acl-migration-runbook.md.
+#
+#   Hinweis (Luecke, kein Auftrag): Ohne gueltigen TAILSCALE_API_KEY (IaC4-Key
+#   seit 2026-07-31 401) und ohne rohen Live-Export ist die Null-Diff-
+#   Verifikation (Runbook M3) nicht ausfuehrbar. Voraussetzung vor M3/M4.
+# =============================================================================
+name: "00 – ACL-Apply (Tailscale SSoT, manuell + Owner-Go)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Governance-Bestaetigung – exakt "APPLY-ACL" waehlen (jeder andere Wert bricht ab)'
+        required: true
+        default: 'NEIN'
+        type: choice
+        options:
+          - 'NEIN'
+          - 'APPLY-ACL'
+      dry_run:
+        description: 'true = Wirkungs-Analyse (semantischer Diff, KEIN POST); false = echter Apply (nur nach Analyse + Review + Owner-Go)'
+        default: true
+        type: boolean
+      rules:
+        description: 'Regel-Auswahl (SSoT-Gruppen), kommagetrennt – iac4 | 1..7 | ha-Gruppen | all. Default "iac4"'
+        required: true
+        default: 'iac4'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acl-apply
+  cancel-in-progress: false
+
+jobs:
+  acl-apply:
+    name: "ACL-Apply (nur manuell, confirm + Owner-Go)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: "(1) Governance-Guard – confirm + rules-Validierung"
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          RULES: ${{ inputs.rules }}
+        run: |
+          set -euo pipefail
+          if [ "${DRY_RUN}" = "false" ]; then
+            MODUS="APPLY (POST)"
+          else
+            MODUS="DRY-RUN (Wirkungs-Analyse, kein POST)"
+          fi
+          if [ "${CONFIRM}" != "APPLY-ACL" ]; then
+            echo "::error::Abbruch: confirm='${CONFIRM}' ist nicht 'APPLY-ACL'."
+            echo "::error::Governance: ACL-Apply laeuft NIE automatisch – nur manuell nach Wirkungs-Analyse + Review + Owner-Go."
+            exit 1
+          fi
+          case "${RULES}" in
+            ''|*[!A-Za-z0-9,._-]*) echo "::error::rules='${RULES}' ungultig – erlaubt: iac4|1..7|Gruppennamen|all (kommagetrennt)."; exit 1 ;;
+          esac
+          for R in $(echo "${RULES}" | tr ',' ' '); do
+            case "${R}" in
+              iac4|all|ha-tagowners|ha-acl|ha-ssh|ha-runner|owner-8123|mqtt-1883|energie-read) ;;
+              1|2|3|4|5|6|7) ;;
+              *) echo "::error::rules enthaelt ungueltige Gruppe '${R}'."; exit 1 ;;
+            esac
+          done
+          echo "✅ Governance-Guard ok – Modus: ${MODUS}, Regel-Auswahl: ${RULES}"
+
+      - uses: actions/checkout@v4
+
+      - name: "(2a) Vorbedingungen – SSoT + Skript vorhanden + Secrets gesetzt"
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${TS_API_KEY}"
+          FAIL=0
+          [ -f "acl/tailscale-acl.hujson" ] || { echo "::error::acl/tailscale-acl.hujson fehlt (SSoT)."; FAIL=1; }
+          [ -f "scripts/ensure-acl.py" ] || { echo "::error::scripts/ensure-acl.py fehlt."; FAIL=1; }
+          [ -n "${TS_TAILNET}" ] || { echo "::error::Secret TAILSCALE_TAILNET fehlt – [OWNER] setzen."; FAIL=1; }
+          [ -n "${TS_API_KEY}" ] || { echo "::error::Secret TAILSCALE_API_KEY fehlt/abgelaufen (401 seit 2026-07-31) – [OWNER] erneuern."; FAIL=1; }
+          [ "${FAIL}" -eq 0 ] || exit 1
+          python3 scripts/ensure-acl.py --check-model
+          echo "✅ Vorbedingungen ok (SSoT-Gates bestanden, Secrets gesetzt) – Werte werden bewusst nicht ausgegeben."
+
+      - name: "(2b) Dry-Run – semantischer Soll/Ist-Diff (KEIN POST)"
+        # boolean-Input direkt pruefen (GitHub loose equality bei Typ-Mix – kein String-Literal).
+        if: inputs.dry_run
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+          RULES: ${{ inputs.rules }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${TS_API_KEY}"
+          echo "ℹ️ Dry-Run: nur GET (read-only) – kein POST, kein Backup, ACL unveraendert."
+          python3 scripts/ensure-acl.py --dry-run --rules "${RULES}"
+
+      - name: "(3) APPLY – nur wenn dry_run=false (confirm-Guard aus Schritt 1 greift)"
+        if: "!inputs.dry_run"
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+          RULES: ${{ inputs.rules }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${TS_API_KEY}"
+          echo "⚠️  Owner-Go bestaetigt (confirm=APPLY-ACL, dry_run=false)."
+          echo "⚠️  Regel-Auswahl: ${RULES} – nur die gewaehlten Gruppen werden eingefuegt (kein POST ohne Auswahl)."
+          echo "⚠️  Ablauf: Backup /tmp/acl-backup.json -> POST -> Verify (count==1 je Eintrag) -> Rollback bei Fehler."
+          python3 scripts/ensure-acl.py --rules "${RULES}" --confirm APPLY-ACL
+
+      - name: "(4) Zusammenfassung (kompakt, keine Secrets)"
+        run: |
+          echo "──────────────────────────────────────────────────────────────"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "Modus:   DRY-RUN – ACL unveraendert."
+            echo "Regeln:  ${{ inputs.rules }} (nicht gewaehlte Gruppen unveraendert)."
+            echo "Naechster Schritt: Diff reviewen; Apply erst nach Review + Owner-Go"
+            echo "erneut dispatchen mit dry_run=false + confirm=APPLY-ACL."
+          else
+            echo "Modus:   APPLY – Ergebnis (count==1-Gates + Additivitaet) siehe Schritt (3)."
+            echo "Regeln:  ${{ inputs.rules }} (nicht gewaehlte Gruppen unveraendert)."
+            echo "Rollback: automatisch bei Verifikationsfehler; Backup /tmp/acl-backup.json dieses Laufs."
+          fi
+          echo "Governance: kein automatischer ACL-Apply – jeder Lauf ist manuell (Runbook docs/workflows/acl-migration-runbook.md)."
+          echo "Pending-Gruppen (mqtt-1883, energie-read) nur nach separater Owner-Freigabe."
