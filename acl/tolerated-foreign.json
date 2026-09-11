@@ -32,6 +32,10 @@
     "(Regel-1-Cluster owner ↔ tag:ha) wurden INS MODELL übernommen (Gruppe",
     "`console-owner`) und sind damit verwalteter Bestand (als `managed`-Token im",
     "Layout).",
+    "Owner-Go 2026-09-11 (21:57 UTC): Regel 7 (`energie-read`) aktiviert (lediglich",
+    "LESEND: tag:ia4 -> 192.168.0.31:1502, 192.168.0.13:80, 192.168.0.13:1502). Sie ist",
+    "damit VERWALTETER Bestand und steht im Layout als letzter `managed`-Token",
+    "(Live-Position 15, nach dem IaC3-Fremdbestand).",
     "Owner-Entscheid 2026-09-11 (20:24 UTC, „1“): Fremdbestand wird POSITIONSGENAU",
     "modelliert (Verschränkung erlaubt) statt als zusammenhängender Block. Grund:",
     "die Reihenfolge-Überwachung bleibt scharf (Umsortierungen/Einschübe rund um",
@@ -109,7 +113,8 @@
           "src": ["tag:ha"],
           "dst": ["tag:ia3:*"]
         }
-      }
+      },
+      { "kind": "managed" }
     ],
 
     "ssh": [

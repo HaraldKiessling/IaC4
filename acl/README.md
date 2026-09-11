@@ -48,7 +48,7 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `owner-8123` (= HA-Regel 5) | admin/member → ia4:8123 | live |
 | `console-owner` | Regel-1-Cluster aus der Owner-Konsole: `owner` ↔ `tag:ha` + `owner` → LAN (`192.168.0.0/24`, `192.168.2.0/24`) | **live** (Owner-Entscheid 2026-09-11 19:52 UTC: ins Modell übernommen) |
 | `mqtt-1883` (= HA-Regel 6) | ia4 → ha:1883 | **live** (Run-Log-rekonstruiert; Apply 2026-09-09) |
-| `energie-read` (= HA-Regel 7) | ia4 → 3 Energie-Ziele | **pending / nicht live** |
+| `energie-read` (= HA-Regel 7) | ia4 → 3 Energie-Ziele (lesend: KSEM + Kostal WR) | **live** (Owner-Go 2026-09-11 21:57 UTC) |
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
 
@@ -106,7 +106,7 @@ aktiv toleriert, **5 Einträge**).
 
 > **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
 > `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
-> HA-Regeln 1–6 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
+> HA-Regeln 1–7 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
 > IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Es ist also **nicht** der *gesamte*
 > IaC3-Altbestand toleriert: die `base`-Einträge sind verwaltet und werden
 > **strenger** geprüft (als `missing`/`changed`, nicht „toleriert“).

@@ -1,9 +1,11 @@
 # Runbook: Tailscale-ACL-Migration nach IaC4 (Single Source)
 
-> **Status:** Vorbereitung (Draft). Kein Merge, kein Apply. Owner-Entscheide
+> **Status:** Migration umgesetzt (PR #140 + #142 gemergt). **Regel 7
+> (`energie-read`) aktiviert** – Owner-Go 2026-09-11 21:57 UTC (live-gewollt,
+> rein lesend); der Apply wird im Migrations-Log belegt. Owner-Entscheide
 > 2026-09-11 (07:27 UTC Grundsatz „ACL ist Infrastruktur → IaC4"; 07:56–11:08 UTC
 > F1–F6; 19:41 UTC G1–G3; 19:52 UTC H1 – Konsolen-Einträge ins Modell; 20:24 UTC
-> J1 – Fremdbestand positionsgenau, siehe unten).
+> J1 – Fremdbestand positionsgenau; 21:57 UTC – Regel 7 aktiviert, siehe unten).
 > **M2-Finding (19:52 UTC) → behoben (20:24 UTC):** Das Block-Positions-Modell
 > konnte den verschränkten IaC3-Fremdbestand nicht abbilden; mit **J1** ist er
 > **positionsgenau** modelliert (Verschränkung zulässig), das M3-Gate gegen den
@@ -25,7 +27,7 @@ IaC4**: SSoT `acl/tailscale-acl.hujson`, ein semantischer Applier
 
 | # | Gegenstand | Festlegung |
 |---|------------|------------|
-| **F1=(a)** | Umfang | **Reiner Umzug**, verhaltensneutral. Die neue **Lese-Regel (Kostal/KSEM = Energie-Regel 7)** bleibt `pending` und kommt erst **nach** dem Schnitt als eigener, freigegebener Schritt. |
+| **F1=(a)** | Umfang | **Reiner Umzug**, verhaltensneutral. Die neue **Lese-Regel (Kostal/KSEM = Energie-Regel 7)** blieb zunächst `pending` und kam **nach** dem Schnitt als eigener, freigegebener Schritt — **aktiviert mit Owner-Go 2026-09-11 21:57 UTC** (Gruppe `energie-read`, live; s. Migrations-Log). |
 | **F3=(b)** | Übergang | **IaC4-first**: der IaC4-Apply führt; der HA-Apply bleibt **bis danach** als **Rückfallweg offen**; **Sperre danach**. |
 | **F4=(a)** | Erfolgskriterium | **Semantische Gleichheit** der geparsten Policy **inkl. Regel-Reihenfolge** (`acls`/`ssh`); Formatierung/Kommentare dürfen abweichen. **Byte**-Gleichheit ist **nicht** das Kriterium (Tailscale-API reserialisiert). → **Präzisiert 2026-09-11 (19:41 UTC):** gilt für den **verwalteten Teil**; nicht übernommener Fremdbestand wird **toleriert/dokumentiert** (siehe unten). |
 
@@ -77,8 +79,8 @@ IaC4**: SSoT `acl/tailscale-acl.hujson`, ein semantischer Applier
 Der aktuelle Live-Bestand ist **nicht** aus einem rohen huJSON-Export, sondern
 aus **Run-Logs rekonstruiert** (Lücke V2). Modell-Soll und Offline-Fixture
 (`acl/tests/fixtures/live-reconstructed.hujson`) bilden diesen Stand ab:
-`base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner + owner-8123 + ha-ssh`
-(HA-Regeln **1–6**; Regel 7 nicht live).
+`base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner + owner-8123 + console-owner + ha-ssh`
+(HA-Regeln **1–6**; Regel 7 mit Owner-Go 2026-09-11 21:57 UTC **aktiviert**).
 
 - **Regel 6 (MQTT 1883) = Live-Soll (belegt):** additiver POST am
   **2026-09-09T19:59:30Z** (HA-Repo-Run **34398338512**, `DRY_RUN=false`), Log
@@ -164,7 +166,7 @@ IaC3 ist eine **eigene Zuständigkeit** und wird **nicht mitverwaltet**.
 
 > **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
 > `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
-> HA-Regeln 1–6 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
+> HA-Regeln 1–7 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
 > IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Es ist **nicht** der *gesamte*
 > IaC3-Altbestand toleriert — die `base`-Einträge sind verwaltet und werden
 > **strenger** geprüft (`missing`/`changed`, nicht „toleriert").
@@ -189,12 +191,12 @@ IaC3 ist eine **eigene Zuständigkeit** und wird **nicht mitverwaltet**.
    exakt ab (M2-Finding behoben).
 3. Die `tag:ha`-Regeln (live) **und die vier Konsolen-Einträge (H1)** werden Teil
    des IaC4-Modells — ohne Änderung am Live-Zustand.
-4. **Noch nicht angewandte Regeln** werden **nicht still mitmigriert**, sondern
-   bleiben `pending` (deklariert, nicht Teil des Live-Solls):
-   - `energie-read` (Regel 7 — **die neue Kostal/KSEM-Lese-Regel**, F1=(a)).
-   `energie-read` ist eine **separate Owner-Freigabe** und kommt erst **nach**
-   dem Schnitt als eigener Schritt. `mqtt-1883` (Regel 6) ist dagegen **live**
-   und damit Teil des Live-Solls (Beleg siehe „Live-Bestand").
+4. **Regel 7 (`energie-read`)** war zunächst `pending` (deklariert, nicht Teil
+   des Live-Solls) und wurde **nicht still mitmigriert**. Mit dem **Owner-Go
+   2026-09-11 21:57 UTC** ist sie als **eigener, freigegebener Schritt aktiviert**
+   (live-gewollt, rein lesend; geprüfte Inhalte aus PR #140/#142, keine neue
+   Semantik) und damit Teil des Live-Solls (s. Migrations-Log). `mqtt-1883`
+   (Regel 6) ist dagegen **live** (Beleg siehe „Live-Bestand").
 5. Modell-Gates prüfen: `python3 scripts/ensure-acl.py --check-model`.
 
 ### M3 — Semantischer Verify **mit Toleranz** (Verifikation)
@@ -324,6 +326,7 @@ einzubringen: `docs/reference/tailscale-acl.md` + Header-Hinweis im Apply-Workfl
 | 2026-09-11 | Verify gegen eingefrorenen Export nach H1: verwalteter Teil exakt, IaC3-Fremdbestand (5) vorhanden/unverändert, kein Unerwarteter — **aber 1 Reihenfolge-Abweichung** (IaC3-Selbstregel vor Konsolen-Block, Block-Positions-Modell) → **exit 1**. **M2-Finding** dokumentiert; Owner-Entscheidung zu Option 1/2 offen. | Befund | Engineer |
 | 2026-09-11 | **J1 (20:24 UTC):** „1“ – Fremdbestand **positionsgenau** modelliert (Verschränkung erlaubt). Toleranzliste auf Schema v2 (`layout`) umgestellt; `ensure-acl.py` (`load_tolerated`/`expected_sequence`/`order_diff`) positionsgenau; Offline-Tests 8a–8g erweitert (verschränkt → grün; verschoben/verändert/fehlend/Zusatz/Managed-verschoben → exit 1). **M2-Finding behoben.** | umgesetzt (Draft-PR, kein Merge) | Engineer |
 | 2026-09-11 | Verify gegen eingefrorenen Export nach J1: verwalteter Teil exakt, IaC3-Fremdbestand (5) **positionsgenau** vorhanden/unverändert, kein Unerwarteter, Reihenfolge ok → **grün (exit 0)**. `--check-model` + `py_compile` + `offline_tests.py` grün. | erledigt | Engineer |
+| 2026-09-11 | **Regel 7 (`energie-read`) aktiviert** (Owner-Go 21:57 UTC): Modell `pending` → live-gewollt (rein lesend, genau drei Ziele); Doku (`README`/`ADR-026`/Runbook) konsistent. Aktivierung geprüfter Inhalte aus PR #140/#142 — keine neue Semantik. **Kein Apply in diesem Schritt.** | umgesetzt (Branch) | Engineer |
 
 ## Offene Lücken (separat als IaC4-Issues, nicht Teil dieser Migration)
 

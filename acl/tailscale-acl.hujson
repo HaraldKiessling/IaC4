@@ -24,7 +24,8 @@
   //
   // Live-Bezug (Stand 2026-09-11, aus Run-Logs rekonstruiert):
   //   live = base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner
-  //          + owner-8123 + ha-ssh   (HA-Regeln 1–6; Regel 7 pending/nicht live)
+  //          + owner-8123 + console-owner + ha-ssh + energie-read
+  //          (HA-Regeln 1–7; energie-read aktiviert: Owner-Go 2026-09-11 21:57 UTC)
   //   Der Live-Bestand ist derzeit eine Run-Log-Rekonstruktion – KEIN roher
   //   huJSON-Export vorhanden (Governance-Lücke V2, siehe Runbook). Nach Schließen
   //   der Lücke durch den rohen Export + `--verify` zu ersetzen/bestätigen.
@@ -135,9 +136,12 @@
       "dst": ["autogroup:owner:*"],
     },
 
-    // rule: energie-read pending — HA-Regel 7 (Energie-Lesezugriff, Owner-
-    // Entscheide D1–D4 2026-09-11): BEIDE VPS (tag:ia4) → genau drei Ziele,
-    // NUR LESEND (kein Schreib-Block). NICHT live – eigene Freigabe ausstehend.
+    // rule: energie-read — HA-Regel 7 (Energie-Lesezugriff, live-gewollt).
+    // Owner-Go 2026-09-11 21:57 UTC: BEIDE VPS (tag:ia4) → genau drei Ziele,
+    // NUR LESEND (kein Schreib-Block). Ziele: 192.168.0.31:1502 (KSEM/Bilanz,
+    // Modbus TCP, slave 71), 192.168.0.13:80 (Kostal WR Plenticore REST),
+    // 192.168.0.13:1502 (Kostal WR Modbus TCP). Aktivierung bereits geprüfter
+    // Inhalte aus PR #140/#142 – keine neue Semantik.
     {
       "action": "accept",
       "src": ["tag:ia4"],

@@ -61,6 +61,11 @@
       "action": "accept",
       "src": ["tag:ha"],
       "dst": ["autogroup:owner:*"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:ia4"],
+      "dst": ["192.168.0.31:1502", "192.168.0.13:80", "192.168.0.13:1502"]
     }
   ],
   "ssh": [
