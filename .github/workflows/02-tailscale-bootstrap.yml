@@ -412,7 +412,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
-          printf '%s' "$SSH_KEY" > ~/.ssh/id_ed25519
+          # Trailing Newline ist für OpenSSH/libcrypto Pflicht (sonst "error in
+          # libcrypto" beim Laden) — identisch zu den übrigen Workflows (echo).
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VPS_TS_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
 
