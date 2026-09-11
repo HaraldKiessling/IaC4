@@ -59,7 +59,7 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
 
    **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
    `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
-   HA-Regeln 1–6 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
+   HA-Regeln 1–7 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
    IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Damit ist **nicht** der *gesamte*
    IaC3-Altbestand toleriert: die `base`-Einträge sind verwaltet und werden
    **strenger** geprüft (`missing`/`changed`, nicht „toleriert").
@@ -158,9 +158,10 @@ für die tatsächlich eingefügten Gruppen geprüft) und offline getestet
 
 ## Evidenz
 
-- `acl-drift-analyse-20260911.md` (live: Regeln 1–6 — Regel 6 belegt per
-  Run-Log 2026-09-09; 7 nicht live; IaC4-Byte-Anker vermutlich nicht mehr
-  matchfähig nach API-Re-Serialisierung).
+- `acl-drift-analyse-20260911.md` (live zum Analyse-Zeitpunkt: Regeln 1–6 —
+  Regel 6 belegt per Run-Log 2026-09-09; 7 damals nicht live, inzwischen
+  aktiviert; IaC4-Byte-Anker vermutlich nicht mehr matchfähig nach
+  API-Re-Serialisierung).
 - `acl-konsolidierung-iac4-20260911.md` (Zielarchitektur, Migrationsplan M1–M7).
 - ha-repo `scripts/ensure-acl-ha.py` (semantischer Multimengen-Vergleich,
   Precondition-Kette, `count==1`-Gates — als Mechanik-Vorbild).
@@ -210,7 +211,9 @@ Modell + Skript + Workflow + Doku, **Draft, kein Merge, kein Apply**.
 - **Voraussetzung (Lücke, nicht Auftrag):** gültiger IaC4-`TAILSCALE_API_KEY`
   sowie ein roher Live-Export sind für M3 (Null-Diff) erforderlich; heute nicht vorhanden.
 - **Folge-Entscheidungen (separat):** Zeitpunkt des Schnitts, Prod-Ausführung,
-  Aktivierungszeitpunkt Regel 7 (Energie), `--accept-routes` (nicht Teil dieser ADR).
+  `--accept-routes` (nicht Teil dieser ADR). **Regel 7 (Energie)** ist mit dem
+  **Owner-Go 2026-09-11 21:57 UTC** aktiviert (Gruppe `energie-read`, rein
+  lesend; s. Migrations-Log im Runbook).
 
 ## Referenzen
 

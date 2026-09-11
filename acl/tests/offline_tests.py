@@ -91,8 +91,12 @@ def main():
     check("Null-Diff Modell ↔ rekonstruierter Live-Snapshot", m.null_diff_ok(rep),
           "missing=%d changed=%d foreign=%d" % (
               len(rep["missing"]), len(rep["changed"]), len(rep["foreign"])))
-    check("Pending-Regel 7 (Energie) ist im Snapshot nicht live",
-          any(s == "acls" for s, _o, _msg in rep["pending_missing"]))
+    energie_mod = [e for e in model["acls"] if e.group == "energie-read"]
+    check("Regel 7 (Energie) ist Live-Soll (aktiviert, nicht mehr pending)",
+          len(energie_mod) == 1 and not energie_mod[0].pending
+          and energie_mod[0].canon in {e.canon for e in live["acls"]},
+          "energie-read-Einträge=%d pending=%s"
+          % (len(energie_mod), [e.pending for e in energie_mod]))
     mqtt_mod = [e for e in model["acls"] if e.group == "mqtt-1883"]
     mqtt_live = {e.canon for e in live["acls"]}
     check("Regel 6 (MQTT) ist Live-Soll (nicht mehr pending)",
@@ -157,6 +161,27 @@ def main():
     ord_problems = m.order_diff(model, m.parse_live(new_text))
     check("Regel-Reihenfolge nach Einfügung erhalten (acls/ssh)", ord_problems == [],
           "; ".join(ord_problems))
+
+    # 3b) Kommentare in der Live-Policy (z. B. auskommentierte `//{ … //},`-Blöcke
+    #     aus der Tailscale-Owner-Konsole) dürfen die strukturelle Einfügung NICHT
+    #     stören. Live-Befund 2026-09-11: `_iter_objects` zählte die Klammern in
+    #     Kommentaren mit -> `insert_entries`-Absturz VOR dem POST. Fix:
+    #     kommentar-maskendes Scannen (`_mask_comments`).
+    commented = minus_text.replace(
+        '"acls": [',
+        '"acls": [\n    //{\n    //  "action": "accept",\n    //  "src": ["*"],\n    //  "dst": ["*:*"],\n    //},')
+    check("3b: Kommentar-Blöcke ändern die geparste Policy nicht",
+          len(m.parse_live(commented)["acls"]) == len(minus_live["acls"]))
+    ctext = commented
+    for section in m.SECTION_ORDER:
+        ents = [e for e in iac4 if e.section == section]
+        if ents:
+            ctext = m.insert_entries(ctext, section, ents, model[section])
+    ok_c, det_c = m.semantic_additivity(commented, ctext, iac4)
+    check("3b: Einfügen in kommentierte Live-Policy rein additiv (kein Absturz)",
+          ok_c, "; ".join(det_c))
+    check("3b: Reihenfolge in kommentierter Policy erhalten",
+          m.order_diff(model, m.parse_live(ctext)) == [])
 
     # 4) Negativ-Test: entfernte Bestandsregel wird erkannt
     broken = json.loads(new_text)
@@ -257,9 +282,11 @@ def main():
           and len(tol["sections"]["ssh"]["entries"]) == 1, "n=%d" % n_tol)
     check("Toleranzliste: KEINE Platzhalter (v2)",
           len(tol["pending"]) == 0, "pending=%d" % len(tol["pending"]))
-    check("Toleranzliste: positionsgenaues Layout (acls=15 Tokens, ssh=3 Tokens)",
-          len(tol["sections"]["acls"]["layout"]) == 15
+    check("Toleranzliste: positionsgenaues Layout (acls=16 Tokens, ssh=3 Tokens)",
+          len(tol["sections"]["acls"]["layout"]) == 16
           and len(tol["sections"]["ssh"]["layout"]) == 3)
+    check("Toleranzliste: energie-read (Regel 7) ist managed-Token am Layout-Ende (Position 15)",
+          tol["sections"]["acls"]["layout"][15]["kind"] == "managed")
     check("Toleranzliste: Fremdbestand VERSCHRÄNKT (acls: foreign auf Position 7 + 12–14; ssh: Position 0)",
           [t["kind"] for t in tol["sections"]["acls"]["layout"]].count("foreign") == 4
           and tol["sections"]["acls"]["layout"][7]["kind"] == "foreign"

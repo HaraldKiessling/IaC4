@@ -876,15 +876,64 @@ def _entry_ident(e):
     return e.key if e.section == "tagOwners" else e.canon
 
 
+def _mask_comments(src):
+    """Kommentare (`// …`, `/* … */`) durch Leerzeichen ersetzen – gleiche Länge,
+    Zeilenumbrüche bleiben erhalten. Damit täuschen Kommentare die strukturellen
+    Klammer-/Key-Scanner nicht mehr: die Live-Policy enthält auskommentierte
+    `//{ … //},`-Blöcke (Tailscale-Owner-Kommentare), deren Klammern `_iter_objects`
+    sonst fehlzählen und `insert_entries` zum Absturz bringen (Live-Befund
+    2026-09-11, Regel-7-Apply). String-Inhalte bleiben unangetastet."""
+    out = list(src)
+    i, n = 0, len(src)
+    in_str = False
+    while i < n:
+        c = src[i]
+        if in_str:
+            if c == "\\" and i + 1 < n:
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+            i += 1
+            continue
+        if c == '"':
+            in_str = True
+            i += 1
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            while i < n and src[i] != "\n":
+                out[i] = " "
+                i += 1
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            out[i] = " "
+            out[i + 1] = " "
+            i += 2
+            while i + 1 < n and not (src[i] == "*" and src[i + 1] == "/"):
+                if src[i] != "\n":
+                    out[i] = " "
+                i += 1
+            if i + 1 < n:
+                out[i] = " "
+                out[i + 1] = " "
+                i += 2
+            continue
+        i += 1
+    return "".join(out)
+
+
 def _iter_section_entries(raw_text, section, start, end):
     """Top-level Einträge eines Abschnitts in Dokument-Reihenfolge →
-    (span_start, span_end, ident). tagOwners: ident = Key; acls/ssh: ident = canon."""
+    (span_start, span_end, ident). tagOwners: ident = Key; acls/ssh: ident = canon.
+    Gescannt wird der KOMMENTAR-MASKEDE Text (Klammern in Kommentaren zählen
+    nicht); kanonisiert wird der Original-Slice (huJSON-parser tolerant)."""
+    mtext = _mask_comments(raw_text)
     items = []
     if section == "tagOwners":
-        for key, _vs, ve, ks in _iter_tagowners(raw_text, start, end):
+        for key, _vs, ve, ks in _iter_tagowners(mtext, start, end):
             items.append((ks, ve, key))
     else:
-        for os_, oe in _iter_objects(raw_text, start, end):
+        for os_, oe in _iter_objects(mtext, start, end):
             items.append((os_, oe, canon(parse_policy(raw_text[os_:oe]))))
     return items
 
@@ -911,11 +960,14 @@ def insert_entries(raw_text, section, entries, model_entries=None):
     relativ zu den vorhandenen Einträgen eingefügt, sodass die Regel-Reihenfolge
     des Modells erhalten bleibt (Owner-Entscheid F4: Reihenfolge zählt). Ohne
     Modell wird direkt nach der öffnenden Klammer eingefügt (Alt-Verhalten)."""
-    span = _section_span(raw_text, section)
+    # Struktur auf dem KOMmentar-maskenden Text bestimmen (Positionen sind
+    # längengleich → gültig im Original), gerendert/geparst wird das Original.
+    mtext = _mask_comments(raw_text)
+    span = _section_span(mtext, section)
     if span is None:
         raise ValueError("Abschnitt %s nicht in Live-Policy gefunden" % section)
     start, end = span
-    indent = _detect_indent(raw_text, span)
+    indent = _detect_indent(mtext, span)
     if section == "tagOwners":
         def render(e):
             return _render_tagowner(e.key, e.obj, indent)
