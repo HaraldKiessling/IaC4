@@ -18,8 +18,9 @@
 #     Verifikationsfehler.
 #
 #   Doppelte Sicherung ueber die Inputs:
-#     - confirm:  muss exakt "APPLY-ACL" sein (sonst Abbruch in Schritt (1),
-#                 VOR jedem anderen Schritt – auch vor dem Dry-Run).
+#     - confirm:  muss exakt "APPLY-ACL" sein – NUR fuer den echten Apply
+#                 (dry_run=false); sonst Abbruch in Schritt (1) VOR dem POST. Ein
+#                 reiner Trockenlauf (dry_run=true) braucht KEIN Apply-Wort.
 #     - dry_run:  Default true -> Schritt (2b): Wirkungs-Analyse (GET + Diff +
 #                 Gate-Bericht), KEIN POST. Erst nach freigegebener Analyse auf
 #                 false stellen; dann fuehrt Schritt (3) den Apply aus
@@ -62,7 +63,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Governance-Bestaetigung – exakt "APPLY-ACL" waehlen (jeder andere Wert bricht ab)'
+        description: 'Governance-Bestaetigung – exakt "APPLY-ACL" NUR fuer den echten Apply (dry_run=false); Dry-Run braucht kein Apply-Wort'
         required: true
         default: 'NEIN'
         type: choice
@@ -104,7 +105,10 @@ jobs:
           else
             MODUS="DRY-RUN (Wirkungs-Analyse, kein POST)"
           fi
-          if [ "${CONFIRM}" != "APPLY-ACL" ]; then
+          # confirm nur fuer den echten Apply verlangen (dry_run=false). Ein reiner
+          # Trockenlauf braucht kein Apply-Wort; der Schreibpfad bleibt hart durch
+          # dry_run gegated (Schritt 3: if !inputs.dry_run).
+          if [ "${DRY_RUN}" = "false" ] && [ "${CONFIRM}" != "APPLY-ACL" ]; then
             echo "::error::Abbruch: confirm='${CONFIRM}' ist nicht 'APPLY-ACL'."
             echo "::error::Governance: ACL-Apply laeuft NIE automatisch – nur manuell nach Wirkungs-Analyse + Review + Owner-Go."
             exit 1

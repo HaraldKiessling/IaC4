@@ -497,6 +497,11 @@ def order_diff(model, live):
     ausgelassen. Formatierung/Kommentare sowie Feld-/Listen-Reihenfolge innerhalb
     einer Regel sind irrelevant. `tagOwners` ist eine Zuordnung (JSON-Objekt) –
     dessen Key-Reihenfolge wird NICHT geprüft.
+    Gemeldet wird NUR eine ECHTE Umsortierung: die kanonische Sequenz weicht ab,
+    obwohl ALLE Soll-Einträge vorhanden sind (Multimengen gleich). Fehlt dagegen
+    ein Soll-Eintrag oder ist etwas fremd (Multimenge != Soll), ist die Ursache
+    'Fehlend'/'Fremd' – das wird bereits in rep["missing"]/rep["foreign"]
+    berichtet und hier NICHT zusätzlich irreführend als Reihenfolge-Abweichung.
     Liefert eine Liste von Abweichungs-Beschreibungen (leer = Reihenfolge ok)."""
     problems = []
     for section in ("acls", "ssh"):
@@ -507,6 +512,10 @@ def order_diff(model, live):
             if expected.get(e.canon, 0) > 0:
                 got.append(e.canon)
                 expected[e.canon] -= 1
+        # Ursache-Trennung: weicht die Multimenge ab, fehlt/fremdelt ein Eintrag
+        # (bereits als Fehlend/Fremd gemeldet) – KEINE Reihenfolge-Abweichung.
+        if Counter(got) != Counter(mseq):
+            continue
         if got != mseq:
             problems.append(
                 "%s: Regel-Reihenfolge weicht ab (Modell-Soll: %d Einträge, in Live "

@@ -8,6 +8,11 @@ Prüft:
  3. Rein additive Einfügung der iac4-Gruppe in einen Snapshot OHNE iac4
     (0 Entfernungen, count==1-Gate, semantische Additivität, Reihenfolge erhalten).
  4. Negativ-Test: Erkennung einer entfernten Bestandsregel.
+ 4b. Negativ-Test A2: eine PERMUTIERTE acls-/ssh-Reihenfolge wird von `--verify`
+     erkannt (exit 1) – die Regel-Reihenfolge wird wirklich erzwungen, nicht nur
+     behauptet (Abweichung ist REIN die Reihenfolge: Fehlend/Geändert/Fremd = 0).
+ 4c. A3a: fehlt eine Regel, wird KEINE irreführende Reihenfolge-Abweichung
+     gemeldet; die Ursache wird als 'Fehlend' benannt.
  5. Export-Modus liest offline (--file) und schreibt huJSON + SHA256.
  6. IaC4-Vorbedingung (aus HA-PR #54) semantisch inkl. Negativ-Fall.
  7. `--verify <export-datei>` (Positional) = reproduzierbarer Null-Diff.
@@ -17,6 +22,7 @@ Aufruf: python3 acl/tests/offline_tests.py
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from collections import Counter
@@ -135,6 +141,49 @@ def main():
     ok_neg, det_neg = m.semantic_additivity(new_text, json.dumps(broken, indent=2), [])
     check("Negativ-Test: entfernte Bestandsregel wird erkannt", not ok_neg,
           "unerkannt")
+
+    # 4b) Negativ-Test A2: PERMUTIERTE Regel-Reihenfolge (acls/ssh) → --verify exit 1
+    #     Beweist, dass die Reihenfolge erzwungen und nicht nur behauptet wird:
+    #     die Multimenge ist unverändert (Fehlend/Geändert/Fremd = 0), allein die
+    #     Sequenz ist umgedreht.
+    ptmp = tempfile.mkdtemp()
+
+    def verify_permuted(section):
+        raw_perm = json.loads(live_text)
+        raw_perm[section] = list(reversed(raw_perm[section]))
+        path = os.path.join(ptmp, "perm-%s.hujson" % section)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(raw_perm, f, indent=2)
+        proc = subprocess.run(
+            [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
+             "--verify", path], capture_output=True, text=True)
+        return proc.returncode, proc.stdout
+
+    rc_a, out_a = verify_permuted("acls")
+    check("A2: permutierte acls-Reihenfolge → --verify exit 1", rc_a == 1,
+          "rc=%d" % rc_a)
+    check("A2: acls-Abweichung ist REIN die Reihenfolge (Fehlend=0, abweichend=1)",
+          "Fehlend (Soll, nicht live): 0" in out_a
+          and "Regel-Reihenfolge (acls/ssh) abweichend: 1" in out_a,
+          "Fehlend!=0 oder Reihenfolge nicht gemeldet")
+
+    rc_s, out_s = verify_permuted("ssh")
+    check("A2: permutierte ssh-Reihenfolge → --verify exit 1", rc_s == 1,
+          "rc=%d" % rc_s)
+    check("A2: ssh-Abweichung ist REIN die Reihenfolge (Fehlend=0, abweichend=1)",
+          "Fehlend (Soll, nicht live): 0" in out_s
+          and "Regel-Reihenfolge (acls/ssh) abweichend: 1" in out_s,
+          "Fehlend!=0 oder Reihenfolge nicht gemeldet")
+
+    # 4c) A3a: fehlt eine Regel, gibt es KEINE irreführende Reihenfolge-Meldung;
+    #     die Ursache wird (allein) als 'Fehlend' berichtet.
+    raw_miss = json.loads(live_text)
+    raw_miss["acls"] = raw_miss["acls"][1:]  # erste (base ia3) entfernen
+    rep_miss = m.diff_model_vs_live(model, m.parse_live(json.dumps(raw_miss, indent=2)))
+    check("A3a: fehlende Regel → KEINE Reihenfolge-Meldung (order=[])",
+          rep_miss["order"] == [], "; ".join(rep_miss["order"]))
+    check("A3a: fehlende Regel wird als 'Fehlend' benannt",
+          len(rep_miss["missing"]) == 1, "missing=%d" % len(rep_miss["missing"]))
 
     # 5) Export offline (--file) schreibt huJSON + SHA256
     tmp = tempfile.mkdtemp()
