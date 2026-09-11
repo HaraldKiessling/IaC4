@@ -13,10 +13,10 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | Datei | Zweck |
 |-------|-------|
 | `tailscale-acl.hujson` | **SSoT**: kanonische Policy (tagOwners → acls → ssh) |
-| `tolerated-foreign.json` | **Fremdbestand-Toleranzliste** (nur noch IaC3 aktiv, 5 Einträge; Konsolen-Einträge sind seit 2026-09-11 19:52 UTC **ins Modell** übernommen) |
-| `tests/fixtures/live-reconstructed.hujson` | Offline-Testfixture (aktueller Live-Stand, verwalteter Teil inkl. Konsolen-Einträge) |
-| `tests/fixtures/live-with-foreign.hujson` | Testfixture: Live-Stand **+ dokumentierter (IaC3) Fremdbestand** (realer Aufbau) |
-| `tests/fixtures/live-with-tolerated-foreign.hujson` | Testfixture: Live-Stand **+ dokumentierter (IaC3) Fremdbestand** (realer Aufbau, inkl. Interleaving) |
+| `tolerated-foreign.json` | **Fremdbestand-Toleranzliste, positionsgenau** (Schema v2: geordnetes `layout`; nur IaC3 aktiv, 5 Einträge; Konsolen-Einträge sind seit 2026-09-11 19:52 UTC **ins Modell** übernommen) |
+| `tests/fixtures/live-reconstructed.hujson` | Offline-Testfixture (aktueller Live-Stand, nur verwalteter Teil inkl. Konsolen-Einträge) |
+| `tests/fixtures/live-with-foreign.hujson` | Testfixture: Live-Stand **+ dokumentierter (IaC3) Fremdbestand** (realer, verschränkter Aufbau) |
+| `tests/fixtures/live-with-tolerated-foreign.hujson` | Testfixture: Live-Stand **+ dokumentierter (IaC3) Fremdbestand** (realer, verschränkter Aufbau) |
 | `tests/offline_tests.py` | Offline-Nachweise (kein Netz, kein POST) |
 
 ## Konventionen der SSoT-Datei
@@ -52,15 +52,23 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
 
-## Verify mit Toleranz (Erfolgskriterium, Owner-Entscheide F4 + G1–G3, 2026-09-11)
+## Verify mit Toleranz (Erfolgskriterium, Owner-Entscheide F4 + G1–G3 + 20:24 UTC)
 
 `--verify <export> --tolerated-foreign <liste>` gilt als bestanden, wenn
 
 - der **verwaltete Teil** (Modelleinträge) **exakt** matcht **inkl. Reihenfolge**
   (`acls`/`ssh`) — Zero-Delta **nur** des verwalteten Teils;
-- der **dokumentierte Fremdbestand** (siehe `tolerated-foreign.json`) vollständig,
-  unverändert und an seinen **Live-Positionen** vorhanden ist;
+- der **dokumentierte Fremdbestand** (siehe `tolerated-foreign.json`)
+  **positionsgenau** unverändert vorhanden ist — jeder Fremdbestand-Eintrag an
+  **seiner** dokumentierten Position, in **genau der** dokumentierten Reihenfolge;
 - **kein unerwarteter** Live-Eintrag existiert (Modell ∪ Toleranzliste).
+
+**Verschränkung (Interleaving) ist zulässig:** Die Toleranzliste modelliert je
+Abschnitt eine **geordnete Erwartung** (`layout`, Schema v2) aus `managed`- und
+`foreign`-Positionen; verwaltete und fremde Einträge dürfen sich beliebig
+abwechseln (Owner-Entscheid 2026-09-11, 20:24 UTC). Die Reihenfolge-Überwachung
+bleibt **scharf**: Umsortierungen oder Einschübe rund um unsere Regeln fallen auf
+(exit 1 mit Nennung des Eintrags + Position).
 
 Tags (`tagOwners`) werden als **Zuordnung** verglichen (Reihenfolge irrelevant);
 Formatierung, Kommentare und Trailing-Kommas bleiben unberücksichtigt. **Byte**-
@@ -70,28 +78,21 @@ Policy). Jede Abweichung → **exit 1** mit Benennung des Eintrags.
 Der **strikte** Null-Diff (`--verify` **ohne** `--tolerated-foreign`, „Modell ≡
 Live, kein Fremdbestand“) bleibt verfügbar.
 
-### Bekannte Limitierung (Block-Position des Fremdbestands) — M2-Finding 2026-09-11
+### Positionsgenaue Modellierung (M2-Finding behoben, Owner-Entscheid 2026-09-11 20:24 UTC)
 
-Die Toleranzliste pinnt den Fremdbestand je Abschnitt als **zusammenhängenden
-Block** mit Position `start`/`end`. Der **reale** Live-Aufbau erfüllt das für
-`acls` **nicht**: die IaC3-Selbstregel (`tag:ia3 → tag:ia3:*`) steht in Live
-**vor** dem (jetzt verwalteten) Konsolen-Block, die übrigen drei IaC3-Einträge
-danach — der IaC3-Block ist also durch verwaltete Einträge **unterbrochen**.
+Der **reale** Live-Aufbau ist **verschränkt**: `acls` =
+`[verwaltet 0–6] [IaC3-Selbstregel 7] [Konsolen-Block 8–11] [IaC3 12–14]` — die
+IaC3-Selbstregel steht **zwischen** den verwalteten Einträgen. Das frühere
+Block-Positions-Modell (`position` `start`/`end`) konnte das nicht abbilden und
+meldete fälschlich eine Reihenfolge-Abweichung (**M2-Finding**, 19:52 UTC).
 
-Folge: Für den eingefrorenen Export (`acl-live-export-20260911.json`) meldet
-der `--verify`
-
-- **verwalteter Teil exakt** (Fehlend/Geändert = 0), **Fremdbestand vollständig/
-  unverändert** (5 vorhanden, 0 fehlend/verändert), **kein unerwarteter Eintrag**
-  — also genau das **Erfolgskriterium** —,
-- aber **eine** Reihenfolge-Abweichung, weil die IaC3-Selbstregel nicht im
-  Block erwartet wird → **exit 1** (`Regel-Reihenfolge (acls/ssh) abweichend: 1`).
-
-Das ist **kein** Datenfehler des Modells/Toleranz, sondern eine **Limitierung des
-Block-Positions-Modells** gegenüber einem nicht-zusammenhängenden Fremdbestand.
-Behebung erfordert eine **Owner-Entscheidung**: entweder den Fremdbestand
-positions-genau (interleaving-fähig) modellieren oder die Block-Positionierung in
-der Erfolgsdefinition präzisieren. Siehe Runbook „M2-Finding" + Migrations-Log.
+Mit dem Owner-Entscheid **20:24 UTC („1“)** ist der Fremdbestand **positionsgenau**
+modelliert (`acl/tolerated-foreign.json`, Schema v2, geordnetes `layout`).
+Verschränkung ist damit erlaubt; das Werkzeug geht **nicht** mehr von einem Block
+aus. Der `--verify` gegen den eingefrorenen Export
+(`acl-live-export-20260911.json`) ist damit **grün** (exit 0): verwalteter Teil
+exakt, Fremdbestand 5/5 positionsgenau vorhanden/unverändert, kein unerwarteter
+Eintrag, Reihenfolge ok.
 
 ## Fremdbestand (nicht von IaC4 verwaltet)
 
@@ -139,8 +140,8 @@ TS_TAILNET=… TS_API_KEY=… python3 scripts/ensure-acl.py --verify
 # Null-Diff reproduzierbar gegen einen exportierten Live-Stand (Datei + SHA256)
 python3 scripts/ensure-acl.py --verify acl/live-export-<sha8>.hujson
 
-# Verify MIT Fremdbestand-Toleranz (M3-Gate): verwalteter Teil exakt +
-# dokumentierter Fremdbestand unverändert/an Live-Positionen
+# Verify MIT Fremdbestand-Toleranz (M3-Gate, positionsgenau): verwalteter Teil exakt
+# + dokumentierter Fremdbestand positionsgenau unverändert (Verschränkung zulässig)
 python3 scripts/ensure-acl.py --verify acl/live-export-<sha8>.hujson \
     --tolerated-foreign acl/tolerated-foreign.json
 

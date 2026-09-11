@@ -19,14 +19,18 @@ Prüft:
 
 Aufruf: python3 acl/tests/offline_tests.py
 
- 8. Fremdbestand-Toleranz (`--tolerated-foreign`): verwalteter Teil exakt +
-    dokumentierter Fremdbestand unverändert/an Live-Positionen; jeder
-    unerwartete Fremdbestand (fehlt/verändert/neu/falsche Position) -> exit 1.
+ 8. Fremdbestand-Toleranz POSITIONSGENAU (`--tolerated-foreign`): die
+    Toleranzliste (Schema v2) modelliert je Abschnitt eine GEORDNETE Erwartung
+    (`layout`): jeder Live-Eintrag ist `managed` (muss dem Modell entsprechen)
+    oder `foreign` (muss dem eingefrorenen Soll-Eintrag entsprechen), in genau
+    dieser Reihenfolge. Verschränkung (Interleaving) ist damit zulässig.
+      (i)  verschränkter Fall (realer Live-Aufbau) -> grün (exit 0);
+      (ii) Foreign-Eintrag VERSCHOBEN -> exit 1 (mit Nennung);
+      (iii) Foreign-Eintrag VERÄNDERT -> exit 1;
+      (iv) unerwarteter ZUSATZ-Eintrag -> exit 1;
+      (v)  Foreign-Eintrag FEHLT -> exit 1.
     Toleranzliste: acl/tolerated-foreign.json (nur IaC3 aktiv, 5 Einträge;
     die 4 Konsolen-Einträge sind seit 2026-09-11 19:52 UTC Teil des Modells).
-    Befund: der reale Live-Aufbau ist nicht block-konform (IaC3-Selbstregel
-    steht vor dem Konsolen-Block) -> Block-Positions-Check meldet Reihenfolge
-    (bekannte Limitierung; siehe 8b).
 """
 import importlib.util
 import json
@@ -227,28 +231,34 @@ def main():
     check("--verify <export-datei>: Null-Diff gegen Snapshot (exit 0)", rc == 0)
 
     # ----------------------------------------------------------------------
-    # 8) Fremdbestand-Toleranz (Owner-Entscheide 2026-09-11):
+    # 8) Fremdbestand-Toleranz POSITIONSGENAU (Owner-Entscheide 2026-09-11):
     #    - 19:41 UTC „IaC3 nicht übernehmen": IaC3 bleibt dokumentierter
     #      Fremdbestand (5 Einträge).
     #    - 19:52 UTC „Ja" zu den 4 Konsolen-Einträgen: sie sind INS MODELL
     #      übernommen (Gruppe console-owner, live) – kein Platzhalter mehr.
-    #    Erfolgskriterium: verwalteter Teil exakt + dokumentierter Fremdbestand
-    #    unverändert/an Live-Positionen; jede unerwartete Abweichung -> exit 1.
-    #    BEFUND (bekannte Limitierung): der reale Live-Aufbau ist NICHT block-
-    #    konform – die IaC3-Selbstregel steht VOR dem Konsolen-Block. Der
-    #    Block-Positions-Check (start|end) meldet das als Reihenfolge-Abweichung
-    #    (8b). Siehe acl/README.md „Bekannte Limitierung" / M2-Findings.
+    #    - 20:24 UTC „1" (J1): Fremdbestand positionsgenau modelliert
+    #      (Verschränkung erlaubt); Toleranzliste Schema v2 (`layout`).
+    #    Erfolgskriterium: verwalteter Teil exakt + Fremdbestand positionsgenau
+    #    unverändert; jede unerwartete Abweichung -> exit 1 mit Nennung.
+    #    Fälle: (i) verschränkt -> grün; (ii) verschoben / (iii) verändert /
+    #    (iv) Zusatz / (v) fehlend / Managed verschoben -> exit 1.
     # ----------------------------------------------------------------------
     tol = m.load_tolerated(TOLERATED)
     n_tol = sum(len(tol["sections"][s]["entries"]) for s in ("acls", "ssh"))
-    check("Toleranzliste parst; 5 aktive IaC3-Einträge (4 acls + 1 ssh)",
+    check("Toleranzliste parst (Schema v2, positionsgenau); 5 aktive IaC3-Einträge (4 acls + 1 ssh)",
           n_tol == 5 and len(tol["sections"]["acls"]["entries"]) == 4
           and len(tol["sections"]["ssh"]["entries"]) == 1, "n=%d" % n_tol)
-    check("Toleranzliste: KEIN offener Platzhalter mehr (Konsolen ins Modell übernommen)",
+    check("Toleranzliste: KEINE Platzhalter (v2)",
           len(tol["pending"]) == 0, "pending=%d" % len(tol["pending"]))
-    check("Toleranzliste: Block-Positionen (acls=end, ssh=start)",
-          tol["sections"]["acls"]["position"] == "end"
-          and tol["sections"]["ssh"]["position"] == "start")
+    check("Toleranzliste: positionsgenaues Layout (acls=15 Tokens, ssh=3 Tokens)",
+          len(tol["sections"]["acls"]["layout"]) == 15
+          and len(tol["sections"]["ssh"]["layout"]) == 3)
+    check("Toleranzliste: Fremdbestand VERSCHRÄNKT (acls: foreign auf Position 7 + 12–14; ssh: Position 0)",
+          [t["kind"] for t in tol["sections"]["acls"]["layout"]].count("foreign") == 4
+          and tol["sections"]["acls"]["layout"][7]["kind"] == "foreign"
+          and all(tol["sections"]["acls"]["layout"][k]["kind"] == "foreign"
+                  for k in (12, 13, 14))
+          and tol["sections"]["ssh"]["layout"][0]["kind"] == "foreign")
 
     ttmp = tempfile.mkdtemp()
 
@@ -268,101 +278,89 @@ def main():
             json.dump(d, f, indent=2)
         return p
 
-    # Kanon-Lage (kontiguierlicher Fremdbestand): acls = verwalteter Teil +
-    # IaC3-Block geschlossen am Ende, in Toleranz-Reihenfolge (Selbstregel zuerst).
-    _foreign = [
-        {"action": "accept", "src": ["tag:ia3"], "dst": ["tag:ia3:*"]},
-        {"action": "accept", "src": ["tag:ia3"], "dst": ["tag:ha:*"]},
-        {"action": "accept", "src": ["tag:ia3"], "dst": ["192.168.0.0/24:*"]},
-        {"action": "accept", "src": ["tag:ha"], "dst": ["tag:ia3:*"]},
-    ]
-
-    def _contiguous(d):
-        d["acls"] = [r for r in d["acls"] if r not in _foreign] + list(_foreign)
-
-    # 8a) Mechanik-Nachweis (Kanon-Lage): kontiguierlicher Fremdbestand-Block
-    #     (IaC3 geschlossen NACH den verwalteten Einträgen) -> exit 0. Belegt,
-    #     dass der verwaltete Teil exakt matcht UND der dokumentierte
-    #     Fremdbestand an seinen Live-Positionen unverändert vorhanden ist.
-    p_contig = write_live("tol-contiguous.hujson", _contiguous)
-    p = verify(p_contig)
-    check("Toleranz-Verify (kontiguierlicher Fremdbestand): exit 0",
+    # 8a) (i) VERSCHRÄNKT/positionsgenau: der reale Live-Aufbau (eingefrorener
+    #     Export) erfüllt das Erfolgskriterium -> exit 0. Belegt, dass
+    #     Verschränkung zulässig ist UND der verwaltete Teil exakt + der
+    #     Fremdbestand positionsgenau unverändert ist.
+    p = verify(FIXTURE_TOL)
+    check("(i) Toleranz-Verify (verschränkter realer Aufbau): exit 0",
           p.returncode == 0, "rc=%d" % p.returncode)
-    check("Toleranz-Verify: verwalteter Teil exakt (Fehlend/Geändert/Fremd=0)",
+    check("(i) verwalteter Teil exakt (Fehlend/Geändert/Fremd=0)",
           "Fehlend (Soll, nicht live): 0" in p.stdout
           and "Geändert (Soll != live): 0" in p.stdout
           and "Unerwartet fremd in live (Modell+Toleranz unbekannt): 0" in p.stdout)
-    check("Toleranz-Verify: 5 tolerierte Einträge als vorhanden gemeldet",
-          "Tolerierter Fremdbestand (vorhanden/unverändert): 5" in p.stdout)
+    check("(i) 5 tolerierte Einträge vorhanden/unverändert, Reihenfolge ok",
+          "Tolerierter Fremdbestand (vorhanden/unverändert): 5" in p.stdout
+          and "Tolerierter Fremdbestand fehlt/verändert: 0" in p.stdout
+          and "Regel-Reihenfolge (acls/ssh) abweichend: 0" in p.stdout)
 
-    # 8b) REALER Live-Aufbau (eingefrorener Export): verwalteter Teil exakt +
-    #     IaC3-Fremdbestand vorhanden/unverändert + kein unerwarteter Eintrag.
-    #     BEFUND (bekannte Limitierung): In Live steht die IaC3-Selbstregel VOR
-    #     dem Konsolen-Block (IaC3 nicht zusammenhängend). Der Block-Positions-
-    #     Check (start|end) meldet das als Reihenfolge-Abweichung -> exit 1,
-    #     obwohl der verwaltete Teil und der Fremdbestand selbst korrekt sind.
-    p_real = verify(FIXTURE_TOL)
-    check("Toleranz-Verify (realer Aufbau): verwalteter Teil exakt (Fehlend/Geändert/Fremd=0)",
-          "Fehlend (Soll, nicht live): 0" in p_real.stdout
-          and "Geändert (Soll != live): 0" in p_real.stdout
-          and "Unerwartet fremd in live (Modell+Toleranz unbekannt): 0" in p_real.stdout)
-    check("Toleranz-Verify (realer Aufbau): 5 IaC3-Einträge vorhanden/unverändert",
-          "Tolerierter Fremdbestand (vorhanden/unverändert): 5" in p_real.stdout
-          and "Tolerierter Fremdbestand fehlt/verändert: 0" in p_real.stdout)
-    check("Toleranz-Verify (realer Aufbau): Interleaving -> Reihenfolge-Abweichung (bekannte Limitierung) -> exit 1",
-          p_real.returncode == 1
-          and "Regel-Reihenfolge (acls/ssh) abweichend: 1" in p_real.stdout,
-          "rc=%d" % p_real.returncode)
-
-    # 8c) Ohne Toleranz (strikt): derselbe reale Live-Zustand -> 5 IaC3-Fremd-Einträge = Drift
-    p_strict = verify(FIXTURE_FULL, tolerated=False)
-    check("Strikter Verify (ohne Toleranz): 5 Fremd-Einträge -> exit 1",
-          p_strict.returncode == 1
-          and "Unerwartet fremd in live (Modell+Toleranz unbekannt): 5" in p_strict.stdout,
-          "rc=%d" % p_strict.returncode)
-
-    # 8d) Tolerierter Fremdbestand FEHLT (gelöscht) -> exit 1
-    p_miss = write_live("tol-missing.hujson", lambda d: d.__setitem__(
-        "acls", [r for r in d["acls"]
-                 if not (r.get("src") == ["tag:ia3"] and r.get("dst") == ["tag:ia3:*"])]))
-    p = verify(p_miss)
-    check("Toleranz-Verify: tolerierter Fremdbestand fehlt -> exit 1",
-          p.returncode == 1
-          and "Tolerierter Fremdbestand fehlt/verändert: 1" in p.stdout,
+    # 8b) (ii) Foreign-Eintrag VERSCHOBEN (IaC3-Selbstregel ans Ende) -> exit 1
+    #     mit Nennung des betroffenen Eintrags. Multimenge unverändert; allein
+    #     die Position weicht ab.
+    def _move_foreign(d):
+        idx = next(i for i, r in enumerate(d["acls"])
+                   if r.get("src") == ["tag:ia3"] and r.get("dst") == ["tag:ia3:*"])
+        d["acls"].append(d["acls"].pop(idx))
+    p_moved = write_live("tol-moved.hujson", _move_foreign)
+    p = verify(p_moved)
+    check("(ii) verschobener Foreign-Eintrag -> exit 1", p.returncode == 1,
           "rc=%d" % p.returncode)
+    check("(ii) Reihenfolge-Abweichung mit Nennung des Fremdbestand-Eintrags",
+          "Regel-Reihenfolge (acls/ssh) abweichend: 1" in p.stdout
+          and "Position 7" in p.stdout and "tag:ia3:*" in p.stdout,
+          "Position/Eintrag nicht genannt")
 
-    # 8e) Tolerierter Fremdbestand VERÄNDERT -> exit 1
+    # 8c) (iii) Foreign-Eintrag VERÄNDERT (dst tag:ha:* -> tag:ha:22) -> exit 1
     def _mutate_changed(d):
         for r in d["acls"]:
             if r.get("src") == ["tag:ia3"] and r.get("dst") == ["tag:ha:*"]:
                 r["dst"] = ["tag:ha:22"]
     p_chg = write_live("tol-changed.hujson", _mutate_changed)
     p = verify(p_chg)
-    check("Toleranz-Verify: tolerierter Fremdbestand verändert -> exit 1",
-          p.returncode == 1
-          and "Tolerierter Fremdbestand fehlt/verändert: 1" in p.stdout,
+    check("(iii) veränderter Foreign-Eintrag -> exit 1", p.returncode == 1,
           "rc=%d" % p.returncode)
+    check("(iii) gemeldet als Fremdbestand fehlt/verändert",
+          "Tolerierter Fremdbestand fehlt/verändert: 1" in p.stdout)
 
-    # 8f) UNERWARTETER neuer Fremdbestand -> exit 1
+    # 8d) (iv) UNERWARTETER Zusatz-Eintrag -> exit 1
     p_new = write_live("tol-extra.hujson", lambda d: d["acls"].append(
         {"action": "accept", "src": ["autogroup:member"], "dst": ["tag:ia4:9999"]}))
     p = verify(p_new)
-    check("Toleranz-Verify: unerwarteter neuer Eintrag -> exit 1",
-          p.returncode == 1
-          and "Unerwartet fremd in live (Modell+Toleranz unbekannt): 1" in p.stdout,
+    check("(iv) unerwarteter Zusatz-Eintrag -> exit 1", p.returncode == 1,
           "rc=%d" % p.returncode)
+    check("(iv) gemeldet als unerwartet fremd",
+          "Unerwartet fremd in live (Modell+Toleranz unbekannt): 1" in p.stdout)
 
-    # 8g) Fremdbestand an FALSCHER Live-Position (ssh?) -> exit 1 (Reihenfolge/Position)
-    #     Basis = Kanon-Lage (p_contig), damit die Abweichung REIN die ssh-Position ist.
-    def _mutate_moved(d):
-        e = d["ssh"].pop(0)
-        d["ssh"].append(e)
-    p_moved = write_live("tol-moved.hujson", _mutate_moved, base=p_contig)
-    p = verify(p_moved)
-    check("Toleranz-Verify: Fremdbestand an falscher Position -> exit 1",
+    # 8e) (v) Foreign-Eintrag FEHLT (gelöscht) -> exit 1
+    p_miss = write_live("tol-missing.hujson", lambda d: d.__setitem__(
+        "acls", [r for r in d["acls"]
+                 if not (r.get("src") == ["tag:ia3"] and r.get("dst") == ["tag:ia3:*"])]))
+    p = verify(p_miss)
+    check("(v) fehlender Foreign-Eintrag -> exit 1", p.returncode == 1,
+          "rc=%d" % p.returncode)
+    check("(v) gemeldet als Fremdbestand fehlt/verändert",
+          "Tolerierter Fremdbestand fehlt/verändert: 1" in p.stdout)
+
+    # 8f) Managed-Eintrag VERSCHOBEN -> exit 1 (Reihenfolge bleibt scharf:
+    #     Umsortierungen rund um unsere Regeln fallen auf).
+    def _move_managed(d):
+        idx = next(i for i, r in enumerate(d["acls"])
+                   if r.get("src") == ["tag:ha"]
+                   and r.get("dst") == ["autogroup:owner:*"])
+        d["acls"].append(d["acls"].pop(idx))
+    p_moved_m = write_live("tol-moved-managed.hujson", _move_managed)
+    p = verify(p_moved_m)
+    check("(8f) Managed-Eintrag verschoben -> exit 1 (Reihenfolge scharf)",
           p.returncode == 1
           and "Regel-Reihenfolge (acls/ssh) abweichend: 1" in p.stdout,
           "rc=%d" % p.returncode)
+
+    # 8g) Ohne Toleranz (strikt): derselbe reale Live-Zustand -> 5 IaC3-Fremd-Einträge = Drift
+    p_strict = verify(FIXTURE_FULL, tolerated=False)
+    check("Strikter Verify (ohne Toleranz): 5 Fremd-Einträge -> exit 1",
+          p_strict.returncode == 1
+          and "Unerwartet fremd in live (Modell+Toleranz unbekannt): 5" in p_strict.stdout,
+          "rc=%d" % p_strict.returncode)
 
     print("")
     if _failures:

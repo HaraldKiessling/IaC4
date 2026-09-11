@@ -34,12 +34,14 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
    nur die fehlende Differenz **rein additiv** an (bestehende Zeilen werden nie
    verändert oder entfernt). Neue Einträge werden an ihrer **Modell-Position**
    eingefügt, sodass die Regel-Reihenfolge erhalten bleibt.
-3. **Erfolgskriterium (Owner-Entscheid F4=(a), präzisiert 2026-09-11 19:41 UTC):**
+3. **Erfolgskriterium (Owner-Entscheid F4=(a), präzisiert 2026-09-11 19:41 UTC;
+   positionsgenau 2026-09-11 20:24 UTC):**
    Der Abgleich `--verify <export-datei> --tolerated-foreign <liste>` gilt als
    bestanden, wenn der **verwaltete Teil** (Modelleinträge) **semantisch exakt**
    matcht **inkl. Regel-Reihenfolge** (`acls`/`ssh`) **und** der **dokumentierte
-   Fremdbestand** vollständig, unverändert und an seinen Live-Positionen vorhanden
-   ist. Tags (`tagOwners`) werden als Zuordnung verglichen; Formatierung,
+   Fremdbestand** **positionsgenau** unverändert vorhanden ist (jeder Eintrag an
+   **seiner** dokumentierten Position, in **genau der** dokumentierten
+   Reihenfolge). Tags (`tagOwners`) werden als Zuordnung verglichen; Formatierung,
    Kommentare und Trailing-Kommas bleiben unberücksichtigt. **Byte**-Gleichheit
    ist **nicht** das Kriterium (die Tailscale-API reserialisiert die Policy).
    Der frühere strikte **Null-Diff** („Modell ≡ Live, kein fremder Eintrag“) gilt
@@ -50,8 +52,8 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
    `tag:ia3`) werden **nicht** ins IaC4-Modell aufgenommen. Sie sind eine **eigene
    Zuständigkeit** (IaC3) und bleiben als **dokumentierter Fremdbestand** in
    `acl/tolerated-foreign.json` erfasst (Gruppe `iac3`, 5 Einträge): Sie müssen
-   vollständig und unverändert an ihren Live-Positionen erhalten bleiben,
-   unterliegen aber **nicht** der IaC4-Modellierung.
+   vollständig und **positionsgenau** an ihren **Live-Positionen** erhalten
+   bleiben, unterliegen aber **nicht** der IaC4-Modellierung.
 
    Die **vier Konsolen-Einträge** (Regel-1-Cluster `owner` ↔ `tag:ha`, aus der
    Owner-Konsole) wurden mit dem **Owner-Entscheid 2026-09-11 (19:52 UTC, „Ja“)**
@@ -93,23 +95,26 @@ bewusst **nicht** übernommen (kein Mitverwalten). Damit ist ein strikter Null-D
 der **gesamten** Policy nicht mehr das Ziel; das Erfolgskriterium ist der
 **verwaltete Teil exakt + dokumentierter Fremdbestand unverändert**.
 
-**Mechanik:** `acl/tolerated-foreign.json` listet den Fremdbestand je Abschnitt
-(`acls`/`ssh`) mit Block-**Position** (`start`/`end`) und Reihenfolge. `--verify
-<export> --tolerated-foreign <liste>` prüft: (a) verwalteter Teil ≡ Modell
-(inkl. Reihenfolge), (b) jeder tolerierte Eintrag vorhanden/unverändert,
-(c) **kein unerwarteter** Live-Eintrag (Modell ∪ Toleranzliste). Jede Abweichung
-→ **exit 1** mit Nennung des betroffenen Eintrags. Der strikte Modus bleibt ohne
-`--tolerated-foreign` erhalten.
+**Mechanik (positionsgenau, Schema v2):** `acl/tolerated-foreign.json`
+modelliert je Abschnitt (`acls`/`ssh`) eine **geordnete Erwartung** (`layout`):
+jeder Live-Eintrag ist als `managed` (Wert aus dem Modell, in Modell-Reihenfolge
+konsumiert) oder `foreign` (eingefrorener Soll-Eintrag) klassifiziert, in genau
+dieser Reihenfolge. **Verschränkung (Interleaving) ist damit zulässig.**
+`--verify <export> --tolerated-foreign <liste>` prüft: (a) jeder `managed`-Eintrag
+≡ Modell (Wert + Position), (b) jeder `foreign`-Eintrag ≡ Soll-Wert + steht an
+seiner Position, (c) **kein unerwarteter** Live-Eintrag (Modell ∪ Toleranzliste)
+und keine Umsortierung. Jede Abweichung → **exit 1** mit Nennung des betroffenen
+Eintrags (+ Position). Der strikte Modus bleibt ohne `--tolerated-foreign` erhalten.
 
-**Bekannte Limitierung (M2-Finding 2026-09-11):** Die Block-Positionierung setzt
-einen **zusammenhängenden** Fremdbestand-Block je Abschnitt voraus. In der realen
-Live-Policy ist der IaC3-`acls`-Block jedoch durch den (jetzt verwalteten)
-Konsolen-Block **unterbrochen** (IaC3-Selbstregel steht davor). Folge: Der
-`--verify` erfüllt das **Erfolgskriterium** (verwalteter Teil exakt, Fremdbestand
-vollständig/unverändert, kein unerwarteter Eintrag), meldet aber eine
-Reihenfolge-Abweichung → **exit 1**. Behebung erfordert eine **Owner-Entscheidung**
-(positions-genaue Modellierung des Fremdbestands **oder** Präzisierung der
-Block-Positionierung im Erfolgskriterium). Siehe Runbook „M2-Finding“.
+**Aufgelöste Limitierung (M2-Finding 2026-09-11, behoben 20:24 UTC):** Das frühere
+Block-Positions-Modell (`position` `start`/`end`) setzte einen **zusammenhängenden**
+Fremdbestand-Block voraus. In der realen Live-Policy ist der IaC3-`acls`-Block
+jedoch durch den (jetzt verwalteten) Konsolen-Block **unterbrochen**
+(IaC3-Selbstregel steht davor). Der `--verify` meldete daher fälschlich eine
+Reihenfolge-Abweichung (exit 1), obwohl das **Erfolgskriterium** erfüllt war. Mit
+dem Owner-Entscheid 2026-09-11 (20:24 UTC, „1“) ist der Fremdbestand
+**positionsgenau** modelliert; Verschränkung ist erlaubt. Der `--verify` gegen den
+eingefrorenen Export ist damit **grün** (exit 0). Siehe Runbook „M2-Finding“.
 
 ### Übernahme aus HA-PR #54 (F5=(a))
 
