@@ -26,12 +26,21 @@ IaC4**: SSoT `acl/tailscale-acl.hujson`, ein semantischer Applier
 | **F5=(a)** | HA-PR #54 | Inhalt (semantische Precondition) wandert ins IaC4-Werkzeug; **#54** wird als **überholt** geschlossen (Referenz-Kommentar auf PR #140 + Branch/Commit). |
 | **F6=(a)** | Sperre | HA-Workflow **deaktivieren** (nicht löschen) + **Kopfhinweis** + Doku-Eintrag; Ausführung durch den **Orchestrator nach Owner-Bestätigung**, im Migrations-Log festgehalten. |
 
+### Zusätzliche Owner-Entscheide (2026-09-11, 17:52 UTC)
+
+| # | Gegenstand | Festlegung | Umsetzung |
+|---|------------|------------|-----------|
+| **E1** | Legacy-Trigger Workflow 01 | Workflow `01-tailscale-terraform.yml` darf den `tag:ia4`-Apply **nicht mehr automatisch** auslösen (raus aus dem push-/`terraform/**`-Trigger). ACL-Apply **nur noch manuell** (`workflow_dispatch` + explizite Bestätigung). **Kein** eingebautes „Confirm“ in Workflow 01. | ACL-Schritt (Aufruf `ensure-acl-ia4.py`) **entfernt**; Kopfhinweis ergänzt; Terraform-Teil unverändert. Einziger Apply-Weg bleibt `00-acl-apply.yml` (`confirm=APPLY-ACL`). |
+| **E2** | Merge-Grundlage | **Regel-6-live-Evidenz** (Run-Log-Rekonstruktion, Run 34398338512) wird für den **Merge** akzeptiert; der **rohe Export bestätigt später** (M3). | Merge von #140 ohne vorherigen Roh-Export; `--verify` gegen den Export erfolgt nachgelagert. |
+| **E3** | Roh-Export | Roh-Export **nicht ins Repo**: `.gitignore` + Artefakt-Upload; Kopie im Workspace einfrieren. Doku-Notiz „Roh-Export wird nicht versioniert“. | `.gitignore` (`acl/live*.hujson`) + Artefakt-Upload in `00-acl-apply.yml` (`export=true`) + Hinweise in `acl/README.md`/Runbook (M1). |
+| **E4** | Merge der Vorstufe | **Ja** — PR #140 (reine Migration + Doku, kein Apply) darf gemergt werden. | `gh pr merge 140 --merge` (kein Force, kein Branch-Delete). |
+
 ## Voraussetzungen (blockierend, vor M1)
 
 | # | Voraussetzung | Status |
 |---|---------------|--------|
 | V1 | **IaC4-Tailscale-API-Key** erneuern (401 seit 2026-07-31 15:36) → als Secret `TAILSCALE_API_KEY` | **OFFEN (Lücke)** |
-| V2 | **Roher Live-Export** der ACL (`GET /api/v2/tailnet/{tailnet}/acl`) als versioniertes Artefakt + SHA256 (read-only `--export`) | **OFFEN (Lücke)** |
+| V2 | **Roher Live-Export** der ACL (`GET /api/v2/tailnet/{tailnet}/acl`) als read-only `--export` + SHA256 — als **Artefakt** (nicht versioniert, Entscheid 3) | **OFFEN (Lücke)** |
 | V3 | Drift-Befund verbindlich einarbeiten (`acl-drift-analyse-20260911.md`) | teilweise (Run-Log-rekonstruiert, siehe „Live-Bestand") |
 
 > **Hinweis:** V1/V2 sind **bekannte Lücken, kein Auftrag dieser Migration.**
@@ -61,10 +70,17 @@ aus **Run-Logs rekonstruiert** (Lücke V2). Modell-Soll und Offline-Fixture
 
 ### M1 — Export (Inventar, verlustfrei, read-only)
 
-1. Live-Policy roh exportieren und versionieren:
-   `python3 scripts/ensure-acl.py --export --out acl/live-<ts>.hujson`
-   (schreibt rohe huJSON + `.sha256`; reiner `GET`).
-2. Semantisch parsen und in die Struktur `tagOwners` / `acls` / `ssh` zerlegen.
+1. Live-Policy roh exportieren (reiner `GET`, **kein Commit**):
+   - über den Workflow (empfohlen, kein lokaler Key nötig):
+     `.github/workflows/00-acl-apply.yml` per `workflow_dispatch` mit
+     **`export=true`** (`dry_run=true`, **niemals** `apply`) starten; danach das
+     Artefakt `acl-live-export-<run_id>` abrufen (`gh run download`).
+   - oder lokal: `python3 scripts/ensure-acl.py --export --out acl/live-<ts>.hujson`
+     (schreibt rohe huJSON + `.sha256`; reiner `GET`).
+2. **Der Roh-Export wird NICHT versioniert** (Entscheid 3, 2026-09-11): Die
+   Ablage erfolgt als **Workflow-Artefakt** plus eingefrorene Kopie im Workspace
+   (`.gitignore`: `acl/live*.hujson`). Nur SHA256 + Zeitstempel sind der Beleg.
+3. Semantisch parsen und in die Struktur `tagOwners` / `acls` / `ssh` zerlegen.
 3. Regel-für-Regel-Zuordnung erstellen: welche Live-Blöcke gehören zu `tag:ia4`
    (IaC4), welche zu `tag:ha`/`tag:ha-ci` (HA), was ist „fremder Bestand"
    (ia3, Owner-Konsole) → Letzteres bleibt **unverändert**.
@@ -183,6 +199,9 @@ einzubringen: `docs/reference/tailscale-acl.md` + Header-Hinweis im Apply-Workfl
 | 2026-09-11 | M4 IaC4-Apply | blockiert — V1 (Key 401) + V2 (roher Export) fehlen | Orchestrator (nach V1/V2) |
 | 2026-09-11 | M5 Sperre HA-Weg | ausstehend — nach Owner-Bestätigung | Orchestrator |
 | 2026-09-11 | Befund eingearbeitet: Regel 6 (mqtt-1883) = **Live-Soll** (Run-Log-Beleg 34398338512); Regel 7 bleibt `pending`; Live-Bestand als Rekonstruktion dokumentiert | erledigt | Engineer |
+| 2026-09-11 | **E1** Workflow 01: automatischer `tag:ia4`-Apply entfernt (kein push-/PR-Auslöser mehr); ACL nur noch manuell | erledigt | Engineer |
+| 2026-09-11 | **E3** Roh-Export nicht versioniert: `.gitignore` + Artefakt-Upload (`00-acl-apply.yml`, `export=true`); Doku-Notiz | erledigt | Engineer |
+| 2026-09-11 | **E2/E4** Regel-6-live-Evidenz für Merge akzeptiert; Merge Vorstufe PR #140 freigegeben | erledigt | Engineer/Orchestrator |
 
 ## Offene Lücken (separat als IaC4-Issues, nicht Teil dieser Migration)
 

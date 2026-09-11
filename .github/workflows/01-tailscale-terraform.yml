@@ -1,5 +1,24 @@
 ---
-name: "01 – Tailscale Terraform (OAuth + ACLs)"
+# =============================================================================
+# 01 – Tailscale Terraform (OAuth)
+#
+#   Verwaltet NUR den Tailscale-OAuth-Client (terraform/oauth-client.tf) und die
+#   zugehoerigen GH-Secrets. Es gibt in IaC4 KEINE Terraform-ACL-Resource
+#   (ADR-010).
+#
+#   GOVERNANCE (Owner-Entscheid 2026-09-11, Entscheid 1):
+#     Dieser Workflow loest KEINEN ACL-Apply mehr aus. Der frueher hier
+#     eingebaute Pfad `scripts/ensure-acl-ia4.py` (tag:ia4) ist ENTFERNT – ein
+#     ACL-Apply darf NIEMALS automatisch aus dem push-/`terraform/**`-Trigger
+#     (oder aus einem workflow_dispatch dieses Workflows) heraus laufen.
+#     Der einzige ACL-Apply-Weg ist `.github/workflows/00-acl-apply.yml`:
+#     ausschliesslich manuell (workflow_dispatch) mit expliziter
+#     Governance-Bestaetigung (`confirm=APPLY-ACL`, `dry_run=false`).
+#     `scripts/ensure-acl-ia4.py` bleibt lediglich als Kompatibilitaets-Shim
+#     (→ `ensure-acl.py --rule iac4`) bestehen; es wird hier NICHT mehr aufgerufen.
+#     Siehe docs/workflows/acl-migration-runbook.md (Migrations-Log) + ADR-026.
+# =============================================================================
+name: "01 – Tailscale Terraform (OAuth)"
 
 on:
   pull_request:
@@ -114,13 +133,14 @@ jobs:
         if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
         run: terraform apply -auto-approve plan_output
 
-      - name: ACL – IaC4-Regeln idempotent sicherstellen (rein additiv, Backup+Rollback)
-        if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')
-        env:
-          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
-          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
-        run: |
-          python3 ${GITHUB_WORKSPACE}/scripts/ensure-acl-ia4.py
+      # HINWEIS (Owner-Entscheid 2026-09-11, Entscheid 1): Der frueher hier
+      # stehende Schritt „ACL – IaC4-Regeln idempotent sicherstellen"
+      # (Aufruf `scripts/ensure-acl-ia4.py`) ist ENTFERNT. Dieser Workflow darf
+      # den tag:ia4-Apply NICHT mehr automatisch ausloesen. ACL-Aenderungen laufen
+      # ausschliesslich manuell ueber `.github/workflows/00-acl-apply.yml`
+      # (workflow_dispatch + `confirm=APPLY-ACL`). Absichtlich KEIN eingebautes
+      # "Confirm" hier – der Terraform-Teil bleibt unveraendert. Siehe
+      # docs/workflows/acl-migration-runbook.md und ADR-026.
 
       - name: OAuth-Secrets in GH speichern
         if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply == 'true')

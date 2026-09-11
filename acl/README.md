@@ -90,10 +90,18 @@ TS_TAILNET=… TS_API_KEY=… python3 scripts/ensure-acl.py --rules iac4 --confi
 python3 acl/tests/offline_tests.py
 ```
 
+> **Roh-Export wird nicht versioniert** (Owner-Entscheid 2026-09-11, Entscheid 3):
+> Der rohe Live-Export ist **kein** Repo-Artefakt. Er wird per Workflow
+> `00-acl-apply.yml` (`export=true`) als **Artefakt** erzeugt/abgerufen und als
+> Kopie im Workspace eingefroren; `.gitignore` schließt `acl/live*.hujson` aus.
+> Beleg sind SHA256 + Zeitstempel (Artefakt `acl-export-info.txt`).
+
 ## Governance
 
 - Ein ACL-Apply läuft **nie automatisch** — manuell über
   `.github/workflows/00-acl-apply.yml` (`confirm=APPLY-ACL`, `dry_run`, `rules`).
+  Der Legacy-Trigger in Workflow 01 (`01-tailscale-terraform.yml`) ist **entfernt**
+  (Entscheid 1): Workflow 01 löst **keinen** `tag:ia4`-Apply mehr aus.
 - Jeder Apply: Wirkungs-Analyse (`--dry-run`) + Review (Autor ≠ Reviewer) +
   ausdrückliche Owner-Zustimmung.
 - Der Applier ist **rein additiv** (bestehende Zeilen werden nie verändert/entfernt)

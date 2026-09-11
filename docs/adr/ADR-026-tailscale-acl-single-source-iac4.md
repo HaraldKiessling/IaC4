@@ -41,17 +41,22 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
    bleiben unberücksichtigt. **Byte**-Gleichheit ist **nicht** das Kriterium (die
    Tailscale-API reserialisiert die Policy).
 4. **Ein Apply-Weg:** `.github/workflows/00-acl-apply.yml` — ausschließlich
-   manuell (`workflow_dispatch`), Inputs `confirm`/`dry_run`/`rules`,
+   manuell (`workflow_dispatch`), Inputs `export`/`confirm`/`dry_run`/`rules`,
    **kein** push-/PR-Trigger (Governance: ACL nie automatisch). Secrets-Namen
-   unverändert (`TAILSCALE_TAILNET`, `TAILSCALE_API_KEY`).
+   unverändert (`TAILSCALE_TAILNET`, `TAILSCALE_API_KEY`). Der Input `export`
+   liefert den rohen Live-Stand als **Artefakt** (read-only, nicht versioniert) —
+   Grundlage für M3. Der Legacy-Aufruf in Workflow 01 wurde mit dem Owner-Entscheid
+   2026-09-11 (Entscheid 1) **entfernt**: Workflow 01 löst keinen `tag:ia4`-Apply
+   mehr aus.
 5. **Übergang IaC4-first (Owner-Entscheid F3=(b)):** Der IaC4-Apply führt; der
    HA-Apply-Weg bleibt während des Übergangs als **Rückfallweg offen** und wird
    **danach** gesperrt (deaktivieren statt löschen, F6=(a)).
 6. **Kein Terraform-ACL-Resource:** ADR-010 bleibt gewahrt (Overwrite-Gefahr).
 
 Der bisherige IaC4-Pfad (`ensure-acl-ia4.py`) wird auf einen dünnen
-Kompatibilitäts-Shim reduziert (leitet auf `ensure-acl.py --rule iac4`), damit
-der bestehende Aufrufer (Workflow 01) nicht bricht.
+Kompatibilitäts-Shim reduziert (leitet auf `ensure-acl.py --rule iac4`); er wird
+von **keinem** Workflow mehr aufgerufen (Workflow 01 entkoppelt, Entscheid 1) und
+bleibt nur als Migrations-/Rollback-Referenz erhalten.
 
 ### Übernahme aus HA-PR #54 (F5=(a))
 

@@ -1,8 +1,15 @@
 ---
 # =============================================================================
-# 00 – ACL-Apply (Tailscale, SSoT in IaC4) — NUR manuell + Owner-Go
+# 00 – ACL (Tailscale, SSoT in IaC4) — Export (read-only) + Dry-Run + Apply
 #
-#   Fuehrt scripts/ensure-acl.py mit der Single Source of Truth
+#   Export/Inventar (read-only): Input `export=true` fuehrt
+#   `scripts/ensure-acl.py --export` aus: reiner GET der Live-Policy → rohe
+#   huJSON + SHA256, hochgeladen als ARTEFAKT. KEIN POST, kein Backup, kein
+#   Commit. Der Roh-Export wird NICHT versioniert (siehe .gitignore); die Kopie
+#   lebt im Workspace/Artefakt. Damit ist der frueher fehlende rohe Ist-Stand
+#   (Runbook V2/M1, Null-Diff-Grundlage M3) reproduzierbar abrufbar.
+#
+#   Dry-Run/Apply: fuehrt scripts/ensure-acl.py mit der Single Source of Truth
 #   acl/tailscale-acl.hujson aus: rein additive, SEMANTISCHE Tailscale-ACL-
 #   Erweiterung fuer BEIDE Tag-Welten (tag:ia4 + tag:ha/tag:ha-ci).
 #
@@ -18,6 +25,9 @@
 #     Verifikationsfehler.
 #
 #   Doppelte Sicherung ueber die Inputs:
+#     - export:   Default false. true = read-only Inventar (GET → rohe huJSON +
+#                 SHA256 als Artefakt); schliesst den Schreibpfad strukturell aus
+#                 (verlangt dry_run=true). NIEMALS mit apply kombinieren.
 #     - confirm:  muss exakt "APPLY-ACL" sein – NUR fuer den echten Apply
 #                 (dry_run=false); sonst Abbruch in Schritt (1) VOR dem POST. Ein
 #                 reiner Trockenlauf (dry_run=true) braucht KEIN Apply-Wort.
@@ -43,6 +53,8 @@
 #   HA-PR #54). Der Erfolgs-Abgleich ("Null-Diff") laeuft ueber
 #   `python3 scripts/ensure-acl.py --verify <export-datei>`: semantisch inkl.
 #   Regel-Reihenfolge (acls/ssh); Formatierung/Kommentare bleiben unberuecksichtigt.
+#   Der Export dieses Workflows (Input `export=true`) liefert genau diese
+#   export-datei + SHA256 als Artefakt.
 #
 #   Uebergang (Owner-Entscheid F3=(b)/F6=(a)): IaC4-first – der ha-repo-ACL-Weg
 #   bleibt bis zur Sperre als Rueckfallweg offen und wird danach deaktiviert
@@ -57,11 +69,15 @@
 #   seit 2026-07-31 401) und ohne rohen Live-Export ist die Null-Diff-
 #   Verifikation (Runbook M3) nicht ausfuehrbar. Voraussetzung vor M3/M4.
 # =============================================================================
-name: "00 – ACL-Apply (Tailscale SSoT, manuell + Owner-Go)"
+name: "00 – ACL (Tailscale SSoT: Export read-only, Dry-Run, Apply + Owner-Go)"
 
 on:
   workflow_dispatch:
     inputs:
+      export:
+        description: 'Read-only Inventar: GET → rohe huJSON + SHA256 als Artefakt (kein POST). Verlangt dry_run=true.'
+        default: false
+        type: boolean
       confirm:
         description: 'Governance-Bestaetigung – exakt "APPLY-ACL" NUR fuer den echten Apply (dry_run=false); Dry-Run braucht kein Apply-Wort'
         required: true
@@ -93,17 +109,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: "(1) Governance-Guard – confirm + rules-Validierung"
+      - name: "(1) Governance-Guard – export/confirm + rules-Validierung"
         env:
           CONFIRM: ${{ inputs.confirm }}
           DRY_RUN: ${{ inputs.dry_run }}
+          EXPORT: ${{ inputs.export }}
           RULES: ${{ inputs.rules }}
         run: |
           set -euo pipefail
-          if [ "${DRY_RUN}" = "false" ]; then
+          if [ "${EXPORT}" = "true" ]; then
+            MODUS="EXPORT (read-only Inventar, kein POST)"
+          elif [ "${DRY_RUN}" = "false" ]; then
             MODUS="APPLY (POST)"
           else
             MODUS="DRY-RUN (Wirkungs-Analyse, kein POST)"
+          fi
+          # Export ist strikt read-only und schliesst den Schreibpfad aus.
+          if [ "${EXPORT}" = "true" ] && [ "${DRY_RUN}" = "false" ]; then
+            echo "::error::export=true verlangt dry_run=true – Export ist read-only und darf NIE mit dem Schreibpfad kombiniert werden."
+            exit 1
+          fi
+          if [ "${EXPORT}" = "true" ] && [ "${CONFIRM}" = "APPLY-ACL" ]; then
+            echo "::error::export=true ist read-only – kein Apply-Wort zulaessig."
+            exit 1
           fi
           # confirm nur fuer den echten Apply verlangen (dry_run=false). Ein reiner
           # Trockenlauf braucht kein Apply-Wort; der Schreibpfad bleibt hart durch
@@ -145,7 +173,7 @@ jobs:
 
       - name: "(2b) Dry-Run – semantischer Soll/Ist-Diff (KEIN POST)"
         # boolean-Input direkt pruefen (GitHub loose equality bei Typ-Mix – kein String-Literal).
-        if: inputs.dry_run
+        if: ${{ !inputs.export && inputs.dry_run }}
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
           TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
@@ -156,8 +184,46 @@ jobs:
           echo "ℹ️ Dry-Run: nur GET (read-only) – kein POST, kein Backup, ACL unveraendert."
           python3 scripts/ensure-acl.py --dry-run --rules "${RULES}"
 
+      - name: "(2c) Export – read-only Inventar (rohe huJSON + SHA256, KEIN POST)"
+        if: ${{ inputs.export }}
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${TS_API_KEY}"
+          echo "ℹ️ Export: nur GET (read-only) – kein POST, kein Backup, ACL unveraendert."
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          OUT="$RUNNER_TEMP/acl-live-export-${TS}.hujson"
+          python3 scripts/ensure-acl.py --export --out "$OUT"
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$(basename "$OUT")" > "$OUT.sha256"
+          {
+            echo "# ACL-Live-Export (read-only) – NICHT versioniert (siehe .gitignore)"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "time_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "source=GET /api/v2/tailnet/<tailnet>/acl"
+            echo "file=$(basename "$OUT")"
+            echo "sha256=${SHA}"
+          } > "$RUNNER_TEMP/acl-export-info.txt"
+          echo "🔑 SHA256: ${SHA}"
+          cat "$RUNNER_TEMP/acl-export-info.txt"
+
+      - name: "(2d) Artefakt-Upload – roher Export + SHA256 + Info (nicht versioniert)"
+        if: ${{ inputs.export }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: acl-live-export-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/acl-live-export-*.hujson
+            ${{ runner.temp }}/acl-live-export-*.hujson.sha256
+            ${{ runner.temp }}/acl-export-info.txt
+          retention-days: 30
+          if-no-files-found: error
+
       - name: "(3) APPLY – nur wenn dry_run=false (confirm-Guard aus Schritt 1 greift)"
-        if: "!inputs.dry_run"
+        if: ${{ !inputs.export && !inputs.dry_run }}
         env:
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
           TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
@@ -173,7 +239,11 @@ jobs:
       - name: "(4) Zusammenfassung (kompakt, keine Secrets)"
         run: |
           echo "──────────────────────────────────────────────────────────────"
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "${{ inputs.export }}" = "true" ]; then
+            echo "Modus:   EXPORT – read-only Inventar (ACL unveraendert)."
+            echo "Artefakt: acl-live-export-${{ github.run_id }} (rohe huJSON + SHA256 + Info)."
+            echo "Hinweis: Roh-Export wird NICHT versioniert (.gitignore); Kopie im Workspace ablegen."
+          elif [ "${{ inputs.dry_run }}" = "true" ]; then
             echo "Modus:   DRY-RUN – ACL unveraendert."
             echo "Regeln:  ${{ inputs.rules }} (nicht gewaehlte Gruppen unveraendert)."
             echo "Naechster Schritt: Diff reviewen; Apply erst nach Review + Owner-Go"
