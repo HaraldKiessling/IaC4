@@ -86,8 +86,9 @@ für die tatsächlich eingefügten Gruppen geprüft) und offline getestet
 
 ## Evidenz
 
-- `acl-drift-analyse-20260911.md` (live: Regeln 1/2/3/4/5 + 6 strittig; 7 nicht
-  live; IaC4-Byte-Anker vermutlich nicht mehr matchfähig nach API-Re-Serialisierung).
+- `acl-drift-analyse-20260911.md` (live: Regeln 1–6 — Regel 6 belegt per
+  Run-Log 2026-09-09; 7 nicht live; IaC4-Byte-Anker vermutlich nicht mehr
+  matchfähig nach API-Re-Serialisierung).
 - `acl-konsolidierung-iac4-20260911.md` (Zielarchitektur, Migrationsplan M1–M7).
 - ha-repo `scripts/ensure-acl-ha.py` (semantischer Multimengen-Vergleich,
   Precondition-Kette, `count==1`-Gates — als Mechanik-Vorbild).
@@ -130,7 +131,7 @@ Modell + Skript + Workflow + Doku, **Draft, kein Merge, kein Apply**.
 - **Voraussetzung (Lücke, nicht Auftrag):** gültiger IaC4-`TAILSCALE_API_KEY`
   sowie ein roher Live-Export sind für M3 (Null-Diff) erforderlich; heute nicht vorhanden.
 - **Folge-Entscheidungen (separat):** Zeitpunkt des Schnitts, Prod-Ausführung,
-  Aktivierungszeitpunkt von Regel 6/7, `--accept-routes` (nicht Teil dieser ADR).
+  Aktivierungszeitpunkt Regel 7 (Energie), `--accept-routes` (nicht Teil dieser ADR).
 
 ## Referenzen
 

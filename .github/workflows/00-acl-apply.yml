@@ -27,8 +27,8 @@
 #     - rules:    Regel-Auswahl gegen die SSoT-Gruppen. Erlaubt: iac4 | 1..7
 #                 (HA-Regeln) | Gruppennamen (ha-tagowners, ha-acl, ha-ssh,
 #                 ha-runner, owner-8123, mqtt-1883, energie-read) | all.
-#                 Default 'iac4' (IaC4-Welt). Pending-Gruppen (mqtt-1883,
-#                 energie-read) nur bei bewusster, separater Owner-Freigabe.
+#                 Default 'iac4' (IaC4-Welt). Pending-Gruppe (energie-read)
+#                 nur bei bewusster, separater Owner-Freigabe.
 #
 #   Secrets (Namen unveraendert zu Workflow 01): TAILSCALE_TAILNET +
 #   TAILSCALE_API_KEY. Werte werden NIE ausgegeben; zusaetzlich explizite
@@ -180,4 +180,4 @@ jobs:
             echo "Rollback: automatisch bei Verifikationsfehler; Backup /tmp/acl-backup.json dieses Laufs."
           fi
           echo "Governance: kein automatischer ACL-Apply – jeder Lauf ist manuell (Runbook docs/workflows/acl-migration-runbook.md)."
-          echo "Pending-Gruppen (mqtt-1883, energie-read) nur nach separater Owner-Freigabe."
+          echo "Pending-Gruppe (energie-read) nur nach separater Owner-Freigabe."

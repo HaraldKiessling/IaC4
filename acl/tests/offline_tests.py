@@ -64,19 +64,33 @@ def main():
               len(rep["missing"]), len(rep["changed"]), len(rep["foreign"])))
     check("Pending-Regel 7 (Energie) ist im Snapshot nicht live",
           any(s == "acls" for s, _o, _msg in rep["pending_missing"]))
-    check("Pending-Regel 6 (MQTT) als live erkannt (streitig → pending_live)",
-          any(s == "acls" for s, _o, _msg in rep["pending_live"]))
+    mqtt_mod = [e for e in model["acls"] if e.group == "mqtt-1883"]
+    mqtt_live = {e.canon for e in live["acls"]}
+    check("Regel 6 (MQTT) ist Live-Soll (nicht mehr pending)",
+          len(mqtt_mod) == 1 and not mqtt_mod[0].pending,
+          "mqtt-1883-Einträge=%d pending=%s"
+          % (len(mqtt_mod), [e.pending for e in mqtt_mod]))
+    check("Regel 6 (MQTT) im Live-Snapshot vorhanden (nicht mehr pending_live)",
+          bool(mqtt_mod) and mqtt_mod[0].canon in mqtt_live
+          and not any(s == "acls" for s, _o, _m in rep["pending_live"]))
 
     # 3) Additive Einfügung der iac4-Gruppe in Snapshot OHNE iac4
+    #    Entfernt werden GENAU die iac4-Modell-Einträge (semantisch über canon),
+    #    damit z. B. die MQTT-Regel (gleiche src wie ein iac4-Eintrag, aber
+    #    dst tag:ha:1883) im Snapshot bleibt.
+    iac4 = [e for s in m.SECTION_ORDER for e in model[s] if e.group == "iac4"]
+    iac4_acls = {e.canon for e in iac4 if e.section == "acls"}
+    iac4_ssh = {e.canon for e in iac4 if e.section == "ssh"}
+    iac4_tags = {e.key for e in iac4 if e.section == "tagOwners"}
+
     raw = json.loads(live_text)
-    del raw["tagOwners"]["tag:ia4"]
-    raw["acls"] = [r for r in raw["acls"] if r.get("dst") != ["tag:ia4:*"]
-                   and r.get("src") != ["tag:ia4"]]
-    raw["ssh"] = [r for r in raw["ssh"] if r.get("dst") != ["tag:ia4"]]
+    for k in iac4_tags:
+        raw["tagOwners"].pop(k, None)
+    raw["acls"] = [r for r in raw["acls"] if m.canon(r) not in iac4_acls]
+    raw["ssh"] = [r for r in raw["ssh"] if m.canon(r) not in iac4_ssh]
     minus_text = json.dumps(raw, indent=2)
 
     minus_live = m.parse_live(minus_text)
-    iac4 = [e for s in m.SECTION_ORDER for e in model[s] if e.group == "iac4"]
     check("iac4-Gruppe hat 4 Einträge (1 tagOwner + 2 acl + 1 ssh)", len(iac4) == 4,
           "gefunden: %d" % len(iac4))
 

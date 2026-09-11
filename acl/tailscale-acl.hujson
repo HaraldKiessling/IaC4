@@ -22,9 +22,12 @@
   //   3. Kommentare sind huJSON-Kommentare (// oder /* */); Trailing-Kommas sind
   //      erlaubt. `scripts/ensure-acl.py` parst die Datei semantisch (huJSON→JSON).
   //
-  // Live-Bezug (Stand 2026-09-11, belegt in acl-drift-analyse-20260911.md):
-  //   live = base + iac4 + ha-tagowners + ha-acl + ha-runner + owner-8123 + ha-ssh
-  //   KEIN Raw-huJSON-Export der Live-Policy vorhanden (Governance-Lücke, offen).
+  // Live-Bezug (Stand 2026-09-11, aus Run-Logs rekonstruiert):
+  //   live = base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner
+  //          + owner-8123 + ha-ssh   (HA-Regeln 1–6; Regel 7 pending/nicht live)
+  //   Der Live-Bestand ist derzeit eine Run-Log-Rekonstruktion – KEIN roher
+  //   huJSON-Export vorhanden (Governance-Lücke V2, siehe Runbook). Nach Schließen
+  //   der Lücke durch den rohen Export + `--verify` zu ersetzen/bestätigen.
   //   Die IaC4-Gewähr endet am 31.07.2026 (API-Key seither 401).
   // ===========================================================================
 
@@ -72,13 +75,15 @@
       "dst": ["tag:ha:22", "tag:ha:8123"],
     },
 
-    // rule: mqtt-1883 pending — HA-Regel 6 (MQTT 1883): vps-dev (tag:ia4) →
+    // rule: mqtt-1883 — HA-Regel 6 (MQTT 1883): vps-dev (tag:ia4) →
     // ha1/ha3 (tag:ha), LESEND: NUR Port 1883 (core-mosquitto).
-    // ⚠️ LIVE-ZUSTAND STREITIG: Netz-Diag (2026-09-10) + plan-ha1-e2e-beweis
-    //    §437 melden "Regel 6 wirkt/live" (Apply 09.09. 20:02Z, Branch
-    //    feature/acl-regel6-1883); acl-vorlage-energie §2.5/§6.1 sagt "nicht
-    //    live" (Regel 6 sei nur Branch-Stand). Nur ein Live-GET entscheidet.
-    //    Bis dahin als `pending` geführt (nicht Teil des garantierten Live-Solls).
+    // ✅ LIVE-SOLL (belegt 2026-09-11, Run-Log-Rekonstruktion): additiver POST
+    //    am 2026-09-09T19:59:30Z, HA-Repo-Run 34398338512 mit DRY_RUN=false →
+    //    Log "➕ …1883 MQTT eingefügt", "✅ count==1", kein Rollback.
+    //    Widerspruch aufgelöst: der kursierende "20:02Z-Apply" war KEIN Apply –
+    //    Run 34398400415 (2026-09-09T20:00Z) lief mit DRY_RUN=true. Der Live-Bestand
+    //    stammt derzeit aus Run-Logs (kein roher Export, Lücke V2); nach Schließen
+    //    der Lücke mit rohem Export + `--verify` bestätigen.
     {
       "action": "accept",
       "src": ["tag:ia4"],

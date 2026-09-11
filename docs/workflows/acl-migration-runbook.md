@@ -32,11 +32,30 @@ IaC4**: SSoT `acl/tailscale-acl.hujson`, ein semantischer Applier
 |---|---------------|--------|
 | V1 | **IaC4-Tailscale-API-Key** erneuern (401 seit 2026-07-31 15:36) → als Secret `TAILSCALE_API_KEY` | **OFFEN (Lücke)** |
 | V2 | **Roher Live-Export** der ACL (`GET /api/v2/tailnet/{tailnet}/acl`) als versioniertes Artefakt + SHA256 (read-only `--export`) | **OFFEN (Lücke)** |
-| V3 | Drift-Befund verbindlich einarbeiten (`acl-drift-analyse-20260911.md`) | teilweise (rekonstruiert) |
+| V3 | Drift-Befund verbindlich einarbeiten (`acl-drift-analyse-20260911.md`) | teilweise (Run-Log-rekonstruiert, siehe „Live-Bestand") |
 
 > **Hinweis:** V1/V2 sind **bekannte Lücken, kein Auftrag dieser Migration.**
 > Ohne sie ist M3 (Null-Diff) **nicht ausführbar**. Sie werden hier als
 > Voraussetzung markiert, nicht gelöst.
+
+## Live-Bestand (Run-Log-Rekonstruktion, Stand 2026-09-11)
+
+Der aktuelle Live-Bestand ist **nicht** aus einem rohen huJSON-Export, sondern
+aus **Run-Logs rekonstruiert** (Lücke V2). Modell-Soll und Offline-Fixture
+(`acl/tests/fixtures/live-reconstructed.hujson`) bilden diesen Stand ab:
+`base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner + owner-8123 + ha-ssh`
+(HA-Regeln **1–6**; Regel 7 nicht live).
+
+- **Regel 6 (MQTT 1883) = Live-Soll (belegt):** additiver POST am
+  **2026-09-09T19:59:30Z** (HA-Repo-Run **34398338512**, `DRY_RUN=false`), Log
+  „➕ …1883 MQTT eingefügt", „✅ count==1", **kein Rollback**.
+- **Aufgelöster Widerspruch (Dry-Run vs. Apply):** Der kursierende „20:02Z-Apply"
+  war **kein** Apply — Run **34398400415** (2026-09-09T20:00Z) lief mit
+  `DRY_RUN=true`. Das erklärt die widersprüchlichen Aussagen („Regel 6 live" vs.
+  „nur Branch-Stand"); beide sind hiermit geschlossen.
+- **Ersetzen/Bestätigen nach der Lücke:** Sobald V2 (roher Export) geschlossen ist,
+  wird diese Rekonstruktion durch den **rohen Export + `--verify`** ersetzt bzw.
+  bestätigt (M3). Keine weitere Migration ohne diesen Abgleich.
 
 ## Ablauf
 
@@ -60,10 +79,10 @@ IaC4**: SSoT `acl/tailscale-acl.hujson`, ein semantischer Applier
    Live-Zustand.
 3. **Noch nicht angewandte Regeln** werden **nicht still mitmigriert**, sondern
    bleiben `pending` (deklariert, nicht Teil des Live-Solls):
-   - `mqtt-1883` (Regel 6, Live-Zustand **strittig**),
    - `energie-read` (Regel 7 — **die neue Kostal/KSEM-Lese-Regel**, F1=(a)).
-   Jede ist eine **separate Owner-Freigabe**; `energie-read` kommt erst **nach**
-   dem Schnitt als eigener Schritt.
+   `energie-read` ist eine **separate Owner-Freigabe** und kommt erst **nach**
+   dem Schnitt als eigener Schritt. `mqtt-1883` (Regel 6) ist dagegen **live**
+   und damit Teil des Live-Solls (Beleg siehe „Live-Bestand").
 4. Modell-Gates prüfen: `python3 scripts/ensure-acl.py --check-model`.
 
 ### M3 — Semantischer Null-Diff (Verifikation)
@@ -163,11 +182,13 @@ einzubringen: `docs/reference/tailscale-acl.md` + Header-Hinweis im Apply-Workfl
 | 2026-09-11 | M1–M3 vorbereitet: SSoT + semantischer Applier + Doku (Draft-PR #140) | vorbereitet | Engineer |
 | 2026-09-11 | M4 IaC4-Apply | blockiert — V1 (Key 401) + V2 (roher Export) fehlen | Orchestrator (nach V1/V2) |
 | 2026-09-11 | M5 Sperre HA-Weg | ausstehend — nach Owner-Bestätigung | Orchestrator |
+| 2026-09-11 | Befund eingearbeitet: Regel 6 (mqtt-1883) = **Live-Soll** (Run-Log-Beleg 34398338512); Regel 7 bleibt `pending`; Live-Bestand als Rekonstruktion dokumentiert | erledigt | Engineer |
 
 ## Offene Lücken (separat als IaC4-Issues, nicht Teil dieser Migration)
 
 1. IaC4-Tailscale-API-Key erneuern (V1) — Voraussetzung für echten Access.
 2. Raw-huJSON-Export + SHA256 der Live-Policy als versionierter Ist-Stand (V2).
 3. Tag→Node-Inventar (ha1/ha3, vps-dev/vps-prod) für den Blast-Radius.
-4. Doku-Widerspruch „Regel 6 live?" per Live-GET klären.
+4. ~~Doku-Widerspruch „Regel 6 live?" per Live-GET klären.~~ **aufgelöst 2026-09-11**
+   (Regel 6 = Live-Soll, belegt per Run-Log; siehe „Live-Bestand").
 5. `--accept-routes` in IaC verankern (separater Task, nicht hier).

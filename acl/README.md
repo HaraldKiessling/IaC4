@@ -30,8 +30,8 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
    - `// base` — Bestands-Eintrag (pre-IaC4 / Owner-Konsole). Wird **nie**
      eingefügt, nur erwartet/verifiziert.
 3. **huJSON-Kommentare** (`//`, `/* */`) und Trailing-Kommas sind erlaubt.
-4. **Live-Zustand strittiger Regeln** wird an der Regel selbst kommentiert
-   (siehe `mqtt-1883` in der SSoT).
+4. **Live-Zustand** wird an der Regel selbst kommentiert (Beleg: Run-ID,
+   Zeitstempel; z. B. `mqtt-1883`, Widerspruch aufgelöst 2026-09-11).
 
 ## Gruppen (Workflow-Input `rules`)
 
@@ -43,7 +43,7 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `ha-ssh` (= HA-Regel 3) | ssh-Spiegel → tag:ha | live |
 | `ha-runner` (= HA-Regel 4) | ha-ci → ia4 (22+8123) | live |
 | `owner-8123` (= HA-Regel 5) | admin/member → ia4:8123 | live |
-| `mqtt-1883` (= HA-Regel 6) | ia4 → ha:1883 | **pending / Live-Zustand strittig** |
+| `mqtt-1883` (= HA-Regel 6) | ia4 → ha:1883 | **live** (Run-Log-rekonstruiert; Apply 2026-09-09) |
 | `energie-read` (= HA-Regel 7) | ia4 → 3 Energie-Ziele | **pending / nicht live** |
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
@@ -105,3 +105,7 @@ Ohne gültigen `TAILSCALE_API_KEY` (IaC4-Key seit 2026-07-31 **401**) und ohne
 rohen Live-Export ist die **Null-Diff-Verifikation** ([Runbook](../docs/workflows/acl-migration-runbook.md)
 M3) nicht ausführbar. Diese Lücke gehört in den Runbook-Kopf, nicht in diese
 Migration.
+
+Der Soll/Ist-Bestand (Modell-Soll + Fixture `tests/fixtures/live-reconstructed.hujson`)
+ist derzeit eine **Run-Log-Rekonstruktion** (kein roher Export). Nach Schließen der
+Lücke (V2) ist er durch den **rohen Export + `--verify`** zu ersetzen/bestätigen.
