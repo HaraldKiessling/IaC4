@@ -16,6 +16,9 @@
 #                     Phase 2b geschlossen). Reihenfolge: erst Dry-Run
 #                     (`--check --diff`, zeigt nur Ist vs. Soll, ändert nichts),
 #                     dann Anwenden nur mit `confirm=APPLY-ACCEPT-ROUTES`.
+#                     Soll-Wert über Input `accept_routes` (true|false, Default true)
+#                     → geht als Extra-Var `-e tailscale_accept_routes=…` an Step 10/11;
+#                     `accept_routes=false` ist der dokumentierte Rückweg (Rollback).
 #                     PROD-REGEL (Owner): `target=prod` + Anwenden führt der OWNER
 #                     aus (Harald). Siehe
 #                     docs/workflows/tailscale-accept-routes-runbook.md (Issue #135).
@@ -49,6 +52,14 @@ on:
         required: false
         default: ''
         type: string
+      accept_routes:
+        description: 'Nur mode=accept-routes: Soll-Wert für --accept-routes (true = Routen annehmen; false = Rückweg/Rollback)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 permissions:
   contents: write
@@ -244,7 +255,7 @@ jobs:
           NODE="vps-${{ inputs.target }}"
           TS_IP=$(curl -s \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
-            -H "Authorization: Bearer ${TS_TOKEN}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+            -H "Authorization: Bearer ${TS_TOKEN}" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0] | (.addresses // []) | ((map(select(startswith("100."))) | .[0]) // .[0]) // empty' | head -1)
           echo "SSH-Verifikation via Tailscale-IP: ${TS_IP}"
           echo "TS_IP=${TS_IP}" >> $GITHUB_ENV
           sleep 15
@@ -311,11 +322,16 @@ jobs:
           MODE: ${{ inputs.mode }}
           CONFIRM: ${{ inputs.confirm }}
           TARGET: ${{ inputs.target }}
+          ACCEPT_ROUTES: ${{ inputs.accept_routes }}
         run: |
           set -euo pipefail
           case "$MODE" in
             bootstrap|accept-routes) ;;
             *) echo "::error::Ungültiger mode='$MODE' (erlaubt: bootstrap|accept-routes)"; exit 1 ;;
+          esac
+          case "$ACCEPT_ROUTES" in
+            true|false) ;;
+            *) echo "::error::Ungültiger accept_routes='$ACCEPT_ROUTES' (erlaubt: true|false)"; exit 1 ;;
           esac
           # Der Dry-Run braucht KEIN Bestätigungswort. Nur ein gesetztes, falsches
           # Wort wird abgewiesen (Anwenden läuft zusätzlich über den Step-if).
@@ -326,7 +342,7 @@ jobs:
           if [ "$TARGET" = "prod" ]; then
             echo "⚠️  target=prod – PROD-REGEL: Das Anwenden führt der OWNER aus (Harald)."
           fi
-          echo "✅ Guard ok (target=$TARGET, mode=$MODE, apply=$([ "$CONFIRM" = "APPLY-ACCEPT-ROUTES" ] && echo ja || echo nein), actor=${{ github.actor }})"
+          echo "✅ Guard ok (target=$TARGET, mode=$MODE, accept_routes=$ACCEPT_ROUTES, apply=$([ "$CONFIRM" = "APPLY-ACCEPT-ROUTES" ] && echo ja || echo nein), actor=${{ github.actor }})"
 
       - name: "(2) Vorbedingungen prüfen"
         env:
@@ -383,7 +399,7 @@ jobs:
             exit 1
           fi
           TS_IP=$(printf '%s' "$API_BODY" | jq -r --arg n "$NODE" \
-            '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+            '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0] | (.addresses // []) | ((map(select(startswith("100."))) | .[0]) // .[0]) // empty' | head -1)
           if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
             echo "❌ Keine Tailscale-IP für Node ${NODE} gefunden (Node nicht gejoint?)."
             echo "   Vorbedingung: Workflow 02 mode=bootstrap muss zuerst gelaufen sein."
@@ -415,16 +431,18 @@ jobs:
         run: |
           set -euo pipefail
           ansible-playbook playbooks/tailscale-accept-routes.yml \
-            -i /tmp/inventory --check --diff
+            -i /tmp/inventory --check --diff \
+            -e '{"tailscale_accept_routes": ${{ inputs.accept_routes }}}'
 
       - name: "(11) accept-routes – Anwenden (nur mit confirm=APPLY-ACCEPT-ROUTES)"
         if: inputs.confirm == 'APPLY-ACCEPT-ROUTES'
         working-directory: ansible
         run: |
           set -euo pipefail
-          echo "⚠️  Owner-Go bestätigt (confirm=APPLY-ACCEPT-ROUTES, target=${{ inputs.target }})."
+          echo "⚠️  Owner-Go bestätigt (confirm=APPLY-ACCEPT-ROUTES, target=${{ inputs.target }}, accept_routes=${{ inputs.accept_routes }})."
           ansible-playbook playbooks/tailscale-accept-routes.yml \
-            -i /tmp/inventory
+            -i /tmp/inventory \
+            -e '{"tailscale_accept_routes": ${{ inputs.accept_routes }}}'
 
       - name: "(12) Verifikation (Ist-Zustand via Tailscale-SSH)"
         run: |

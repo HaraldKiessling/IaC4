@@ -67,12 +67,20 @@ aus dem Node-Hostnamen (`vps-dev`) auf – ein `VPS_DEV_HOST`-Secret ist dafür 
    `docs/plans/iac4-migration.md`; Workflow 05 = Freigabe + Geräte-Verwaltung
    (Telegram-Pairing + Device-Approve, v3.6 – siehe `tools/device-approve/README.md`)
 
+> **Hinweis (Issue #135):** Der Workflow-**Pfad** `mode=bootstrap` bleibt
+> unverändert (Phase 2a + 2b). Die **Tailscale-Rolle** ändert sich jedoch: der
+> Join (`ansible/roles/tailscale/tasks/main.yml`) setzt `tailscale up …` nun
+> zusätzlich `--accept-routes` (Default `true`, vgl. `group_vars/all.yml`) —
+> gewollt für künftige VPS.
+
 ## On-Demand-Wartung (nicht Teil der Reihenfolge)
 
 - `02-tailscale-bootstrap.yml` mit **`mode=accept-routes`** → setzt **nur** den
   Client-Pref `--accept-routes` auf vps-dev/vps-prod (kein Re-Join, läuft
   ausschließlich über das Tailnet; die Public-IP ist nach Phase 2b geschlossen).
-  Erst **Dry-Run** (`--check --diff`, immer), dann **Anwenden nur mit
-  `confirm=APPLY-ACCEPT-ROUTES`**. Einstieg ist also **Workflow 02** (kein eigener
-  Workflow). Siehe `docs/workflows/tailscale-accept-routes-runbook.md` (Issue #135).
+  Soll-Wert über Input **`accept_routes`** (`true|false`, Default `true`;
+  `false` = Rückweg/Rollback). Erst **Dry-Run** (`--check --diff`, immer), dann
+  **Anwenden nur mit `confirm=APPLY-ACCEPT-ROUTES`**. Einstieg ist also
+  **Workflow 02** (kein eigener Workflow). Siehe
+  `docs/workflows/tailscale-accept-routes-runbook.md` (Issue #135).
   **Prod (`target=prod`) + Anwenden führt der Owner aus.**

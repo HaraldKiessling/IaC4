@@ -15,7 +15,7 @@
 - name: Tailscale authentifizieren
   ansible.builtin.shell: |
     tailscale up --auth-key={{ tailscale_auth_key }} --hostname={{ inventory_hostname }} \
-      --accept-routes={{ tailscale_accept_routes | default(true) | ternary('true', 'false') }}
+      --accept-routes={{ tailscale_accept_routes | default(true) | bool | ternary('true', 'false') }}
   register: ts_up_result
   changed_when: ts_up_result.rc == 0
   when: tailscale_auth_key is defined and tailscale_auth_key | length > 0
