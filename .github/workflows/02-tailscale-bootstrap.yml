@@ -454,3 +454,31 @@ jobs:
             "$VPS_USER@$VPS_TS_IP" \
             "tailscale get accept-routes; tailscale ip -4"
           echo "✅ Fertig. Ohne confirm=APPLY-ACCEPT-ROUTES wurde nichts geschrieben (Dry-Run)."
+
+      - name: "(13) Wirkungsprobe (read-only, nc vom Ziel-Host)"
+        run: |
+          set -euo pipefail
+          echo "--- Wirkungsprobe (rein lesend) von ${{ inputs.target }} aus:"
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$VPS_USER@$VPS_TS_IP" '
+            set -euo pipefail
+            probe() {
+              h="$1"; p="$2"; lbl="$3"
+              if command -v nc >/dev/null 2>&1; then
+                if nc -zv -w3 "$h" "$p" >/dev/null 2>&1; then
+                  echo "OPEN     ${lbl} (${h}:${p})"
+                else
+                  echo "TIMEOUT  ${lbl} (${h}:${p})"
+                fi
+              else
+                if timeout 3 bash -c "exec 3<>/dev/tcp/${h}/${p}" 2>/dev/null; then
+                  echo "OPEN     ${lbl} (${h}:${p})"
+                else
+                  echo "TIMEOUT  ${lbl} (${h}:${p})"
+                fi
+              fi
+            }
+            probe 192.168.0.31 1502 "Energie-Modbus"
+            probe 192.168.0.13 80   "HA-HTTP"
+            probe 192.168.0.13 1502 "HA-Modbus"
+            probe ha1 8123          "Kontrolle-Tailnet-ha1"
+          '
