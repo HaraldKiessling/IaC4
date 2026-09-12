@@ -185,7 +185,13 @@ jobs:
           set -euo pipefail
           echo "::add-mask::${TS_API_KEY}"
           echo "ℹ️ Dry-Run: nur GET (read-only) – kein POST, kein Backup, ACL unveraendert."
-          python3 scripts/ensure-acl.py --dry-run --rules "${RULES}"
+          # Toleranzliste (Default-Pfad) laden: dokumentierter, NICHT von IaC4
+          # verwalteter Bestand (IaC3, 5 Eintraege) erscheint so positionsgenau als
+          # "toleriert" statt "unbekannt" – konsistent zur M3-Verifikation
+          # (--verify <export> --tolerated-foreign). Keine Verhaltensaenderung am
+          # Apply-Pfad (Schritt 3 unveraendert); Exit-Semantik unveraendert.
+          python3 scripts/ensure-acl.py --dry-run --rules "${RULES}" \
+            --tolerated-foreign acl/tolerated-foreign.json
 
       - name: "(2c) Export – read-only Inventar (rohe huJSON + SHA256, KEIN POST)"
         if: ${{ inputs.export }}
