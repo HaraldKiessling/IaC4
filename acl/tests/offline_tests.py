@@ -97,6 +97,12 @@ def main():
           and energie_mod[0].canon in {e.canon for e in live["acls"]},
           "energie-read-Einträge=%d pending=%s"
           % (len(energie_mod), [e.pending for e in energie_mod]))
+    ksem_mod = [e for e in model["acls"] if e.group == "ksem-port-probe"]
+    check("Gruppe ksem-port-probe ist Live-Soll (aktiviert, nicht mehr pending)",
+          len(ksem_mod) == 1 and not ksem_mod[0].pending
+          and ksem_mod[0].canon in {e.canon for e in live["acls"]},
+          "ksem-port-probe-Einträge=%d pending=%s"
+          % (len(ksem_mod), [e.pending for e in ksem_mod]))
     mqtt_mod = [e for e in model["acls"] if e.group == "mqtt-1883"]
     mqtt_live = {e.canon for e in live["acls"]}
     check("Regel 6 (MQTT) ist Live-Soll (nicht mehr pending)",
@@ -282,11 +288,13 @@ def main():
           and len(tol["sections"]["ssh"]["entries"]) == 1, "n=%d" % n_tol)
     check("Toleranzliste: KEINE Platzhalter (v2)",
           len(tol["pending"]) == 0, "pending=%d" % len(tol["pending"]))
-    check("Toleranzliste: positionsgenaues Layout (acls=16 Tokens, ssh=3 Tokens)",
-          len(tol["sections"]["acls"]["layout"]) == 16
+    check("Toleranzliste: positionsgenaues Layout (acls=17 Tokens, ssh=3 Tokens)",
+          len(tol["sections"]["acls"]["layout"]) == 17
           and len(tol["sections"]["ssh"]["layout"]) == 3)
-    check("Toleranzliste: energie-read (Regel 7) ist managed-Token am Layout-Ende (Position 15)",
+    check("Toleranzliste: energie-read (Regel 7) ist managed-Token an Position 15",
           tol["sections"]["acls"]["layout"][15]["kind"] == "managed")
+    check("Toleranzliste: ksem-port-probe ist managed-Token am Layout-Ende (Position 16)",
+          tol["sections"]["acls"]["layout"][16]["kind"] == "managed")
     check("Toleranzliste: Fremdbestand VERSCHRÄNKT (acls: foreign auf Position 7 + 12–14; ssh: Position 0)",
           [t["kind"] for t in tol["sections"]["acls"]["layout"]].count("foreign") == 4
           and tol["sections"]["acls"]["layout"][7]["kind"] == "foreign"

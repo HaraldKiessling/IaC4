@@ -36,6 +36,10 @@
     "LESEND: tag:ia4 -> 192.168.0.31:1502, 192.168.0.13:80, 192.168.0.13:1502). Sie ist",
     "damit VERWALTETER Bestand und steht im Layout als letzter `managed`-Token",
     "(Live-Position 15, nach dem IaC3-Fremdbestand).",
+    "Owner-Go 2026-09-12 (12:41 UTC): Gruppe (`ksem-port-probe`) aktiviert (lediglich",
+    "LESEND: tag:ia4 -> 192.168.0.31:80 (Web) + 192.168.0.31:502 (Std-Modbus)). Sie ist",
+    "damit VERWALTETER Bestand und steht im Layout als weiterer `managed`-Token",
+    "(Live-Position 16, nach `energie-read`).",
     "Owner-Entscheid 2026-09-11 (20:24 UTC, „1“): Fremdbestand wird POSITIONSGENAU",
     "modelliert (Verschränkung erlaubt) statt als zusammenhängender Block. Grund:",
     "die Reihenfolge-Überwachung bleibt scharf (Umsortierungen/Einschübe rund um",
@@ -117,6 +121,7 @@
           "dst": ["tag:ia3:*"]
         }
       },
+      { "kind": "managed" },
       { "kind": "managed" }
     ],
 

@@ -49,11 +49,11 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `console-owner` | Regel-1-Cluster aus der Owner-Konsole: `owner` ↔ `tag:ha` + `owner` → LAN (`192.168.0.0/24`, `192.168.2.0/24`) | **live** (Owner-Entscheid 2026-09-11 19:52 UTC: ins Modell übernommen) |
 | `mqtt-1883` (= HA-Regel 6) | ia4 → ha:1883 | **live** (Run-Log-rekonstruiert; Apply 2026-09-09) |
 | `energie-read` (= HA-Regel 7) | ia4 → 3 Energie-Ziele (lesend: KSEM + Kostal WR) | **live** (Owner-Go 2026-09-11 21:57 UTC) |
-| `ksem-port-probe` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:80` (Web) + `:502` (Std-Modbus) — temporäre Port-Diagnose | **pending** (Vorlage 2026-09-12, **kein** Owner-Go; rein additiv) |
+| `ksem-port-probe` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:80` (Web) + `:502` (Std-Modbus) — temporäre Port-Diagnose | **live** (Owner-Go 2026-09-12 12:41 UTC; rein additiv) |
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
-Die `pending`-Gruppe `ksem-port-probe` gehört **nicht** zum Live-Soll und wird
-nur bei ausdrücklicher Selektion (`--rule ksem-port-probe` bzw. `rules`) eingeführt.
+Es gibt derzeit **keine** `pending`-Gruppe im Modell: `ksem-port-probe` wurde mit
+dem Owner-Go 2026-09-12 12:41 UTC aktiviert (rein lesend, additiv).
 
 ## Verify mit Toleranz (Erfolgskriterium, Owner-Entscheide F4 + G1–G3 + 20:24 UTC)
 
@@ -111,7 +111,7 @@ aktiv toleriert, **5 Einträge**).
 
 > **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
 > `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
-> HA-Regeln 1–7 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
+> HA-Regeln 1–7 **+** die Konsolen-Einträge **+** `ksem-port-probe`; **toleriert** = die **5 übrigen
 > IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Es ist also **nicht** der *gesamte*
 > IaC3-Altbestand toleriert: die `base`-Einträge sind verwaltet und werden
 > **strenger** geprüft (als `missing`/`changed`, nicht „toleriert“).

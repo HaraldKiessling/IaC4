@@ -80,7 +80,8 @@ Der Live-Bestand war zunächst **nicht** aus einem rohen huJSON-Export, sondern
 aus **Run-Logs rekonstruiert** (Lücke V2 — mit dem rohen Export **geschlossen**). Modell-Soll und Offline-Fixture
 (`acl/tests/fixtures/live-reconstructed.hujson`) bilden diesen Stand ab:
 `base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner + owner-8123 + console-owner + ha-ssh`
-(HA-Regeln **1–6**; Regel 7 mit Owner-Go 2026-09-11 21:57 UTC **aktiviert**).
+(HA-Regeln **1–6**; Regel 7 mit Owner-Go 2026-09-11 21:57 UTC **aktiviert**;
+`ksem-port-probe` mit Owner-Go 2026-09-12 12:41 UTC **aktiviert**).
 
 - **Regel 6 (MQTT 1883) = Live-Soll (belegt):** additiver POST am
   **2026-09-09T19:59:30Z** (HA-Repo-Run **34398338512**, `DRY_RUN=false`), Log
@@ -173,7 +174,7 @@ IaC3 ist eine **eigene Zuständigkeit** und wird **nicht mitverwaltet**.
 
 > **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
 > `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
-> HA-Regeln 1–7 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
+> HA-Regeln 1–7 **+** die Konsolen-Einträge **+** `ksem-port-probe`; **toleriert** = die **5 übrigen
 > IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Es ist **nicht** der *gesamte*
 > IaC3-Altbestand toleriert — die `base`-Einträge sind verwaltet und werden
 > **strenger** geprüft (`missing`/`changed`, nicht „toleriert").
@@ -204,6 +205,10 @@ IaC3 ist eine **eigene Zuständigkeit** und wird **nicht mitverwaltet**.
    (live-gewollt, rein lesend; geprüfte Inhalte aus PR #140/#142, keine neue
    Semantik) und damit Teil des Live-Solls (s. Migrations-Log). `mqtt-1883`
    (Regel 6) ist dagegen **live** (Beleg siehe „Live-Bestand").
+   Die **temporäre Port-Diagnose `ksem-port-probe`** (nur lesend, KSEM
+   `192.168.0.31` auf `:80`/`:502`) wurde ebenfalls als **eigener, freigegebener
+   Schritt aktiviert** — **Owner-Go 2026-09-12 12:41 UTC** (rein additiv;
+   Entfernung = Rollback; s. Migrations-Log).
 5. Modell-Gates prüfen: `python3 scripts/ensure-acl.py --check-model`.
 
 ### M3 — Semantischer Verify **mit Toleranz** (Verifikation)
@@ -336,6 +341,8 @@ einzubringen: `docs/reference/tailscale-acl.md` + Header-Hinweis im Apply-Workfl
 | 2026-09-11 | **Regel 7 (`energie-read`) aktiviert** (Owner-Go 21:57 UTC): Modell `pending` → live-gewollt (rein lesend, genau drei Ziele); Doku (`README`/`ADR-026`/Runbook) konsistent. Aktivierung geprüfter Inhalte aus PR #140/#142 — keine neue Semantik. Applier-Fix (kommentar-sicheres `insert_entries`, Regressionstest 3b). Merge PR **#145** (Merge-Commit `c9a947e`). | gemergt | Engineer |
 | 2026-09-11 | **M4 IaC4-Apply (Regel 7):** Dry-Run auf `main` (`dry_run=true`) mit `rules=energie-read` (Run [34652301825](https://github.com/HaraldKiessling/IaC4/actions/runs/34652301825)) = **1 Einfügung / 0 Entfernungen**; Idempotenz-Gegenprobe `rules=all` (Run [34652333765](https://github.com/HaraldKiessling/IaC4/actions/runs/34652333765)) = **1 Einfügung / 0**. Apply (Run [34652367043](https://github.com/HaraldKiessling/IaC4/actions/runs/34652367043), `dry_run=false`, `confirm=APPLY-ACL`, `rules=energie-read`): ➕ `energie-read` eingefügt, Pre-POST-Guard rein additiv, `count==1`-Gate ✅, Additivität ✅. | **live** | Engineer |
 | 2026-09-11 | **POST-APPLY-Export** (Run [34652410709](https://github.com/HaraldKiessling/IaC4/actions/runs/34652410709), read-only GET): sha256 `52bc662a…7993e`, 2026-09-11T22:05:26Z; im Workspace `acl-live-export-20260911-post-energie.json`. Diff vs. pre-energie-Export = **genau 1 Zusatz (energie-read), 0 Entfernungen**. `--verify --tolerated-foreign` gegen diesen Export **grün (exit 0)** (verwalteter Teil exakt inkl. Regel 7; IaC3-Fremdbestand 5 positionsgenau). Anker `source_export_sha256` aktualisiert. | verifiziert | Engineer |
+| 2026-09-12 | **PR #150 gemergt** (`ksem-port-probe` als `pending`-Gruppe + Beiwerk; Merge-Commit `218876f`). | gemergt | Engineer |
+| 2026-09-12 | **Gruppe `ksem-port-probe` aktiviert** (Owner-Go 12:41 UTC): Modell `pending` → live-gewollt (rein lesend: KSEM `192.168.0.31` `:80`/`:502`); Layout-Position 16 als `managed`; Doku/README/ADR/Runbook konsistent; Aktivierung als eigener Branch + PR. | in Arbeit | Engineer |
 
 ## Offene Lücken (separat als IaC4-Issues, nicht Teil dieser Migration)
 

@@ -59,7 +59,7 @@ beide Tag-Welten (`tag:ia4` und `tag:ha`/`tag:ha-ci`) **eindeutig** verwaltet?
 
    **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
    `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
-   HA-Regeln 1–7 **+** die Konsolen-Einträge; **toleriert** = die **5 übrigen
+   HA-Regeln 1–7 **+** die Konsolen-Einträge **+** `ksem-port-probe`; **toleriert** = die **5 übrigen
    IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Damit ist **nicht** der *gesamte*
    IaC3-Altbestand toleriert: die `base`-Einträge sind verwaltet und werden
    **strenger** geprüft (`missing`/`changed`, nicht „toleriert").
@@ -215,7 +215,9 @@ Modell + Skript + Workflow + Doku, **Draft, kein Merge, kein Apply**.
 - **Folge-Entscheidungen (separat):** Zeitpunkt des Schnitts, Prod-Ausführung,
   `--accept-routes` (nicht Teil dieser ADR). **Regel 7 (Energie)** ist mit dem
   **Owner-Go 2026-09-11 21:57 UTC** aktiviert (Gruppe `energie-read`, rein
-  lesend; s. Migrations-Log im Runbook).
+  lesend; s. Migrations-Log im Runbook). Die **temporäre Port-Diagnose
+  `ksem-port-probe`** (nur lesend: KSEM `:80`/`:502`) ist mit dem **Owner-Go
+  2026-09-12 12:41 UTC** aktiviert (rein additiv; s. Migrations-Log).
 
 ## Referenzen
 
