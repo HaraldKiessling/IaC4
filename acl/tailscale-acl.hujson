@@ -26,6 +26,9 @@
   //   live = base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner
   //          + owner-8123 + console-owner + ha-ssh + energie-read
   //          + ksem-port-probe
+  //   pending (deklariert, NICHT Teil des Live-Solls): ksem-read
+  //          (dauerhafte KSEM-Modbus-Lese-Regel :502; Vorlage 2026-09-12,
+  //           wartet auf eigenen Owner-Apply-Go)
   //          (HA-Regeln 1–7; energie-read aktiviert: Owner-Go 2026-09-11 21:57 UTC;
   //           ksem-port-probe aktiviert: Owner-Go 2026-09-12 12:41 UTC)
   //   Anker: roher Live-Export acl-live-export-20260912-post-ksem.json
@@ -161,6 +164,19 @@
       "action": "accept",
       "src": ["tag:ia4"],
       "dst": ["192.168.0.31:80", "192.168.0.31:502"],
+    },
+
+    // rule: ksem-read pending — DAUERHAFT (VORLAGE 2026-09-12, noch KEIN Owner-Go):
+    // tag:ia4 (BEIDE VPS) → KSEM 192.168.0.31 NUR LESEND auf :502 (Standard-Modbus
+    // TCP; Diagnose 2026-09-12: FC3 Unit 71 OK, :1502 REFUSED). Saubere, permanente
+    // Lese-Regel, die die temporäre Diagnose-Gruppe `ksem-port-probe` (:80+:502)
+    // ablöst — NICHT :80 (nur Diagnose-Web-Identität) und NICHT die tote :1502.
+    // Aktivierung = eigener Owner-Go (confirm=APPLY-ACL); danach eigener
+    // Entfernungs-Schritt für `ksem-port-probe`.
+    {
+      "action": "accept",
+      "src": ["tag:ia4"],
+      "dst": ["192.168.0.31:502"],
     },
   ],
 

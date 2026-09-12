@@ -38,9 +38,9 @@
 #     - rules:    Regel-Auswahl gegen die SSoT-Gruppen. Erlaubt: iac4 | 1..7
 #                 (HA-Regeln) | Gruppennamen (ha-tagowners, ha-acl, ha-ssh,
 #                 ha-runner, owner-8123, console-owner, mqtt-1883, energie-read,
-#                 ksem-port-probe) | all. Default 'iac4' (IaC4-Welt). Pending-
-#                 Gruppen (ksem-port-probe) nur bei bewusster, separater Owner-
-#                 Freigabe.
+#                 ksem-port-probe, ksem-read) | all. Default 'iac4' (IaC4-Welt).
+#                 Pending-Gruppen (ksem-port-probe, ksem-read) nur bei bewusster,
+#                 separater Owner-Freigabe.
 #
 #   Secrets (Namen unveraendert zu Workflow 01): TAILSCALE_TAILNET +
 #   TAILSCALE_API_KEY. Werte werden NIE ausgegeben; zusaetzlich explizite
@@ -95,7 +95,7 @@ on:
         description: >-
           Regel-Auswahl (SSoT-Gruppen), kommagetrennt – iac4 | 1..7 |
           ha-Gruppen | owner-8123 | console-owner | mqtt-1883 | energie-read |
-          ksem-port-probe | all. Default "iac4"
+          ksem-port-probe | ksem-read | all. Default "iac4"
         required: true
         default: 'iac4'
         type: string
@@ -150,7 +150,7 @@ jobs:
           esac
           for R in $(echo "${RULES}" | tr ',' ' '); do
             case "${R}" in
-              iac4|all|ha-tagowners|ha-acl|ha-ssh|ha-runner|owner-8123|console-owner|mqtt-1883|energie-read|ksem-port-probe) ;;
+              iac4|all|ha-tagowners|ha-acl|ha-ssh|ha-runner|owner-8123|console-owner|mqtt-1883|energie-read|ksem-port-probe|ksem-read) ;;
               1|2|3|4|5|6|7) ;;
               *) echo "::error::rules enthaelt ungueltige Gruppe '${R}'."; exit 1 ;;
             esac
@@ -264,4 +264,4 @@ jobs:
             echo "Rollback: automatisch bei Verifikationsfehler; Backup /tmp/acl-backup.json dieses Laufs."
           fi
           echo "Governance: kein automatischer ACL-Apply – jeder Lauf ist manuell (Runbook docs/workflows/acl-migration-runbook.md)."
-          echo "Pending-Gruppe (ksem-port-probe) nur nach separater Owner-Freigabe."
+          echo "Pending-Gruppen (ksem-port-probe, ksem-read) nur nach separater Owner-Freigabe."
