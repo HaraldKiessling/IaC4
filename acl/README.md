@@ -87,9 +87,10 @@ Live, kein Fremdbestand“) bleibt verfügbar.
 
 Der **reale** Live-Aufbau ist **verschränkt**: `acls` =
 `[verwaltet 0–6] [IaC3-Selbstregel 7] [Konsolen-Block 8–11] [IaC3 12–14]
-[energie-read 15]` — die IaC3-Selbstregel steht **zwischen** den verwalteten
-Einträgen; mit der Regel-7-Aktivierung kommt `energie-read` als letzter
-verwalteter Eintrag an Position 15, **nach** dem IaC3-Fremdbestand. Das frühere
+[energie-read 15] [ksem-port-probe 16]` — die IaC3-Selbstregel steht **zwischen**
+den verwalteten Einträgen; mit der Aktivierung von `energie-read` (Position 15)
+und `ksem-port-probe` (Position 16, Owner-Go 2026-09-12 12:41 UTC) stehen die
+verwalteten Einträge am Ende, **nach** dem IaC3-Fremdbestand. Das frühere
 Block-Positions-Modell (`position` `start`/`end`) konnte das nicht abbilden und
 meldete fälschlich eine Reihenfolge-Abweichung (**M2-Finding**, 19:52 UTC).
 
@@ -97,9 +98,10 @@ Mit dem Owner-Entscheid **20:24 UTC („1“)** ist der Fremdbestand **positions
 modelliert (`acl/tolerated-foreign.json`, Schema v2, geordnetes `layout`).
 Verschränkung ist damit erlaubt; das Werkzeug geht **nicht** mehr von einem Block
 aus. Der `--verify` gegen den eingefrorenen **POST-APPLY**-Export
-(`acl-live-export-20260911-post-energie.json`, sha256 `52bc662a…`) ist damit
-**grün** (exit 0): verwalteter Teil exakt (inkl. `energie-read`), Fremdbestand
-5/5 positionsgenau vorhanden/unverändert, kein unerwarteter Eintrag, Reihenfolge ok.
+(`acl-live-export-20260912-post-ksem.json`, sha256 `b7c7b2d4…`) ist damit
+**grün** (exit 0): verwalteter Teil exakt (inkl. `energie-read` + `ksem-port-probe`),
+Fremdbestand 5/5 positionsgenau vorhanden/unverändert, kein unerwarteter Eintrag,
+Reihenfolge ok.
 
 ## Fremdbestand (nicht von IaC4 verwaltet)
 
@@ -193,7 +195,7 @@ Ohne gültigen `TAILSCALE_API_KEY` (IaC4-Key seit 2026-07-31 **401**) und ohne
 rohen Live-Export war die **Null-Diff-Verifikation** ([Runbook](../docs/workflows/acl-migration-runbook.md)
 M3) nicht ausführbar. **Beide Voraussetzungen sind mit 2026-09-11 geschlossen:**
 Key erneuert (V1) und roher Live-Export liegt vor (V2) — Anker
-`acl-live-export-20260911-post-energie.json` (sha256 `52bc662a…`), s. o.
+`acl-live-export-20260912-post-ksem.json` (sha256 `b7c7b2d4…`), s. o.
 
 Der Soll/Ist-Bestand (Modell-Soll + Fixture `tests/fixtures/live-reconstructed.hujson`)
 war eine **Run-Log-Rekonstruktion** (kein roher Export) und ist durch den **rohen
