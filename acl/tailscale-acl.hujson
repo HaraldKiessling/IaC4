@@ -25,7 +25,9 @@
   // Live-Bezug (Stand 2026-09-11, roher Live-Export):
   //   live = base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner
   //          + owner-8123 + console-owner + ha-ssh + energie-read
-  //          (HA-Regeln 1–7; energie-read aktiviert: Owner-Go 2026-09-11 21:57 UTC)
+  //          + ksem-port-probe
+  //          (HA-Regeln 1–7; energie-read aktiviert: Owner-Go 2026-09-11 21:57 UTC;
+  //           ksem-port-probe aktiviert: Owner-Go 2026-09-12 12:41 UTC)
   //   Anker: roher Live-Export acl-live-export-20260911-post-energie.json
   //   (sha256 52bc662a…7993e, 2026-09-11T22:05:26Z, Run 34652410709 – POST-APPLY
   //   nach Regel 7). `--verify --tolerated-foreign` gegen diesen Export ist
@@ -151,10 +153,10 @@
       "dst": ["192.168.0.31:1502", "192.168.0.13:80", "192.168.0.13:1502"],
     },
 
-    // rule: ksem-port-probe pending — TEMPORÄR/DIAGNOSTISCH (VORLAGE 2026-09-12,
-    // noch KEIN Owner-Go): tag:ia4 → KSEM 192.168.0.31 NUR LESEND auf :80 (Web)
-    // + :502 (Std-Modbus), um die :1502-REFUSED-Diagnose abzusichern. Bewusst
-    // KEINE Schreib-Rechnung (action accept, nur Lese-Checks); Entfernung = Rollback.
+    // rule: ksem-port-probe — TEMPORÄR/DIAGNOSTISCH (Owner-Go 2026-09-12 12:41 UTC):
+    // tag:ia4 → KSEM 192.168.0.31 NUR LESEND auf :80 (Web) + :502 (Std-Modbus), um
+    // die :1502-REFUSED-Diagnose abzusichern. Bewusst KEINE Schreib-Rechnung
+    // (action accept, nur Lese-Checks); Entfernung = Rollback.
     {
       "action": "accept",
       "src": ["tag:ia4"],
