@@ -150,6 +150,16 @@
       "src": ["tag:ia4"],
       "dst": ["192.168.0.31:1502", "192.168.0.13:80", "192.168.0.13:1502"],
     },
+
+    // rule: ksem-port-probe pending — TEMPORÄR/DIAGNOSTISCH (VORLAGE 2026-09-12,
+    // noch KEIN Owner-Go): tag:ia4 → KSEM 192.168.0.31 NUR LESEND auf :80 (Web)
+    // + :502 (Std-Modbus), um die :1502-REFUSED-Diagnose abzusichern. Bewusst
+    // KEINE Schreib-Rechnung (action accept, nur Lese-Checks); Entfernung = Rollback.
+    {
+      "action": "accept",
+      "src": ["tag:ia4"],
+      "dst": ["192.168.0.31:80", "192.168.0.31:502"],
+    },
   ],
 
   "ssh": [

@@ -49,8 +49,11 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `console-owner` | Regel-1-Cluster aus der Owner-Konsole: `owner` ↔ `tag:ha` + `owner` → LAN (`192.168.0.0/24`, `192.168.2.0/24`) | **live** (Owner-Entscheid 2026-09-11 19:52 UTC: ins Modell übernommen) |
 | `mqtt-1883` (= HA-Regel 6) | ia4 → ha:1883 | **live** (Run-Log-rekonstruiert; Apply 2026-09-09) |
 | `energie-read` (= HA-Regel 7) | ia4 → 3 Energie-Ziele (lesend: KSEM + Kostal WR) | **live** (Owner-Go 2026-09-11 21:57 UTC) |
+| `ksem-port-probe` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:80` (Web) + `:502` (Std-Modbus) — temporäre Port-Diagnose | **pending** (Vorlage 2026-09-12, **kein** Owner-Go; rein additiv) |
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
+Die `pending`-Gruppe `ksem-port-probe` gehört **nicht** zum Live-Soll und wird
+nur bei ausdrücklicher Selektion (`--rule ksem-port-probe` bzw. `rules`) eingeführt.
 
 ## Verify mit Toleranz (Erfolgskriterium, Owner-Entscheide F4 + G1–G3 + 20:24 UTC)
 
