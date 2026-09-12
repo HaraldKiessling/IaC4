@@ -20,7 +20,10 @@
 #                     → geht als Extra-Var `-e tailscale_accept_routes=…` an Step 10/11;
 #                     `accept_routes=false` ist der dokumentierte Rückweg (Rollback).
 #                     PROD-REGEL (Owner): `target=prod` + Anwenden führt der OWNER
-#                     aus (Harald). Siehe
+#                     aus (Harald). Der Prod-Apply ist zusätzlich an das GitHub
+#                     Environment `prod-approve` gebunden (Required Reviewer =
+#                     Owner) — ein reines Freigabe-Gate, KEIN zusätzliches
+#                     Secret/Token. Siehe
 #                     docs/workflows/tailscale-accept-routes-runbook.md (Issue #135).
 #
 #   Governance: ausschließlich manuell (`workflow_dispatch`) – KEIN push/PR/schedule.
@@ -310,6 +313,12 @@ jobs:
     if: inputs.mode == 'accept-routes'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # ★ Prod-Freigabe-Gate (Owner-Klarstellung 2026-09-12): NUR der Prod-Apply
+    #   (target=prod UND confirm=APPLY-ACCEPT-ROUTES) hängt am Environment
+    #   `prod-approve` (Required Reviewer = Owner). Für dev/Check/Dry-Run liefert
+    #   der Ausdruck einen LEEREN String → kein Environment (ungebunden).
+    #   Rein additiver Gate — KEINE zusätzlichen Secrets/Tokens.
+    environment: ${{ (inputs.mode == 'accept-routes' && inputs.target == 'prod' && inputs.confirm == 'APPLY-ACCEPT-ROUTES') && 'prod-approve' || '' }}
     env:
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}

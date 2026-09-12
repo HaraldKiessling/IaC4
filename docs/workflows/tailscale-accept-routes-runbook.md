@@ -36,7 +36,7 @@ wirkungslos**.
 | `ansible/roles/tailscale/tasks/main.yml` | Join setzt `--accept-routes=…`; Include der accept-routes-Task (Tag `tailscale-accept-routes`) |
 | `ansible/roles/tailscale/handlers/main.yml` | Re-Join-Handler setzt `--accept-routes=…` ebenfalls |
 | `ansible/playbooks/tailscale-accept-routes.yml` | Mini-Playbook (nur dieser Schalter, kein Re-Join) |
-| `.github/workflows/02-tailscale-bootstrap.yml` | Ausführungspfad `workflow_dispatch`, Input **`mode=accept-routes`** + Input **`accept_routes`** (true/false, Default true) (Dry-Run immer → Anwenden nur mit `confirm=APPLY-ACCEPT-ROUTES`) |
+| `.github/workflows/02-tailscale-bootstrap.yml` | Ausführungspfad `workflow_dispatch`, Input **`mode=accept-routes`** + Input **`accept_routes`** (true/false, Default true) (Dry-Run immer → Anwenden nur mit `confirm=APPLY-ACCEPT-ROUTES`); **Prod-Apply** (`target=prod` + `confirm=…`) zusätzlich an Environment **`prod-approve`** gebunden (Required Reviewer, reines Gate) |
 
 **Entscheidung – Soll-Zustand:** Nur `--accept-routes` ist Teil des
 deklarativen Soll-Zustands der Rolle (Default `true`). Alle übrigen Prefs
@@ -67,9 +67,12 @@ Die Task liest genau diese Werte (kein Schreiben im Read-Schritt) und läuft mit
 Einstieg ist **Workflow 02 – Tailscale Bootstrap / accept-routes**
 (`.github/workflows/02-tailscale-bootstrap.yml`) mit dem Input **`mode`**:
 
-1. **Dry-Run zuerst:** Workflow `02` starten mit `mode=accept-routes`,
-   `target=dev|prod`, Input **`accept_routes`** (Default `true`; `false` = Rückweg)
-   und **leerem** `confirm`. Der Lauf führt
+1. **Dry-Run zuerst – ohne `confirm`:** Workflow `02` starten mit
+   `mode=accept-routes`, `target=dev|prod`, Input **`accept_routes`**
+   (Default `true`; `false` = Rückweg) und **leerem** `confirm`. Wichtig: Der
+   Guard (Schritt 1) weist **jedes gesetzte** Wort ≠ `APPLY-ACCEPT-ROUTES` ab —
+   der Dry-Run braucht daher ein **leeres** `confirm`-Feld (nicht etwa `CHECK`
+   oder `DRY-RUN`). Der Lauf führt
    `ansible-playbook … --check --diff -e '{"tailscale_accept_routes": <accept_routes>}'`
    aus und zeigt Ist vs. Soll (Debug-Zeile
    `accept-routes: ist=… soll=… → DRIFT/keine Änderung`). Es wird **nichts**
@@ -129,7 +132,12 @@ Lauf zeigt `changed=0`.
 
 ## Rollback
 
-Bewusst und mit Owner-Go (Rückweg = Redeclare des Soll-Zustands auf `false`):
+Bewusst und mit Owner-Go (Rückweg = Redeclare des Soll-Zustands auf `false`).
+
+> **Hinweis:** Es gibt **keinen** eigenen Workflow `02b` (wurde in PR #144
+> entfernt) und **kein** direktes `-e`-Workflow-Argument. Der Rückweg ist der
+> **bestehende** Pfad über den Input `accept_routes=false` (Variante A) oder
+> manuell auf dem Knoten (Variante B).
 
 ```shell
 # Variante A (Workflow 02, mode=accept-routes) – der Rückweg ist derselbe Pfad
@@ -155,19 +163,31 @@ wirkungslos. Rollback ist **kein** Re-Join.
 ## Prod-Regel
 
 - **Prod (`target=prod`) führt der Owner aus** (Harald). Der Workflow erzwingt
-  `confirm=APPLY-ACCEPT-ROUTES`; zusätzlich wird ein GitHub Environment mit
-  Required Reviewer für prod empfohlen (Repo-Setting, nicht Teil dieses PRs).
-- Der Dry-Run (`mode=accept-routes`, leerer `confirm`) ist immer unkritisch und
-  darf vorab von jedem Berechtigten ausgeführt werden.
+  `confirm=APPLY-ACCEPT-ROUTES` **und** bindet den Prod-Apply zusätzlich an das
+  GitHub Environment **`prod-approve`** (Job `accept-routes`; Ausdruck:
+  `mode=accept-routes` UND `target=prod` UND `confirm=APPLY-ACCEPT-ROUTES`).
+  Für dev/Check/Dry-Run bleibt der Job **ungebunden** (Ausdruck → leerer String
+  = kein Environment, siehe GitHub-Verhalten). Das Environment ist ein
+  **reines Freigabe-Gate** (Required Reviewer) — **kein** zusätzliches
+  Secret/Token.
+- Der Dry-Run (`mode=accept-routes`, **leerer** `confirm`) ist immer unkritisch
+  und darf vorab von jedem Berechtigten ausgeführt werden.
 
-### Offener Punkt (Owner-Einstellung, B2 aus Review PR #144)
+### Freigabe-Gate — was der Owner noch tun muss (B2 aus Review PR #144)
 
-> **Prod ist aktuell nur markiert, nicht hart gegated.** Ein Apply auf
-> `target=prod` verlangt denselben Confirm-String wie `dev`; es gibt **kein**
-> GitHub Environment / Required Reviewer. **Vor dem ersten prod-Apply** muss der
-> Owner im Repo ein Environment `prod` mit Required Reviewer (= Owner) anlegen
-> und Step „(11) Anwenden“ für `target=prod` daran binden. Das ist eine
-> Repo-/Owner-Einstellung und bewusst **nicht** Teil dieses PRs.
+> Das Environment **`prod-approve`** existiert bereits
+> (`repo/environments/prod-approve`), hat aber **noch keine** Protection Rule →
+> aktuell **ohne Wirkung**. **Vor dem ersten prod-Apply** muss der Owner unter
+> *Settings → Environments → `prod-approve`* die Regel **„Required reviewers“
+> = Owner** setzen. Danach wartet der Job `accept-routes` bei `target=prod` +
+> `confirm=APPLY-ACCEPT-ROUTES` auf die Freigabe, **bevor** er auf einen Runner
+> geht. Ein neues Environment oder Secret ist **nicht** nötig.
+>
+> **Wahl (Trade-off):** Reuse von **`prod-approve`** statt eines neuen `prod` —
+> hält die Environments schlank, nutzt den vorhandenen Prod-Gate-Namen und
+> vermeidet ein drittes Objekt; `dev-approve` bleibt ungenutzt. Nachteil: der
+> Name stammt aus dem früheren Device-Approve-Design („-approve“), ist aber
+> semantisch eindeutig.
 
 ## Grenzen / Sicherheit
 
@@ -187,3 +207,4 @@ wirkungslos. Rollback ist **kein** Re-Join.
 | 2026-09-11 | Review-Auflagen PR #144 umgesetzt: Rollback-Input **`accept_routes`** (Default `true`) in Workflow 02 → als Extra-Var an Step 10/11; Doku präzisiert (B3 stale `02b`, B4 „bootstrap unverändert“); IPv4-Auswahl (B6); `bool`-Härtung der Join-/Handler-`ternary`. Kein Apply. | vorbereitet | Engineer |
 | 2026-09-11 | Fix nach Dry-Run dev: Step (7) schreibt den SSH-Key mit Trailing-Newline (`printf '%s\n'`) — zuvor `printf '%s'` → OpenSSH `error in libcrypto`, Dry-Run nicht ausführbar. Kein VPS-Eingriff. | vorbereitet | Engineer |
 | 2026-09-11 | Ausführung dev/prod (Dry-Run → Apply), Ist-Zustand live verifizieren | ausstehend — Owner-Go | Owner (prod) |
+| 2026-09-12 | Prod-Freigabe-Gate verdrahtet: Workflow 02, Job `accept-routes`, nur für Prod-Apply (`target=prod` + `confirm=APPLY-ACCEPT-ROUTES`) an Environment **`prod-approve`** gebunden (leerer Ausdruck = ungebunden für dev/Check/Dry-Run); Runbook präzisiert (Dry-Run **ohne** `confirm`, Rollback-Hinweis, Gate). Draft-PR, kein Merge, kein Trigger, **keine** neuen Secrets/Tokens. | vorbereitet | Engineer |
