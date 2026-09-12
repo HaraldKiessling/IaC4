@@ -47,11 +47,11 @@
     "(position start|end, M2-Finding 2026-09-11).",
     "",
     "Quelle/Beleg: eingefrorener POST-APPLY-Live-Export",
-    "acl-live-export-20260911-post-energie.json",
-    "(sha256 52bc662a587e02125d7ada5c52c65e6c283b33ccdc7f8866cb9eb3de6587993e,",
-    "GET /api/v2/tailnet/<tailnet>/acl, 2026-09-11T22:05:26Z; Run 34652410709).",
-    "Vorgänger-Anker: acl-live-export-20260911.json (sha256 8cd58f88…a75b8d,",
-    "2026-09-11T17:58:11Z, pre-energie). Der rohe Export wird",
+    "acl-live-export-20260912-post-ksem.json",
+    "(sha256 b7c7b2d4a47630dd32266e74cc423c777ebd2ec55cb41f78e21faab22f9c4b40,",
+    "GET /api/v2/tailnet/<tailnet>/acl, 2026-09-12T12:48:34Z; Run 34694681107).",
+    "Vorgänger-Anker: acl-live-export-20260911-post-energie.json",
+    "(sha256 52bc662a…7993e, 2026-09-11T22:05:26Z, pre-ksem). Der rohe Export wird",
     "NICHT versioniert (siehe .gitignore + acl/README.md). Die `layout`-Reihenfolge",
     "ist exakt die Live-Reihenfolge dieses Exports.",
     "PROVENIENZ-ANKER: `source_export_sha256` ist nicht länger nur Dokumentation –",
@@ -63,8 +63,8 @@
     "        `layout`: { acls: [Token…], ssh: [Token…] } – s. o."
   ],
   "version": 2,
-  "captured_utc": "2026-09-11T22:05:26Z",
-  "source_export_sha256": "52bc662a587e02125d7ada5c52c65e6c283b33ccdc7f8866cb9eb3de6587993e",
+  "captured_utc": "2026-09-12T12:48:34Z",
+  "source_export_sha256": "b7c7b2d4a47630dd32266e74cc423c777ebd2ec55cb41f78e21faab22f9c4b40",
 
   "tagOwners": [],
 

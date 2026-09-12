@@ -210,8 +210,8 @@ Modell + Skript + Workflow + Doku, **Draft, kein Merge, kein Apply**.
   entfernen).
 - **Voraussetzung (Lücke):** gültiger IaC4-`TAILSCALE_API_KEY` sowie ein roher
   Live-Export sind für M3 (Null-Diff) erforderlich — mit **2026-09-11 geschlossen**
-  (Key erneuert; Roh-Export liegt vor: `acl-live-export-20260911-post-energie.json`,
-  sha256 `52bc662a…`).
+  (Key erneuert; Roh-Export liegt vor: `acl-live-export-20260912-post-ksem.json`,
+  sha256 `b7c7b2d4…`).
 - **Folge-Entscheidungen (separat):** Zeitpunkt des Schnitts, Prod-Ausführung,
   `--accept-routes` (nicht Teil dieser ADR). **Regel 7 (Energie)** ist mit dem
   **Owner-Go 2026-09-11 21:57 UTC** aktiviert (Gruppe `energie-read`, rein

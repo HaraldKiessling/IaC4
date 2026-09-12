@@ -111,6 +111,14 @@ aus **Run-Logs rekonstruiert** (Lücke V2 — mit dem rohen Export **geschlossen
   **Erfolgskriterium** erfüllt. Ohne Toleranz wären alle **5** Fremd-Einträge
   Drift. Der Provenienz-Anker `source_export_sha256` der Toleranzliste zeigt auf
   diesen Export.
+- **POST-APPLY-Export nach `ksem-port-probe` (2026-09-12T12:48:34Z, Run 34694681107):**
+  `acl-live-export-20260912-post-ksem.json` (sha256 `b7c7b2d4…4b40`).
+  `acls` = o. g. Reihenfolge **+ `ksem-port-probe` an Position 16** (nach
+  `energie-read`). Das Toleranz-Verify gegen **diesen** Export ist **grün
+  (exit 0)**: **verwalteter Teil fehlend/geändert = 0** (inkl. `energie-read` +
+  `ksem-port-probe`), **IaC3-Fremdbestand (5) positionsgenau vorhanden/unverändert**,
+  **kein unerwarteter Eintrag**, **Reihenfolge ok**. Der Provenienz-Anker
+  `source_export_sha256` der Toleranzliste zeigt auf diesen Export.
 
 ## M2-Finding (2026-09-11) → behoben durch J1 (20:24 UTC)
 
@@ -342,7 +350,10 @@ einzubringen: `docs/reference/tailscale-acl.md` + Header-Hinweis im Apply-Workfl
 | 2026-09-11 | **M4 IaC4-Apply (Regel 7):** Dry-Run auf `main` (`dry_run=true`) mit `rules=energie-read` (Run [34652301825](https://github.com/HaraldKiessling/IaC4/actions/runs/34652301825)) = **1 Einfügung / 0 Entfernungen**; Idempotenz-Gegenprobe `rules=all` (Run [34652333765](https://github.com/HaraldKiessling/IaC4/actions/runs/34652333765)) = **1 Einfügung / 0**. Apply (Run [34652367043](https://github.com/HaraldKiessling/IaC4/actions/runs/34652367043), `dry_run=false`, `confirm=APPLY-ACL`, `rules=energie-read`): ➕ `energie-read` eingefügt, Pre-POST-Guard rein additiv, `count==1`-Gate ✅, Additivität ✅. | **live** | Engineer |
 | 2026-09-11 | **POST-APPLY-Export** (Run [34652410709](https://github.com/HaraldKiessling/IaC4/actions/runs/34652410709), read-only GET): sha256 `52bc662a…7993e`, 2026-09-11T22:05:26Z; im Workspace `acl-live-export-20260911-post-energie.json`. Diff vs. pre-energie-Export = **genau 1 Zusatz (energie-read), 0 Entfernungen**. `--verify --tolerated-foreign` gegen diesen Export **grün (exit 0)** (verwalteter Teil exakt inkl. Regel 7; IaC3-Fremdbestand 5 positionsgenau). Anker `source_export_sha256` aktualisiert. | verifiziert | Engineer |
 | 2026-09-12 | **PR #150 gemergt** (`ksem-port-probe` als `pending`-Gruppe + Beiwerk; Merge-Commit `218876f`). | gemergt | Engineer |
-| 2026-09-12 | **Gruppe `ksem-port-probe` aktiviert** (Owner-Go 12:41 UTC): Modell `pending` → live-gewollt (rein lesend: KSEM `192.168.0.31` `:80`/`:502`); Layout-Position 16 als `managed`; Doku/README/ADR/Runbook konsistent; Aktivierung als eigener Branch + PR. | in Arbeit | Engineer |
+| 2026-09-12 | **Gruppe `ksem-port-probe` aktiviert** (Owner-Go 12:41 UTC): Modell `pending` → live-gewollt (rein lesend: KSEM `192.168.0.31` `:80`/`:502`); Layout-Position 16 als `managed`; Doku/README/ADR/Runbook konsistent. Merge PR **#151** (Merge-Commit `cb5506b`). | gemergt | Engineer |
+| 2026-09-12 | **M4 Dry-Run (`ksem-port-probe`, Run [34694648550](https://github.com/HaraldKiessling/IaC4/actions/runs/34694648550), `dry_run=true`):** Fehlend=1, Geändert=0, Zusatz=0, Reihenfolge=0 → **1 Einfügung / 0 Entfernungen**; IaC3-Fremdbestand 5/5 unverändert. Rollback-Anker (read-only Export, Run [34694619632](https://github.com/HaraldKiessling/IaC4/actions/runs/34694619632)): sha256 `52bc662a…7993e`. | erledigt | Engineer |
+| 2026-09-12 | **M4 Apply (`ksem-port-probe`, Run [34694663101](https://github.com/HaraldKiessling/IaC4/actions/runs/34694663101), `dry_run=false`, `confirm=APPLY-ACL`):** ➕ `ksem-port-probe` eingefügt; Pre-POST-Guard rein additiv ✅; `count==1`-Gate ✅; Additivität ✅; **kein Rollback**. | **live** | Engineer |
+| 2026-09-12 | **POST-APPLY-Export** (Run [34694681107](https://github.com/HaraldKiessling/IaC4/actions/runs/34694681107), read-only GET): sha256 `b7c7b2d4…4b40`, 2026-09-12T12:48:34Z; im Workspace `acl-live-export-20260912-post-ksem.json`. Diff vs. pre-ksem-Export = **genau 1 Zusatz (`ksem-port-probe`), 0 Entfernungen**. `--verify --tolerated-foreign` gegen diesen Export **grün (exit 0)** (verwalteter Teil exakt inkl. `energie-read` + `ksem-port-probe`; IaC3-Fremdbestand 5 positionsgenau). Anker `source_export_sha256` aktualisiert. | verifiziert | Engineer |
 
 ## Offene Lücken (separat als IaC4-Issues, nicht Teil dieser Migration)
 
