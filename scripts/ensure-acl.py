@@ -82,7 +82,7 @@ TOKEN = os.environ.get("TS_TOKEN", "") or os.environ.get("TS_API_KEY", "")
 # HA-Regeln 1–7 (Kontinuität zum bisherigen ha-repo-Workflow).
 GROUP_NAMES = ("iac4", "ha-tagowners", "ha-acl", "ha-ssh", "ha-runner",
                "owner-8123", "console-owner", "mqtt-1883", "energie-read",
-               "ksem-port-probe")
+               "ksem-port-probe", "ksem-read")
 GROUP_ALIASES = {
     "iac4": "iac4",
     "1": "ha-tagowners", "ha-tagowners": "ha-tagowners", "tagowners": "ha-tagowners",
@@ -95,6 +95,8 @@ GROUP_ALIASES = {
     "7": "energie-read", "energie-read": "energie-read", "energie": "energie-read",
     "ksem-port-probe": "ksem-port-probe", "ksem": "ksem-port-probe",
     "probe": "ksem-port-probe",
+    "ksem-read": "ksem-read", "ksemread": "ksem-read",
+    "ksem-durable": "ksem-read",
 }
 
 
@@ -804,6 +806,7 @@ PRECOND_DESC = {
     "mqtt-1883":    "IaC4-acl-Block (src tag:ia4 -> dst tag:ia4:*)",
     "energie-read": "IaC4-acl-Block (src tag:ia4 -> dst tag:ia4:*)",
     "ksem-port-probe": "IaC4-acl-Block (src tag:ia4 -> dst tag:ia4:*)",
+    "ksem-read": "IaC4-acl-Block (src tag:ia4 -> dst tag:ia4:*)",
 }
 
 
@@ -831,7 +834,7 @@ def precondition_ok(pol, group):
         return any(isinstance(r, dict) and _list_has(r.get("dst"), "tag:ia4")
                    for r in (pol.get("ssh") or []))
     if group in ("ha-acl", "ha-runner", "owner-8123", "mqtt-1883",
-                 "energie-read", "ksem-port-probe"):
+                 "energie-read", "ksem-port-probe", "ksem-read"):
         return any(isinstance(r, dict) and _list_has(r.get("src"), "tag:ia4")
                    and _list_has(r.get("dst"), "tag:ia4:*")
                    for r in (pol.get("acls") or []))
