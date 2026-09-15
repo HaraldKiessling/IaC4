@@ -2,6 +2,9 @@
 
 **Status:** VORLAGE — zur Owner-Sicht + Review; **NICHT angewendet** · **Autor:** engineer-pro (Subagent)
 **Datum:** 2026-09-12 (UTC) · **Anlass-Input:** Owner 2026-09-12 14:06 UTC
+**Owner-Entscheid (neu):** 2026-09-15 21:27 UTC — **„Entscheid 2 ja: KSEM .31:502 dauerhaft freigeben"**
+→ `ksem-read` ist damit **freigegeben**; Vorlage geht ins **Review** (Autor ≠ Reviewer).
+**KEIN Apply in diesem Lauf** — Apply folgt separat mit `rules=ksem-read`, `confirm=APPLY-ACL`.
 **Governance:** ACL nur additiv · Autor ≠ Reviewer · kein Apply ohne Owner-Go · `confirm=APPLY-ACL`.
 **Modus dieses Ergebnisses:** **ausschließlich offline/Modell + eingefrorener Live-Export**
 (kein Live-GET/POST, kein Apply, keine Live-ACL-Änderung, keine Secrets).
