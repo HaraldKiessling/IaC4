@@ -54,11 +54,31 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
 Es gibt derzeit **genau eine** `pending`-Gruppe im Modell: `ksem-read`
-(DAUERHAFT, Deklaration 2026-09-12; noch **kein** Owner-Go → nicht Teil des
-Live-Solls, nur bei ausdrücklicher Selektion `--rule ksem-read`). `ksem-port-probe`
-wurde mit dem Owner-Go 2026-09-12 12:41 UTC aktiviert (rein lesend, additiv) und
-soll nach Live der dauerhaften Regel in einem **eigenen Entfernungs-Schritt**
-abgelöst werden (siehe Vorlage).
+(DAUERHAFT, Owner-Go **2026-09-15 21:27 UTC** — **freigegeben**, aber **noch nicht
+angewendet** → nicht Teil des Live-Solls). Ein APPLY erfolgt **nur** explizit via
+`--rule ksem-read`; `--rules all` wird im APPLY **fail-closed abgelehnt**, solange
+eine `pending`-Gruppe existiert (exit 2, siehe unten). `ksem-port-probe` wurde mit
+dem Owner-Go 2026-09-12 12:41 UTC aktiviert (rein lesend, additiv) und soll nach
+Live der dauerhaften Regel in einem **eigenen Entfernungs-Schritt** abgelöst
+werden (siehe Vorlage).
+
+**APPLY-Gate (fail-closed, Review-Auflage 2026-09-15):** Der Applier zieht eine
+`pending`-Gruppe **niemals** implizit mit — `--rules all` bricht im APPLY mit
+`exit 2` ab („pending-Regeln nur explizit via `--rules <name>`"). Die Dry-Run-
+Anzeige warnt nur (exit 0). `pending`-Regeln sind damit ohne bewusste,
+einzelne Selektion nicht live-fähig.
+
+**`pending` → `managed` (Übergang nach dem Apply):** Nach dem Apply von
+`ksem-read` ist die Regel Teil des **Live-Solls** und wird vom `pending`-Marker in
+`managed` überführt:
+1. `// rule: ksem-read pending` → `// rule: ksem-read` in
+   `acl/tailscale-acl.hujson` (Marker entfernen);
+2. `acl/tolerated-foreign.json`: Layout/Fixtures nachziehen (zusätzlicher
+   `managed`-Token an **Position 17** der `acls`);
+3. `acl/tests/fixtures/*` (rekonstruierter Snapshot / Toleranz-Fixtures) um den
+   neuen Eintrag ergänzen;
+4. `--check-model` (weiter **21**) und
+   `--verify <post-Export> --tolerated-foreign` → **exit 0** (Regel live).
 
 ## Verify mit Toleranz (Erfolgskriterium, Owner-Entscheide F4 + G1–G3 + 20:24 UTC)
 

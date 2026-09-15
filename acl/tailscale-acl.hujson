@@ -166,7 +166,7 @@
       "dst": ["192.168.0.31:80", "192.168.0.31:502"],
     },
 
-    // rule: ksem-read pending — DAUERHAFT (VORLAGE 2026-09-12, noch KEIN Owner-Go):
+    // rule: ksem-read pending — DAUERHAFT (VORLAGE 2026-09-12, Owner-Go 2026-09-15 21:27):
     // tag:ia4 (BEIDE VPS) → KSEM 192.168.0.31 NUR LESEND auf :502 (Standard-Modbus
     // TCP; Diagnose 2026-09-12: FC3 Unit 71 OK, :1502 REFUSED). Saubere, permanente
     // Lese-Regel, die die temporäre Diagnose-Gruppe `ksem-port-probe` (:80+:502)

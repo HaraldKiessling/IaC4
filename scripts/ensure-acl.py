@@ -20,7 +20,8 @@ Prinzip (100% Sicherheit — additiv, idempotent, failsafe):
   werden NIE verändert oder entfernt.
 - Selektive Anwendung: `--rule/--rules <gruppe>` fügt NUR die gewählten Gruppen
   ein; ohne Auswahl wird im APPLY-Modus abgebrochen (kein POST).
-  `pending`-Regeln (deklariert, nicht Teil des Live-Solls) nur bei expliziter Wahl.
+  `pending`-Regeln (deklariert, nicht Teil des Live-Solls) nur bei expliziter Wahl;
+  im APPLY-Modus zieht `--rules all` KEINE pending-Gruppe (fail-closed, exit 2).
 - Verifikation nach POST: jede eingefügte Regel exakt um +1 (count==1-Gate),
   keine Bestands-Regel entfernt/geändert (semantische Multimengen-Prüfung).
 - NIEMALS wird die Modell-Datei als Gesamtdatei über die Live-Policy geschrieben:
@@ -1130,6 +1131,18 @@ def _resolve_groups(args):
     return [g for g in GROUP_NAMES if g in sel]
 
 
+def _uses_all(args):
+    """True, wenn die Auswahl den Sammel-Schlüssel `all` verwendet (--rules/--rule).
+    `all` schließt per Definition ALLE Gruppen ein – auch `pending`-Gruppen, die
+    NICHT Teil des Live-Solls sind. Grundlage für das fail-closed APPLY-Gate."""
+    raw = []
+    if args.rules:
+        raw += [x for x in re.split(r"[,\s]+", args.rules) if x]
+    if args.rule:
+        raw += args.rule
+    return any(x.strip().lower() == "all" for x in raw)
+
+
 def api(method, data=None):
     headers = {"Authorization": "Bearer %s" % TOKEN}
     if data is not None:
@@ -1318,6 +1331,21 @@ def main():
         if not args.file and not args.snapshot:
             print("ℹ️ Kein POST ausgeführt (Dry-Run).")
         return 0
+
+    # APPLY — FAIL-CLOSED-Gate (Review-Auflage 2026-09-15): Die Dry-Run-Warnung
+    # oben bleibt reine Anzeige. Ein APPLY mit `--rules all` darf dagegen NIE
+    # implizit eine `pending`-Gruppe (streitig/ausstehend, nicht Teil des
+    # Live-Solls) mitziehen. pending-Regeln sind NUR explizit via `--rules <name>`
+    # anwendbar; `all` wird abgelehnt, solange eine pending-Gruppe existiert
+    # (fail-closed, Abbruch OHNE POST).
+    if _uses_all(args):
+        pending_selected = sorted(pending_groups & set(selected))
+        if pending_selected:
+            print("❌ APPLY abgelehnt (fail-closed): `--rules all` würde pending-"
+                  "Gruppe(n) %s mitziehen. pending-Regeln nur explizit via "
+                  "`--rules <name>` anwenden (z. B. `--rules %s`)."
+                  % (", ".join(pending_selected), pending_selected[0]))
+            return 2
 
     # APPLY
     if args.confirm != "APPLY-ACL":

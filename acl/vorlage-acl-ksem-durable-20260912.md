@@ -79,7 +79,7 @@ Schließen der `acls`-Liste `  ],` (Zeile **181**). Also als **letzter**
 `acls`-Eintrag (Modell-Position **17** von `acls`).
 
 ```hujson
-    // rule: ksem-read pending — DAUERHAFT (VORLAGE 2026-09-12, noch KEIN Owner-Go):
+    // rule: ksem-read pending — DAUERHAFT (VORLAGE 2026-09-12, Owner-Go 2026-09-15 21:27):
     // tag:ia4 (BEIDE VPS) → KSEM 192.168.0.31 NUR LESEND auf :502 (Standard-Modbus
     // TCP; Diagnose 2026-09-12: FC3 Unit 71 OK, :1502 REFUSED). Saubere, permanente
     // Lese-Regel, die die temporäre Diagnose-Gruppe `ksem-port-probe` (:80+:502)
@@ -100,9 +100,9 @@ Schließen der `acls`-Liste `  ],` (Zeile **181**). Also als **letzter**
 fügt sie über die **Modell-Reihenfolge** automatisch an dieser Position ein
 (kein Hand-Edit an der Live-Policy).
 
-> **Status:** Snippet **und** Beiwerk (`scripts/ensure-acl.py`,
-> `acl/README.md`, Workflow `00-acl-apply.yml`) sind **im Draft-PR** dieser Vorlage
-> vorbereitet; die Regel ist als **`pending`** deklariert. **Kein Merge, kein Apply.**
+> **Status:** Snippet **und** Beiwerk (`scripts/ensure-acl.py` +5/−2,
+> `acl/README.md` +7/−2, Workflow `00-acl-apply.yml` +6/−6, `hujson` +16/−0; diese
+> Vorlage **336 Z.**) sind im Draft-PR vorbereitet; `pending`. **Kein Merge, kein Apply.** Übergang `pending`→`managed` nach Apply: Marker entfernen + Toleranzliste/Fixtures/README nachziehen.
 
 ### 2.3 Minimal-Alternative (falls Owner nur `:80`-frei + `:502` will)
 Falls doch **beide** Ports dauerhaft gewünscht sind (z. B. für künftiges

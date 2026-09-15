@@ -451,6 +451,55 @@ def main():
           p.returncode == 1 and "Provenienz-Anker" in p.stdout,
           "rc=%d" % p.returncode)
 
+    # 9) APPLY fail-closed-Gate (Review-Auflage 2026-09-15): `--rules all` darf
+    #    im APPLY KEINE pending-Gruppe mitziehen (der Dry-Run warnt nur); eine
+    #    EXPLIZITE Selektion (`--rules ksem-read`) passiert das Gate. Idempotenz
+    #    bleibt unverändert 0/0.
+    # ----------------------------------------------------------------------
+    def run_acl(extra):
+        return subprocess.run(
+            [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
+             "--file", FIXTURE] + extra, capture_output=True, text=True)
+
+    g_all = run_acl(["--rules", "all", "--confirm", "APPLY-ACL"])
+    check("Gate: --rules all + pending -> APPLY-Abbruch (exit 2)",
+          g_all.returncode == 2, "rc=%d" % g_all.returncode)
+    check("Gate: Meldung nennt pending-Gruppe + expliziten Weg",
+          "pending-Regeln nur explizit via" in g_all.stdout
+          and "ksem-read" in g_all.stdout, "Meldung fehlt/uneindeutig")
+
+    g_exp = run_acl(["--rules", "ksem-read", "--confirm", "APPLY-ACL"])
+    check("Gate: --rules ksem-read passiert das Gate (kein pending-Abbruch)",
+          g_exp.returncode == 2 and "APPLY ist mit --file" in g_exp.stdout
+          and "pending-Regeln nur explizit" not in g_exp.stdout,
+          "rc=%d out=%r" % (g_exp.returncode, g_exp.stdout[-120:]))
+
+    g_dry = run_acl(["--dry-run", "--rules", "all"])
+    check("Gate: Dry-Run --rules all warnt nur (exit 0, keine Ablehnung)",
+          g_dry.returncode == 0 and "enthält pending-Regeln" in g_dry.stdout
+          and "APPLY abgelehnt" not in g_dry.stdout, "rc=%d" % g_dry.returncode)
+
+    ksem_ent = [e for s in m.SECTION_ORDER for e in model[s]
+                if e.group == "ksem-read"]
+    check("Gate: genau 1 ksem-read-Modell-Eintrag (pending)",
+          len(ksem_ent) == 1, "n=%d" % len(ksem_ent))
+    raw_idem = json.loads(live_text)
+    for e in ksem_ent:
+        if e.section == "acls":
+            raw_idem["acls"].append({"action": "accept", "src": ["tag:ia4"],
+                                     "dst": ["192.168.0.31:502"]})
+    p_idem = os.path.join(ttmp, "idem-ksem-read.hujson")
+    with open(p_idem, "w", encoding="utf-8") as f:
+        f.write(json.dumps(raw_idem, indent=2))
+    g_idem = subprocess.run(
+        [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
+         "--file", p_idem, "--dry-run", "--rules", "ksem-read"],
+        capture_output=True, text=True)
+    check("Gate: Idempotenz nach Einfügung -> 0 Einfügungen / 0 Entfernungen",
+          g_idem.returncode == 0
+          and "0 Einfügung(en), 0 Entfernung(en)" in g_idem.stdout,
+          "rc=%d" % g_idem.returncode)
+
     print("")
     if _failures:
         print("❌ %d Test(s) fehlgeschlagen: %s" % (len(_failures), ", ".join(_failures)))
