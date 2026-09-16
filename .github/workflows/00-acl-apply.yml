@@ -38,8 +38,8 @@
 #     - rules:    Regel-Auswahl gegen die SSoT-Gruppen. Erlaubt: iac4 | 1..7
 #                 (HA-Regeln) | Gruppennamen (ha-tagowners, ha-acl, ha-ssh,
 #                 ha-runner, owner-8123, console-owner, mqtt-1883, energie-read,
-#                 ksem-port-probe, ksem-read) | all. Default 'iac4' (IaC4-Welt).
-#                 Pending-Gruppen (ksem-port-probe, ksem-read) nur bei bewusster,
+#                 ksem-read) | all. Default 'iac4' (IaC4-Welt).
+#                 Pending-Gruppen (derzeit keine; ksem-read ist managed) nur bei bewusster,
 #                 separater Owner-Freigabe.
 #
 #   Secrets (Namen unveraendert zu Workflow 01): TAILSCALE_TAILNET +
@@ -264,4 +264,4 @@ jobs:
             echo "Rollback: automatisch bei Verifikationsfehler; Backup /tmp/acl-backup.json dieses Laufs."
           fi
           echo "Governance: kein automatischer ACL-Apply – jeder Lauf ist manuell (Runbook docs/workflows/acl-migration-runbook.md)."
-          echo "Pending-Gruppen (ksem-port-probe, ksem-read) nur nach separater Owner-Freigabe."
+          echo "Pending-Gruppen (derzeit keine; ksem-read ist managed) nur nach separater Owner-Freigabe."
