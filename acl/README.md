@@ -49,18 +49,16 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `console-owner` | Regel-1-Cluster aus der Owner-Konsole: `owner` ↔ `tag:ha` + `owner` → LAN (`192.168.0.0/24`, `192.168.2.0/24`) | **live** (Owner-Entscheid 2026-09-11 19:52 UTC: ins Modell übernommen) |
 | `mqtt-1883` (= HA-Regel 6) | ia4 → ha:1883 | **live** (Run-Log-rekonstruiert; Apply 2026-09-09) |
 | `energie-read` (= HA-Regel 7) | ia4 → 3 Energie-Ziele (lesend: KSEM + Kostal WR) | **live** (Owner-Go 2026-09-11 21:57 UTC) |
-| `ksem-port-probe` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:80` (Web) + `:502` (Std-Modbus) — temporäre Port-Diagnose | **live** (Owner-Go 2026-09-12 12:41 UTC; rein additiv) |
-| `ksem-read` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:502` (Standard-Modbus) **+ `:80`** (Web/Diagnose) — **dauerhafte** Lese-Regel, löst `ksem-port-probe` (1:1, gleicher Portumfang) ab | **pending** (Vorlage 2026-09-12; Portumfang erweitert 2026-09-16; wartet auf Owner-Apply-Go `confirm=APPLY-ACL`) |
+| `ksem-port-probe` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:80` + `:502` — **temporäre** Port-Diagnose | **2026-09-16 abgelöst** (Block aus dem Modell entfernt; 1:1 durch `ksem-read` substituiert; keine Live-Löschung) |
+| `ksem-read` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:502` (Standard-Modbus) **+ `:80`** (Web/Diagnose) — **dauerhafte** Lese-Regel, löst `ksem-port-probe` (1:1, gleicher Portumfang) ab | **managed/live** (Owner-Go Inhalt 2026-09-15 21:27, Portumfang 2026-09-16 04:28; Substitution in EINEM Schritt 2026-09-16; kein Live-POST nötig) |
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
-Es gibt derzeit **genau eine** `pending`-Gruppe im Modell: `ksem-read`
-(DAUERHAFT, Owner-Go **2026-09-15 21:27 UTC** — **freigegeben**, aber **noch nicht
-angewendet** → nicht Teil des Live-Solls). Ein APPLY erfolgt **nur** explizit via
-`--rule ksem-read`; `--rules all` wird im APPLY **fail-closed abgelehnt**, solange
-eine `pending`-Gruppe existiert (exit 2, siehe unten). `ksem-port-probe` wurde mit
-dem Owner-Go 2026-09-12 12:41 UTC aktiviert (rein lesend, additiv) und soll nach
-Live der dauerhaften Regel in einem **eigenen Entfernungs-Schritt** abgelöst
-werden (siehe Vorlage).
+Es gibt derzeit **keine** `pending`-Gruppe im Modell. `ksem-read` ist seit
+**2026-09-16** **managed** (Live-Soll); der vormals temporäre
+`ksem-port-probe`-Block wurde im **selben** Schritt aus dem Modell entfernt
+(1:1-Substitution, **keine** Live-Löschung – der Applier ist rein additiv und die
+Live-Zeile entspricht exakt `ksem-read`). Der Alias `ksem`/`probe` zeigt nicht
+mehr auf die entfernte Diagnose-Gruppe; `ksem` → `ksem-read`.
 
 **APPLY-Gate (fail-closed, Review-Auflage 2026-09-15):** Der Applier zieht eine
 `pending`-Gruppe **niemals** implizit mit — `--rules all` bricht im APPLY mit
@@ -68,17 +66,23 @@ werden (siehe Vorlage).
 Anzeige warnt nur (exit 0). `pending`-Regeln sind damit ohne bewusste,
 einzelne Selektion nicht live-fähig.
 
-**`pending` → `managed` (Übergang nach dem Apply):** Nach dem Apply von
-`ksem-read` ist die Regel Teil des **Live-Solls** und wird vom `pending`-Marker in
-`managed` überführt:
+**`pending` → `managed` (Substitution in EINEM Schritt, 2026-09-16):** Weil der
+durable Portumfang (`:502`+`:80`) **byte-semantisch identisch** zur bisherigen
+LIVE-Gruppe `ksem-port-probe` ist, wurde `ksem-read` in **einem** Schritt
+`managed` **und** der `ksem-port-probe`-Block **im selben Schritt** aus dem
+Modell entfernt (Review-Empfehlung PR #153 – stellt die Invariante
+„`pending` = nicht live“ wieder her und beseitigt den semantischen Doppelzustand):
 1. `// rule: ksem-read pending` → `// rule: ksem-read` in
    `acl/tailscale-acl.hujson` (Marker entfernen);
-2. `acl/tolerated-foreign.json`: Layout/Fixtures nachziehen (zusätzlicher
-   `managed`-Token an **Position 17** der `acls`);
-3. `acl/tests/fixtures/*` (rekonstruierter Snapshot / Toleranz-Fixtures) um den
-   neuen Eintrag ergänzen;
-4. `--check-model` (weiter **21**) und
-   `--verify <post-Export> --tolerated-foreign` → **exit 0** (Regel live).
+2. `ksem-port-probe`-Block in `acl/tailscale-acl.hujson` **entfernen** (das
+   positionsgenaue `layout` in `acl/tolerated-foreign.json` bleibt gültig – der
+   letzte `managed`-Token an `acls`-Position 16 bildet nun `ksem-read` ab);
+3. **kein Live-POST nötig:** die eine Live-Zeile(`tag:ia4 →` KSEM `:80`/`:502`)
+   entspricht exakt dieser Regel; der Applier ist rein additiv und **löscht
+   nicht** → die Live-Policy bleibt unverändert;
+4. `--check-model` → **20** Einträge und
+   `--verify <anker> --tolerated-foreign` → **exit 0**; idempotenter Dry-Run
+   `--dry-run --rules ksem-read` → **0/0** (kein Live-POST).
 
 ## Verify mit Toleranz (Erfolgskriterium, Owner-Entscheide F4 + G1–G3 + 20:24 UTC)
 
@@ -112,9 +116,9 @@ Live, kein Fremdbestand“) bleibt verfügbar.
 
 Der **reale** Live-Aufbau ist **verschränkt**: `acls` =
 `[verwaltet 0–6] [IaC3-Selbstregel 7] [Konsolen-Block 8–11] [IaC3 12–14]
-[energie-read 15] [ksem-port-probe 16]` — die IaC3-Selbstregel steht **zwischen**
-den verwalteten Einträgen; mit der Aktivierung von `energie-read` (Position 15)
-und `ksem-port-probe` (Position 16, Owner-Go 2026-09-12 12:41 UTC) stehen die
+[energie-read 15] [ksem-read 16]` — die IaC3-Selbstregel steht **zwischen**
+den verwalteten Einträgen; mit `energie-read` (Position 15) und `ksem-read`
+(Position 16, Owner-Go-Portumfang 2026-09-16 04:28) stehen die
 verwalteten Einträge am Ende, **nach** dem IaC3-Fremdbestand. Das frühere
 Block-Positions-Modell (`position` `start`/`end`) konnte das nicht abbilden und
 meldete fälschlich eine Reihenfolge-Abweichung (**M2-Finding**, 19:52 UTC).
@@ -124,7 +128,7 @@ modelliert (`acl/tolerated-foreign.json`, Schema v2, geordnetes `layout`).
 Verschränkung ist damit erlaubt; das Werkzeug geht **nicht** mehr von einem Block
 aus. Der `--verify` gegen den eingefrorenen **POST-APPLY**-Export
 (`acl-live-export-20260912-post-ksem.json`, sha256 `b7c7b2d4…`) ist damit
-**grün** (exit 0): verwalteter Teil exakt (inkl. `energie-read` + `ksem-port-probe`),
+**grün** (exit 0): verwalteter Teil exakt (inkl. `energie-read` + `ksem-read`),
 Fremdbestand 5/5 positionsgenau vorhanden/unverändert, kein unerwarteter Eintrag,
 Reihenfolge ok.
 
@@ -138,7 +142,8 @@ aktiv toleriert, **5 Einträge**).
 
 > **Abgrenzung (präzise):** **verwaltet** = IaC3-/pre-IaC4-`base` (`tagOwners`
 > `tag:ia3`, `tag:ci` + Basis-`acl` `ci/member/admin → tag:ia3`) **+** IaC4 **+**
-> HA-Regeln 1–7 **+** die Konsolen-Einträge **+** `ksem-port-probe`; **toleriert** = die **5 übrigen
+> HA-Regeln 1–7 **+** die Konsolen-Einträge **+** `ksem-read` (nach Ablösung der
+> temporären `ksem-port-probe`); **toleriert** = die **5 übrigen
 > IaC3-*Regeln*** (4 `acls` + 1 `ssh`). Es ist also **nicht** der *gesamte*
 > IaC3-Altbestand toleriert: die `base`-Einträge sind verwaltet und werden
 > **strenger** geprüft (als `missing`/`changed`, nicht „toleriert“).

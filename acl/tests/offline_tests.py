@@ -97,29 +97,63 @@ def main():
           and energie_mod[0].canon in {e.canon for e in live["acls"]},
           "energie-read-Einträge=%d pending=%s"
           % (len(energie_mod), [e.pending for e in energie_mod]))
-    ksem_mod = [e for e in model["acls"] if e.group == "ksem-port-probe"]
-    check("Gruppe ksem-port-probe ist Live-Soll (aktiviert, nicht mehr pending)",
+    ksem_mod = [e for e in model["acls"] if e.group == "ksem-read"]
+    check("Gruppe ksem-read ist Live-Soll (managed, nicht pending)",
           len(ksem_mod) == 1 and not ksem_mod[0].pending
           and ksem_mod[0].canon in {e.canon for e in live["acls"]},
-          "ksem-port-probe-Einträge=%d pending=%s"
+          "ksem-read-Einträge=%d pending=%s"
           % (len(ksem_mod), [e.pending for e in ksem_mod]))
+    probe_mod = [e for s in m.SECTION_ORDER for e in model[s]
+                 if e.group == "ksem-port-probe"]
+    check("Gruppe ksem-port-probe ist aus dem Modell entfernt "
+          "(1-Schritt-Substitution)",
+          len(probe_mod) == 0, "ksem-port-probe-Einträge=%d" % len(probe_mod))
     mqtt_mod = [e for e in model["acls"] if e.group == "mqtt-1883"]
     mqtt_live = {e.canon for e in live["acls"]}
     check("Regel 6 (MQTT) ist Live-Soll (nicht mehr pending)",
           len(mqtt_mod) == 1 and not mqtt_mod[0].pending,
           "mqtt-1883-Einträge=%d pending=%s"
           % (len(mqtt_mod), [e.pending for e in mqtt_mod]))
-    #    Ausnahme (bewusst, Owner-Go 2026-09-16): die durable Gruppe `ksem-read`
-    #    deklariert denselben Portumfang (:80+:502) wie die noch LIVE befindliche
-    #    temporäre Diagnose-Gruppe `ksem-port-probe` → der pending-Eintrag ist
-    #    damit bereits live vorhanden (bis die Probe zurückgebaut ist). Andere
-    #    pending-live-acls-Einträge bleiben verboten.
-    pend_live_acls = [o for s, o, _m in rep["pending_live"] if s == "acls"]
-    pend_model_shorts = {m._short(e.obj) for e in model["acls"] if e.pending}
+    #    Invariante "pending = nicht live" (Review-Auflage PR #153): Nach der
+    #    1-Schritt-Substitution (ksem-read -> managed, Probe-Block raus) enthält
+    #    das Modell KEINE pending-Gruppe mehr → `pending_live` MUSS leer sein.
+    #    Die frühere Fassung (`all(o in pend_model_shorts …)`) war eine Tautologie:
+    #    `pending_live` wird in `diff_model_vs_live` per Konstruktion NUR aus den
+    #    deklarierten pending-Modelleinträgen befüllt (gleiche `_short`-Quelle),
+    #    die Bedingung konnte also nie fehlschlagen. Die strenge Assertion unten
+    #    (kein pending-live-acls-Eintrag) ist dagegen falsifizierbar – nachgewiesen
+    #    im direkt folgenden Falsifikations-Test.
     check("Regel 6 (MQTT) im Live-Snapshot vorhanden (nicht mehr pending_live)",
           bool(mqtt_mod) and mqtt_mod[0].canon in mqtt_live
-          and all(o in pend_model_shorts for o in pend_live_acls),
-          "pending_live_acls=%r" % pend_live_acls)
+          and not any(s == "acls" for s, _o, _m in rep["pending_live"]),
+          "pending_live_acls=%r"
+          % [o for s, o, _m in rep["pending_live"] if s == "acls"])
+
+    #    FALSIFIKATION (Auflage "Assertion greift nachweislich"): derselbe
+    #    Modelltext, aber mit `ksem-read` wieder als `pending` markiert, gegen
+    #    denselben Live-Snapshot → der Eintrag ist dann pending UND live, also
+    #    MUSS die strenge Assertion anschlagen (`pending_live` nicht leer). Die
+    #    frühere (tautologische) Fassung bliebe hier fälschlich grün.
+    with open(MODEL, encoding="utf-8") as f:
+        model_txt = f.read()
+    assert "// rule: ksem-read " in model_txt
+    model_pend_txt = model_txt.replace("// rule: ksem-read ",
+                                       "// rule: ksem-read pending ", 1)
+    p_model_pend = os.path.join(tempfile.mkdtemp(), "model-pend.hujson")
+    with open(p_model_pend, "w", encoding="utf-8") as f:
+        f.write(model_pend_txt)
+    model_pend, _ = m.parse_model(p_model_pend)
+    rep_pend = m.diff_model_vs_live(model_pend, live)
+    pl_pend = [o for s, o, _m2 in rep_pend["pending_live"] if s == "acls"]
+    strict_pend = not any(s == "acls" for s, _o, _m2 in rep_pend["pending_live"])
+    taut_pend = all(o in {m._short(e.obj) for e in model_pend["acls"]
+                          if e.pending} for o in pl_pend)
+    check("Falsifikation: pending-live-Kandidat -> strenge Assertion schlägt an",
+          len(pl_pend) == 1 and strict_pend is False,
+          "pending_live_acls=%r" % pl_pend)
+    check("Falsifikation: frühere (tautologische) Fassung wäre hier fälschlich grün",
+          taut_pend is True,
+          "die alte Bedingung konnte strukturell nie fehlschlagen")
 
     # 3) Additive Einfügung der iac4-Gruppe in Snapshot OHNE iac4
     #    Entfernt werden GENAU die iac4-Modell-Einträge (semantisch über canon),
@@ -301,7 +335,7 @@ def main():
           and len(tol["sections"]["ssh"]["layout"]) == 3)
     check("Toleranzliste: energie-read (Regel 7) ist managed-Token an Position 15",
           tol["sections"]["acls"]["layout"][15]["kind"] == "managed")
-    check("Toleranzliste: ksem-port-probe ist managed-Token am Layout-Ende (Position 16)",
+    check("Toleranzliste: ksem-read ist managed-Token am Layout-Ende (Position 16)",
           tol["sections"]["acls"]["layout"][16]["kind"] == "managed")
     check("Toleranzliste: Fremdbestand VERSCHRÄNKT (acls: foreign auf Position 7 + 12–14; ssh: Position 0)",
           [t["kind"] for t in tol["sections"]["acls"]["layout"]].count("foreign") == 4
@@ -461,25 +495,44 @@ def main():
 
     # 9) APPLY fail-closed-Gate (Review-Auflage 2026-09-15): `--rules all` darf
     #    im APPLY KEINE pending-Gruppe mitziehen (der Dry-Run warnt nur); eine
-    #    EXPLIZITE Selektion (`--rules ksem-read`) passiert das Gate. Idempotenz
-    #    bleibt unverändert 0/0.
+    #    EXPLIZITE Selektion passiert das Gate. Nach der 1-Schritt-Substitution
+    #    (PR #153: ksem-read -> managed, ksem-port-probe-Block raus) enthält das
+    #    PRODUKTIONS-Modell KEINE pending-Gruppe mehr – das Gate wird daher gegen
+    #    ein SYNTHETISCHES Modell mit einer pending-Gruppe geprüft (deterministisch;
+    #    belegt, dass der fail-closed-Pfad scharf bleibt). Idempotenz bleibt 0/0.
     # ----------------------------------------------------------------------
-    def run_acl(extra):
-        return subprocess.run(
-            [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
-             "--file", FIXTURE] + extra, capture_output=True, text=True)
+    # Produktions-Modell: keine pending-Gruppe mehr (Invariante „pending=nicht
+    # live" ist damit strukturell erfüllt; kein Live-POST nötig).
+    prod_pending = {e.group for s in m.SECTION_ORDER for e in model[s] if e.pending}
+    check("Produktions-Modell enthält KEINE pending-Gruppe (1-Schritt-Substitution)",
+          prod_pending == set(), "pending=%r" % sorted(prod_pending))
 
-    g_all = run_acl(["--rules", "all", "--confirm", "APPLY-ACL"])
+    # Synthetisches pending-Modell (NUR für den Gate-Test; NICHT die SSoT):
+    # derselbe SSoT-Text, aber `ksem-read` wieder als `pending` markiert.
+    with open(MODEL, encoding="utf-8") as f:
+        _mtxt = f.read()
+    _ptxt = _mtxt.replace("// rule: ksem-read ", "// rule: ksem-read pending ", 1)
+    p_model_pend = os.path.join(ttmp, "model-ksem-read-pending.hujson")
+    with open(p_model_pend, "w", encoding="utf-8") as f:
+        f.write(_ptxt)
+
+    def run_acl(extra, model_path=None):
+        cmd = [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
+               "--file", FIXTURE]
+        if model_path:
+            cmd += ["--model", model_path]
+        return subprocess.run(cmd + extra, capture_output=True, text=True)
+
+    g_all = run_acl(["--rules", "all", "--confirm", "APPLY-ACL"], p_model_pend)
     check("Gate: --rules all + pending -> APPLY-Abbruch (exit 2)",
           g_all.returncode == 2, "rc=%d" % g_all.returncode)
     check("Gate: Meldung nennt pending-Gruppe + expliziten Weg",
           "pending-Regeln nur explizit via" in g_all.stdout
           and "ksem-read" in g_all.stdout, "Meldung fehlt/uneindeutig")
 
-    #    Damit die explizite Selektion das Gate verlässt UND real etwas einfügen
-    #    würde (APPLY-Pfad erreicht), gegen einen Live-Snapshot OHNE den
-    #    durable-Portumfang testen (der rekonstruierte Live-Snapshot trägt die
-    #    temporäre Probe mit identem Umfang → `--rules ksem-read` wäre dort no-op).
+    #    EXPLIZITE Selektion passiert das Gate. Gegen einen Live-Snapshot OHNE den
+    #    durable-Portumfang, damit real eine Einfügung geplant ist und der
+    #    APPLY-Pfad (offline-`--file`-Guard) erreicht wird.
     raw_nodur = json.loads(live_text)
     dur_canons = {e.canon for e in model["acls"] if e.group == "ksem-read"}
     raw_nodur["acls"] = [r for r in raw_nodur["acls"]
@@ -489,22 +542,34 @@ def main():
         f.write(json.dumps(raw_nodur, indent=2))
     g_exp = subprocess.run(
         [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
-         "--file", p_nodur, "--rules", "ksem-read", "--confirm", "APPLY-ACL"],
+         "--model", p_model_pend, "--file", p_nodur,
+         "--rules", "ksem-read", "--confirm", "APPLY-ACL"],
         capture_output=True, text=True)
     check("Gate: --rules ksem-read passiert das Gate (kein pending-Abbruch)",
           g_exp.returncode == 2 and "APPLY ist mit --file" in g_exp.stdout
           and "pending-Regeln nur explizit" not in g_exp.stdout,
           "rc=%d out=%r" % (g_exp.returncode, g_exp.stdout[-160:]))
 
-    g_dry = run_acl(["--dry-run", "--rules", "all"])
+    g_ins = subprocess.run(
+        [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
+         "--model", p_model_pend, "--file", p_nodur, "--dry-run",
+         "--rules", "ksem-read"],
+        capture_output=True, text=True)
+    check("Gate: explizite Selektion plant die Einfügung (APPLY-Pfad erreichbar)",
+          g_ins.returncode == 0
+          and "1 Einfügung(en), 0 Entfernung(en)" in g_ins.stdout,
+          "rc=%d out=%r" % (g_ins.returncode, g_ins.stdout[-160:]))
+
+    g_dry = run_acl(["--dry-run", "--rules", "all"], p_model_pend)
     check("Gate: Dry-Run --rules all warnt nur (exit 0, keine Ablehnung)",
           g_dry.returncode == 0 and "enthält pending-Regeln" in g_dry.stdout
           and "APPLY abgelehnt" not in g_dry.stdout, "rc=%d" % g_dry.returncode)
 
     ksem_ent = [e for s in m.SECTION_ORDER for e in model[s]
                 if e.group == "ksem-read"]
-    check("Gate: genau 1 ksem-read-Modell-Eintrag (pending)",
-          len(ksem_ent) == 1, "n=%d" % len(ksem_ent))
+    check("Gate: genau 1 ksem-read-Modell-Eintrag (managed)",
+          len(ksem_ent) == 1 and not ksem_ent[0].pending,
+          "n=%d" % len(ksem_ent))
     raw_idem = json.loads(live_text)
     for e in ksem_ent:
         if e.section == "acls":

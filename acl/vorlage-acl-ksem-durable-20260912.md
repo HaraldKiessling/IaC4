@@ -1,8 +1,19 @@
-# Entscheidungsvorlage: dauerhafte ACL-Lese-Regel für KSEM `192.168.0.31:502`
+# Entscheidungsvorlage: dauerhafte ACL-Lese-Regel für KSEM `192.168.0.31:502` + `:80`
 
 **Status:** VORLAGE — zur Owner-Sicht + Review; **NICHT angewendet** · **Autor:** engineer-pro (Subagent)
 **Datum:** 2026-09-12 (UTC) · **Anlass-Input:** Owner 2026-09-12 14:06 UTC
 **Owner-Entscheid (neu):** 2026-09-15 21:27 UTC — **„Entscheid 2 ja: KSEM .31:502 dauerhaft freigeben"**
+
+> **NACHTRAG (verbindlich, 2026-09-16):** Owner-Go **2026-09-16 04:28 UTC** erweitert
+den Portumfang auf **`:502` UND `:80`** („IP .31 Port 502 und Port 80"), durable,
+additiv, Quelle `tag:ia4`. Da der Umfang damit **byte-semantisch identisch** zur
+LIVE-Gruppe `ksem-port-probe` ist, wird `ksem-read` **in EINEM Schritt** `managed`
+und der `ksem-port-probe`-Block **im selben Schritt** aus dem Modell entfernt
+(**keine** Live-Löschung, **kein** Live-POST). Frühere Passagen, die **nur `:502`**
+empfehlen (Titel war `:502`; §1.2, §2.2, §2.3, §8.2, §9), sind damit **überholt** —
+maßgeblich ist dieser Nachtrag (PR #153, Branch `feat/acl-ksem-read-durable`,
+Head `2cd9efe` + Fix-Commit).
+
 → `ksem-read` ist damit **freigegeben**; Vorlage geht ins **Review** (Autor ≠ Reviewer).
 **KEIN Apply in diesem Lauf** — Apply folgt separat mit `rules=ksem-read`, `confirm=APPLY-ACL`.
 **Governance:** ACL nur additiv · Autor ≠ Reviewer · kein Apply ohne Owner-Go · `confirm=APPLY-ACL`.
@@ -41,13 +52,13 @@ Umsetzungsberichts `iac4-ksem-testfreigabe-bericht-20260912.md`) hat ergeben:
 erlaubt `tag:ia4` auf `192.168.0.31:1502` (u. a.) — also auf einen **toten Port**.
 
 ### 1.2 Ziel (eng begrenzt)
-- Eine **saubere, permanente** Lese-Regel für den **einzigen nötigen** KSEM-Port
-  **`:502`** (Standard-Modbus TCP), NUR LESEND.
+- Eine **saubere, permanente** Lese-Regel für die KSEM-Ports **`:502`** (Standard-
+  Modbus TCP) **und `:80`** (Web/Diagnose-Identität), NUR LESEND (Owner-Go
+  2026-09-16 04:28: Portumfang `:502`+`:80`).
 - **Ablösung** der **temporären/diagnostischen** Gruppe `ksem-port-probe`
   (`:80`+`:502`), die mit Owner-Go 2026-09-12 12:41 UTC nur zur Diagnose aktiviert
-  wurde.
-- **Kein** Schreibzugriff, **kein** `:80` (nur Diagnose-Web-Identität), **kein**
-  Einbezug des toten `:1502`.
+  wurde — **1:1-Substitution in EINEM Schritt** (2026-09-16).
+- **Kein** Schreibzugriff, **kein** Einbezug des toten `:1502`.
 
 ---
 
@@ -79,36 +90,38 @@ Schließen der `acls`-Liste `  ],` (Zeile **181**). Also als **letzter**
 `acls`-Eintrag (Modell-Position **17** von `acls`).
 
 ```hujson
-    // rule: ksem-read pending — DAUERHAFT (VORLAGE 2026-09-12, Owner-Go 2026-09-15 21:27):
+    // rule: ksem-read — DAUERHAFT (VORLAGE 2026-09-12; Owner-Go Inhalt 2026-09-15
+    // 21:27, PORTUMFANG erweitert 2026-09-16 04:28; Substitution in EINEM Schritt
+    // 2026-09-16):
     // tag:ia4 (BEIDE VPS) → KSEM 192.168.0.31 NUR LESEND auf :502 (Standard-Modbus
-    // TCP; Diagnose 2026-09-12: FC3 Unit 71 OK, :1502 REFUSED). Saubere, permanente
-    // Lese-Regel, die die temporäre Diagnose-Gruppe `ksem-port-probe` (:80+:502)
-    // ablöst — NICHT :80 (nur Diagnose-Web-Identität) und NICHT die tote :1502.
-    // Aktivierung = eigener Owner-Go (confirm=APPLY-ACL); danach eigener
-    // Entfernungs-Schritt für `ksem-port-probe`.
+    // TCP; Diagnose 2026-09-12: FC3 Unit 71 OK, :1502 REFUSED) UND :80 (Web/Diagnose-
+    // Identität). Portumfang = GENAU die zwei Ports der vormals temporären Diagnose-
+    // Gruppe `ksem-port-probe` (:80+:502); diese dauerhafte Lese-Regel löst die Probe
+    // 1:1 ab (Probe-Block im selben Schritt aus dem Modell entfernt). NICHT die tote
+    // :1502.
     {
       "action": "accept",
       "src": ["tag:ia4"],
-      "dst": ["192.168.0.31:502"],
+      "dst": ["192.168.0.31:80", "192.168.0.31:502"],
     },
 ```
 
 **Einfügeposition (positionsgenau):** aktueller `acls`-Live-Aufbau =
 `[verwaltet 0–6] [IaC3 7] [Konsole 8–11] [IaC3 12–14] [energie-read 15]
-[ksem-port-probe 16]` (17 Positionen). Die neue Regel wird **Modell-Position 17**
-(letzter Eintrag, nach `ksem-port-probe`, vor `]`). Das Werkzeug `insert_entries`
-fügt sie über die **Modell-Reihenfolge** automatisch an dieser Position ein
-(kein Hand-Edit an der Live-Policy).
+[ksem-read 16]` (17 Positionen). Mit der Substitution in EINEM Schritt (2026-09-16)
+ist `ksem-read` der **letzte** `acls`-Eintrag (Modell-/Live-Position 16); der
+`ksem-port-probe`-Block entfällt dabei. Das Werkzeug `insert_entries` fügt über die
+**Modell-Reihenfolge** ein (kein Hand-Edit an der Live-Policy).
 
 > **Status:** Snippet **und** Beiwerk (`scripts/ensure-acl.py` +5/−2,
 > `acl/README.md` +7/−2, Workflow `00-acl-apply.yml` +6/−6, `hujson` +16/−0; diese
 > Vorlage **336 Z.**) sind im Draft-PR vorbereitet; `pending`. **Kein Merge, kein Apply.** Übergang `pending`→`managed` nach Apply: Marker entfernen + Toleranzliste/Fixtures/README nachziehen.
 
-### 2.3 Minimal-Alternative (falls Owner nur `:80`-frei + `:502` will)
-Falls doch **beide** Ports dauerhaft gewünscht sind (z. B. für künftiges
-Web-Monitoring), wäre `"dst": ["192.168.0.31:502", "192.168.0.31:80"]` die
-Erweiterung. **Empfehlung: nur `:502`** (Least Privilege; `:80` war rein
-diagnostisch).
+### 2.3 Port-Umfang — Entschieden: **`:502` UND `:80`** (Owner-Go 2026-09-16 04:28)
+Die frühere Empfehlung „nur `:502`" ist **überholt**: der Owner hat am
+**2026-09-16 04:28 UTC** ausdrücklich **beide** Ports (`:502` **und** `:80`)
+dauerhaft freigegeben. Umsetzung: `"dst": ["192.168.0.31:80", "192.168.0.31:502"]`
+(exakt der Umfang der abgelösten Probe, 1:1-Substitution).
 
 ---
 
@@ -228,6 +241,12 @@ Toleranz-Fälle (i)–(v), Duplikat-Erkennung (8h/8i) und Provenienz-Anker (8j).
 
 ## 6) Ablösung der temporären Gruppe `ksem-port-probe` (eigener Entfernungs-Schritt)
 
+> **ÜBERHOLT (2026-09-16, s. Nachtrag oben):** Die Ablösung ist **nicht** mehr ein
+> separater Entfernungs-Schritt, sondern als **1-Schritt-Substitution** im selben
+> PR #153 umgesetzt (`ksem-read` → `managed`, `ksem-port-probe`-Block aus dem Modell
+> entfernt; **keine** Live-Löschung, **kein** Live-POST). Der folgende Text bleibt als
+> historische Herleitung der Ablösung stehen.
+
 `ksem-port-probe` (`dst: ["192.168.0.31:80","192.168.0.31:502"]`, live seit Owner-Go
 2026-09-12 12:41 UTC) ist **rein diagnostisch** und wird durch `ksem-read` abgelöst.
 
@@ -282,15 +301,17 @@ Toleranz-Fälle (i)–(v), Duplikat-Erkennung (8h/8i) und Provenienz-Anker (8j).
 1. **Owner-Apply-Go** für `ksem-read` (`rules=ksem-read`, `confirm=APPLY-ACL`) — und
    **expliziter Blast-Radius-Entscheid**: vps-prod erhält den KSEM-`:502`-Lesezugriff
    (§3.1). Alternative: engere Quelle über dediziertes vps-dev-Tag (eigener Go).
-2. **Port-Umfang:** nur `:502` (empfohlen) vs. zusätzlich `:80` (§2.3).
+2. **Port-Umfang:** **entschieden** — `:502` **und** `:80` (Owner-Go 2026-09-16 04:28,
+   §2.3); Substitution in EINEM Schritt umgesetzt (PR #153).
 3. **`energie-read` `:1502`:** die Regel führt weiter den **toten** KSEM-`:1502`-Port.
    Empfehlung: **separate** Aufräum-Entscheidung (nicht Teil dieser Vorlage).
-4. **Ablösung `ksem-port-probe`:** Schritt 2 (§6) ist ein **eigener** Vorgang
-   (Entfernung + Doku); Zeitpunkt nach Live von `ksem-read`.
-5. **Alias-Hygiene:** In `scripts/ensure-acl.py` mappt `ksem`/`probe` aktuell auf
-   `ksem-port-probe`, `ksem-read`/`ksemread`/`ksem-durable` auf `ksem-read`. Nach
-   Entfernung von `ksem-port-probe` (Schritt 2) sollte `ksem` → `ksem-read` zeigen
-   (eigene Kleinigkeit im Entfernungs-PR).
+4. **Ablösung `ksem-port-probe`:** **erledigt** — 1-Schritt-Substitution im PR #153
+   (Probe-Block aus dem Modell entfernt, `ksem-read` `managed`; Modell-Relabel,
+   **keine** Live-Löschung). Historisch: §6.
+5. **Alias-Hygiene:** **erledigt** (PR #153) — Gruppe `ksem-port-probe` aus
+   `scripts/ensure-acl.py` entfernt; Alias `ksem` → `ksem-read`;
+   `ksem-read`/`ksemread`/`ksem-durable` → `ksem-read`. Workflow-Guard/-Help
+   `00-acl-apply.yml` entsprechend angepasst.
 6. **Reviewer benennen** (Autor ≠ Reviewer) + Rollback-Anker (roher Export) vor Apply.
 
 ---
@@ -299,13 +320,13 @@ Toleranz-Fälle (i)–(v), Duplikat-Erkennung (8h/8i) und Provenienz-Anker (8j).
 
 | # | Beleg | Ergebnis |
 |---|---|---|
-| E1 | `ensure-acl.py --check-model` | **21 Einträge** (nach `ksem-read`), Gates ok (exit 0) |
+| E1 | `ensure-acl.py --check-model` | **20 Einträge** (nach 1-Schritt-Substitution: `ksem-port-probe` raus, `ksem-read` managed), Gates ok (exit 0) |
 | E2 | `--verify <anker> --tolerated-foreign` (Baseline) | grün; Fremdbestand **5/5**; Fremd/Geändert/Fehlend/Reihenfolge = 0 |
-| E3 | Kandidat Dry-Run (offline, `--rules ksem-read`) | **+1 Einfügung, 0 Entfernungen, 0 Änderungen**; pending |
+| E3 | Kandidat Dry-Run (offline, `--rules ksem-read`) | 2026-09-12: **+1 Einfügung/0 Entfernungen** (pending); nach Substitution 2026-09-16: **0/0** (Eintrag bereits live ≡ durable) |
 | E4 | Kandidat `--verify` | grün (pending außerhalb Live-Soll) ⇒ Null-Diff unberührt |
 | E5 | Kandidat B (`energie-read` erweitert) | **Fehlend 1 + Unerwartet fremd 1** ⇒ nicht additiv (verworfen) |
 | E6 | `acl/tests/offline_tests.py` | **alle grün** (inkl. Toleranz-Fälle (i)–(v), Duplikate 8h/8i, Provenienz 8j) |
-| E7 | `--check-model` / `--dry-run` Model | 20 → **21** Einträge; `acls` +1 (pending) |
+| E7 | `--check-model` / `--dry-run` Model | **20** Einträge; `acls` = 13 (managed), **keine** `pending`-Gruppe; `--dry-run --rules ksem-read` → 0/0 |
 | — | Provenienz-Anker | Export-SHA == `source_export_sha256` (`b7c7b2d4…4b40`) |
 
 **Anker-Datei:** `/home/node/.openclaw/workspace/acl-live-export-20260912-post-ksem.json`
@@ -317,7 +338,7 @@ Kandidat-Regel + Beiwerk auf Branch `feat/acl-ksem-read-durable` (Draft-PR)
 ```json
 {
   "status": "done",
-  "ergebnis": "Vorlage + additive pending-Regel ksem-read (KSEM 192.168.0.31:502, nur lesend) + Draft-PR vorbereitet; NICHT angewendet.",
+  "ergebnis": "Vorlage + durable Regel ksem-read (KSEM 192.168.0.31:502 UND :80, nur lesend) + PR #153; Portumfang per Owner-Go 2026-09-16 04:28; als 1-Schritt-Substitution managed (Probe-Block entfernt). NICHT angewendet (kein Apply, kein Live-POST).",
   "belege": [
     "acl/tailscale-acl.hujson: neuer pending-Block 'rule: ksem-read pending' als letzter acls-Eintrag (Modell-Position 17)",
     "offline --verify <anker> --tolerated-foreign: exit 0, Fremdbestand 5/5 positionsgenau, Reihenfolge 0",
@@ -327,9 +348,9 @@ Kandidat-Regel + Beiwerk auf Branch `feat/acl-ksem-read-durable` (Draft-PR)
   ],
   "offene_punkte": [
     "Owner-Apply-Go (confirm=APPLY-ACL) + Blast-Radius-Entscheid vps-prod",
-    "Port-Umfang nur :502 (empfohlen) vs. :80",
+    "Port-Umfang :502 UND :80 (Owner-Go 2026-09-16 04:28; 1-Schritt-Substitution, PR #153)",
     "energie-read :1502 (toter Port) separate Aufraeum-Entscheidung",
-    "Abloesung ksem-port-probe = eigener Entfernungs-Schritt nach Live",
+    "Abloesung ksem-port-probe: erledigt (1-Schritt-Substitution im Modell, keine Live-Loeschung)",
     "Reviewer (Autor != Reviewer) benennen"
   ]
 }
