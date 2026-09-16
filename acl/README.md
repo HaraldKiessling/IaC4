@@ -50,7 +50,7 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `mqtt-1883` (= HA-Regel 6) | ia4 → ha:1883 | **live** (Run-Log-rekonstruiert; Apply 2026-09-09) |
 | `energie-read` (= HA-Regel 7) | ia4 → 3 Energie-Ziele (lesend: KSEM + Kostal WR) | **live** (Owner-Go 2026-09-11 21:57 UTC) |
 | `ksem-port-probe` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:80` (Web) + `:502` (Std-Modbus) — temporäre Port-Diagnose | **live** (Owner-Go 2026-09-12 12:41 UTC; rein additiv) |
-| `ksem-read` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:502` (Standard-Modbus) — **dauerhafte** Lese-Regel, löst `ksem-port-probe` ab | **pending** (Vorlage 2026-09-12; wartet auf Owner-Apply-Go `confirm=APPLY-ACL`) |
+| `ksem-read` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:502` (Standard-Modbus) **+ `:80`** (Web/Diagnose) — **dauerhafte** Lese-Regel, löst `ksem-port-probe` (1:1, gleicher Portumfang) ab | **pending** (Vorlage 2026-09-12; Portumfang erweitert 2026-09-16; wartet auf Owner-Apply-Go `confirm=APPLY-ACL`) |
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
 Es gibt derzeit **genau eine** `pending`-Gruppe im Modell: `ksem-read`

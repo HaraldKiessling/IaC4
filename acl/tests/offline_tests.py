@@ -109,9 +109,17 @@ def main():
           len(mqtt_mod) == 1 and not mqtt_mod[0].pending,
           "mqtt-1883-Einträge=%d pending=%s"
           % (len(mqtt_mod), [e.pending for e in mqtt_mod]))
+    #    Ausnahme (bewusst, Owner-Go 2026-09-16): die durable Gruppe `ksem-read`
+    #    deklariert denselben Portumfang (:80+:502) wie die noch LIVE befindliche
+    #    temporäre Diagnose-Gruppe `ksem-port-probe` → der pending-Eintrag ist
+    #    damit bereits live vorhanden (bis die Probe zurückgebaut ist). Andere
+    #    pending-live-acls-Einträge bleiben verboten.
+    pend_live_acls = [o for s, o, _m in rep["pending_live"] if s == "acls"]
+    pend_model_shorts = {m._short(e.obj) for e in model["acls"] if e.pending}
     check("Regel 6 (MQTT) im Live-Snapshot vorhanden (nicht mehr pending_live)",
           bool(mqtt_mod) and mqtt_mod[0].canon in mqtt_live
-          and not any(s == "acls" for s, _o, _m in rep["pending_live"]))
+          and all(o in pend_model_shorts for o in pend_live_acls),
+          "pending_live_acls=%r" % pend_live_acls)
 
     # 3) Additive Einfügung der iac4-Gruppe in Snapshot OHNE iac4
     #    Entfernt werden GENAU die iac4-Modell-Einträge (semantisch über canon),
@@ -468,11 +476,25 @@ def main():
           "pending-Regeln nur explizit via" in g_all.stdout
           and "ksem-read" in g_all.stdout, "Meldung fehlt/uneindeutig")
 
-    g_exp = run_acl(["--rules", "ksem-read", "--confirm", "APPLY-ACL"])
+    #    Damit die explizite Selektion das Gate verlässt UND real etwas einfügen
+    #    würde (APPLY-Pfad erreicht), gegen einen Live-Snapshot OHNE den
+    #    durable-Portumfang testen (der rekonstruierte Live-Snapshot trägt die
+    #    temporäre Probe mit identem Umfang → `--rules ksem-read` wäre dort no-op).
+    raw_nodur = json.loads(live_text)
+    dur_canons = {e.canon for e in model["acls"] if e.group == "ksem-read"}
+    raw_nodur["acls"] = [r for r in raw_nodur["acls"]
+                          if m.canon(r) not in dur_canons]
+    p_nodur = os.path.join(ttmp, "live-minus-durable.hujson")
+    with open(p_nodur, "w", encoding="utf-8") as f:
+        f.write(json.dumps(raw_nodur, indent=2))
+    g_exp = subprocess.run(
+        [sys.executable, os.path.join(ROOT, "scripts", "ensure-acl.py"),
+         "--file", p_nodur, "--rules", "ksem-read", "--confirm", "APPLY-ACL"],
+        capture_output=True, text=True)
     check("Gate: --rules ksem-read passiert das Gate (kein pending-Abbruch)",
           g_exp.returncode == 2 and "APPLY ist mit --file" in g_exp.stdout
           and "pending-Regeln nur explizit" not in g_exp.stdout,
-          "rc=%d out=%r" % (g_exp.returncode, g_exp.stdout[-120:]))
+          "rc=%d out=%r" % (g_exp.returncode, g_exp.stdout[-160:]))
 
     g_dry = run_acl(["--dry-run", "--rules", "all"])
     check("Gate: Dry-Run --rules all warnt nur (exit 0, keine Ablehnung)",
@@ -487,7 +509,8 @@ def main():
     for e in ksem_ent:
         if e.section == "acls":
             raw_idem["acls"].append({"action": "accept", "src": ["tag:ia4"],
-                                     "dst": ["192.168.0.31:502"]})
+                                     "dst": ["192.168.0.31:80",
+                                             "192.168.0.31:502"]})
     p_idem = os.path.join(ttmp, "idem-ksem-read.hujson")
     with open(p_idem, "w", encoding="utf-8") as f:
         f.write(json.dumps(raw_idem, indent=2))
