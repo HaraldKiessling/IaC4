@@ -25,9 +25,12 @@
   // Live-Bezug (Stand 2026-09-11, roher Live-Export):
   //   live = base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner
   //          + owner-8123 + console-owner + ha-ssh + energie-read
-  //          + ksem-port-probe
+  //          + ksem-read
+  //   pending (deklariert, NICHT Teil des Live-Solls): — (derzeit KEINE;
+  //           seit 2026-09-16 ist ksem-read managed, s. u.)
   //          (HA-Regeln 1–7; energie-read aktiviert: Owner-Go 2026-09-11 21:57 UTC;
-  //           ksem-port-probe aktiviert: Owner-Go 2026-09-12 12:41 UTC)
+  //           ksem-port-probe aktiviert: Owner-Go 2026-09-12 12:41 UTC –
+  //           am 2026-09-16 04:28 UTC 1:1 durch ksem-read substituiert)
   //   Anker: roher Live-Export acl-live-export-20260912-post-ksem.json
   //   (sha256 b7c7b2d4…4b40, 2026-09-12T12:48:34Z, Run 34694681107 – POST-APPLY
   //   nach ksem-port-probe). `--verify --tolerated-foreign` gegen diesen Export
@@ -153,10 +156,16 @@
       "dst": ["192.168.0.31:1502", "192.168.0.13:80", "192.168.0.13:1502"],
     },
 
-    // rule: ksem-port-probe — TEMPORÄR/DIAGNOSTISCH (Owner-Go 2026-09-12 12:41 UTC):
-    // tag:ia4 → KSEM 192.168.0.31 NUR LESEND auf :80 (Web) + :502 (Std-Modbus), um
-    // die :1502-REFUSED-Diagnose abzusichern. Bewusst KEINE Schreib-Rechnung
-    // (action accept, nur Lese-Checks); Entfernung = Rollback.
+    // rule: ksem-read — DAUERHAFT (VORLAGE 2026-09-12; Owner-Go Inhalt 2026-09-15
+    // 21:27, PORTUMFANG erweitert 2026-09-16 04:28; Substitution in EINEM Schritt
+    // 2026-09-16, Review-Auflage PR #153):
+    // tag:ia4 (BEIDE VPS) → KSEM 192.168.0.31 NUR LESEND auf :502 (Standard-Modbus
+    // TCP; Diagnose 2026-09-12: FC3 Unit 71 OK, :1502 REFUSED) UND :80 (Web/Diagnose-
+    // Identität). Portumfang = GENAU die zwei Ports der vormals temporären Diagnose-
+    // Gruppe `ksem-port-probe` (:80+:502). Diese dauerhafte Lese-Regel löst die Probe
+    // 1:1 ab; der Probe-Block wurde im selben Schritt aus dem Modell entfernt
+    // (kein Doppelzustand, keine Live-Löschung – der Applier ist rein additiv und
+    // die Live-Zeile entspricht exakt dieser Regel). NICHT die tote :1502.
     {
       "action": "accept",
       "src": ["tag:ia4"],
