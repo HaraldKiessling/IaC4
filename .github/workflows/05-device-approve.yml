@@ -17,7 +17,7 @@
 #     instance         – ALLE gepaarten Geraete der gefilterten Instanzen
 #                        entfernen („Instanz leeren“; max 50 Geraete pro Lauf,
 #                        Limit-Ueberschreitung → Exit 2 VOR jedem Remove;
-#                        kein Confirm-Gate – Owner-Entscheidung)
+#                        Owner-Gate: `confirm` EXAKT DEVICE-REMOVE wie bei device)
 #
 #   Owner-Gate (Schranken-Vereinheitlichung 2026-09-20, ADR-005):
 #     mode=remove (device UND instance) verlangt den Input `confirm` EXAKT
