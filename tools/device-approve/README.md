@@ -44,9 +44,17 @@ Telegram-Pairing-Codes sind daher nicht reject-/remove-bar.
 | `type` | `auto` | `auto` (aus ID-Format ableiten), `telegram`, `device`, `both` |
 | `target` | `both` | `dev` \| `prod` \| `both` |
 | `instance` | `all` | `all` oder `oc1`…`ocN` |
+| `confirm` | *(leer)* | Owner-Wort für `mode=remove`: **`DEVICE-REMOVE`** (Pflicht) |
 
-Es gibt **kein Confirm-Gate** – eine Aktion wird ohne weitere Rückfrage
-ausgeführt (Owner-Entscheidung 2026-08-08).
+Für `approve`/`list`/`reject` gibt es **kein Confirm-Gate** – die Aktion wird
+ohne weitere Rückfrage ausgeführt (Owner-Entscheidung 2026-08-08).
+
+**Owner-Gate für `remove` (Schranken-Vereinheitlichung 2026-09-20, ADR-005):**
+Löschen bleibt **dauerhaft owner-pflichtig**. `mode=remove` (`device` **und**
+`instance`) verlangt den Input `confirm` **exakt `DEVICE-REMOVE`** – **fail-closed
+vor jedem Write/SSH** (kein Auto-Aufweichen, keine Schwelle). `mode=e2e` ist ein
+reiner Test-Lifecycle eines frischen, **eigenen** Clients (keine echten
+Owner-Geräte) und braucht kein `DEVICE-REMOVE`.
 
 ## scope=device vs. scope=instance
 
