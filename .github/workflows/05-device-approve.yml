@@ -17,7 +17,14 @@
 #     instance         – ALLE gepaarten Geraete der gefilterten Instanzen
 #                        entfernen („Instanz leeren“; max 50 Geraete pro Lauf,
 #                        Limit-Ueberschreitung → Exit 2 VOR jedem Remove;
-#                        kein Confirm-Gate – Owner-Entscheidung)
+#                        Owner-Gate: `confirm` EXAKT DEVICE-REMOVE wie bei device)
+#
+#   Owner-Gate (Schranken-Vereinheitlichung 2026-09-20, ADR-005):
+#     mode=remove (device UND instance) verlangt den Input `confirm` EXAKT
+#     DEVICE-REMOVE – fail-closed VOR jedem Write/SSH. Loeschen bleibt DAUERHAFT
+#     owner-pflichtig (keine Auto-Aufweichung, keine Schwelle). mode=e2e ist ein
+#     reiner Test-Lifecycle eines frischen, EIGENEN Clients (keine echten
+#     Owner-Geraete) und benoetigt kein DEVICE-REMOVE.
 #
 #   Exit-Code-Vertrag: 0 = Erfolg ODER not_found (gruen, Idempotenz),
 #   1 = Teilerfolg/Fehler, 2 = Validierungs-/Config-/Limit-Fehler.
@@ -74,6 +81,11 @@ on:
         required: false
         default: 'all'
         type: string
+      confirm:
+        description: 'Owner-Freigabe für mode=remove (Wortlaut: DEVICE-REMOVE; Pflicht – Löschen bleibt owner-pflichtig)'
+        required: false
+        default: ''
+        type: string
   repository_dispatch:
     types: [device-approve]
 
@@ -121,10 +133,20 @@ jobs:
           INPUT_INSTANCE: ${{ github.event.inputs.instance || github.event.client_payload.instance || 'all' }}
           INPUT_MODE: ${{ inputs.mode || 'approve' }}
           INPUT_SCOPE: ${{ inputs.scope || 'device' }}
+          INPUT_CONFIRM: ${{ github.event.inputs.confirm || github.event.client_payload.confirm || '' }}
           TG_USER_ID: ${{ github.event.client_payload.telegram_user_id || '' }}
           AUTHORIZED_USERS: ${{ secrets.TELEGRAM_APPROVE_USERS }}
         run: |
           set -euo pipefail
+
+          # Owner-Gate für den destruktiven Remove-Modus (Schranken-Vereinheitlichung
+          # 2026-09-20, ADR-005): Löschen bleibt DAUERHAFT owner-pflichtig –
+          # mode=remove (device UND instance) nur mit EXAKT 'DEVICE-REMOVE',
+          # fail-closed VOR jedem Write/SSH. Es gibt keine Auto-Aufweichung.
+          if [ "$INPUT_MODE" = "remove" ] && [ "$INPUT_CONFIRM" != "DEVICE-REMOVE" ]; then
+            echo "❌ Remove-Modus ohne Owner-Freigabe: Input 'confirm' muss EXAKT 'DEVICE-REMOVE' sein (Löschen bleibt owner-pflichtig, fail-closed)." >&2
+            exit 1
+          fi
 
           # Auth nur für repository_dispatch (Telegram-Pfad): auth_check.sh prüft
           # NUR die User-ID (Nicht-Leer + numerisch VOR Whitelist-Grep). M1: der
