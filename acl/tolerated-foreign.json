@@ -44,6 +44,11 @@
     "Portumfang :80+:502) substituiert: der Probe-Block ist aus der SSoT entfernt, der",
     "`managed`-Token an Position 16 bildet nun `ksem-read` ab (LAYOUT UNVERAENDERT,",
     "kein Live-POST).",
+    "Owner-Go 2026-09-20: Gruppe `shelly-read` aktiviert (lediglich LESEND:",
+    "tag:ia4 -> 192.168.0.26:80, 192.168.0.27:80, 192.168.0.63:80, 192.168.0.67:80 –",
+    "4x Shelly Gen2). Additiver IaC4-Apply (Run 35519859126, dry_run=false,",
+    "confirm=APPLY-ACL): `managed`-Token an Live-Position 17, nach `ksem-read`.",
+    "Das LAYOUT waechst damit um EIN `managed`-Token (acls 17 -> 18 Positionen).",
     "Owner-Entscheid 2026-09-11 (20:24 UTC, „1“): Fremdbestand wird POSITIONSGENAU",
     "modelliert (Verschränkung erlaubt) statt als zusammenhängender Block. Grund:",
     "die Reihenfolge-Überwachung bleibt scharf (Umsortierungen/Einschübe rund um",
@@ -51,11 +56,11 @@
     "(position start|end, M2-Finding 2026-09-11).",
     "",
     "Quelle/Beleg: eingefrorener POST-APPLY-Live-Export",
-    "acl-live-export-20260912-post-ksem.json",
-    "(sha256 b7c7b2d4a47630dd32266e74cc423c777ebd2ec55cb41f78e21faab22f9c4b40,",
-    "GET /api/v2/tailnet/<tailnet>/acl, 2026-09-12T12:48:34Z; Run 34694681107).",
-    "Vorgänger-Anker: acl-live-export-20260911-post-energie.json",
-    "(sha256 52bc662a…7993e, 2026-09-11T22:05:26Z, pre-ksem). Der rohe Export wird",
+    "acl-live-export-20260920T153225Z.hujson",
+    "(sha256 09a46eb67d0d98699351da1bcff9b4c589c93800fed98700793edd884be0e807,",
+    "GET /api/v2/tailnet/<tailnet>/acl, 2026-09-20T15:32:26Z; Run 35519890380 – POST-APPLY",
+    "nach `shelly-read`). Vorgänger-Anker: acl-live-export-20260912-post-ksem.json",
+    "(sha256 b7c7b2d4…4b40, 2026-09-12T12:48:34Z, pre-shelly). Der rohe Export wird",
     "NICHT versioniert (siehe .gitignore + acl/README.md). Die `layout`-Reihenfolge",
     "ist exakt die Live-Reihenfolge dieses Exports.",
     "PROVENIENZ-ANKER: `source_export_sha256` ist nicht länger nur Dokumentation –",
@@ -67,8 +72,8 @@
     "        `layout`: { acls: [Token…], ssh: [Token…] } – s. o."
   ],
   "version": 2,
-  "captured_utc": "2026-09-12T12:48:34Z",
-  "source_export_sha256": "b7c7b2d4a47630dd32266e74cc423c777ebd2ec55cb41f78e21faab22f9c4b40",
+  "captured_utc": "2026-09-20T15:32:26Z",
+  "source_export_sha256": "09a46eb67d0d98699351da1bcff9b4c589c93800fed98700793edd884be0e807",
 
   "tagOwners": [],
 
@@ -125,6 +130,7 @@
           "dst": ["tag:ia3:*"]
         }
       },
+      { "kind": "managed" },
       { "kind": "managed" },
       { "kind": "managed" }
     ],

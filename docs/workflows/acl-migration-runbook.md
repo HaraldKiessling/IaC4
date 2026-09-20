@@ -119,6 +119,14 @@ aus **Run-Logs rekonstruiert** (Lücke V2 — mit dem rohen Export **geschlossen
   `ksem-port-probe`), **IaC3-Fremdbestand (5) positionsgenau vorhanden/unverändert**,
   **kein unerwarteter Eintrag**, **Reihenfolge ok**. Der Provenienz-Anker
   `source_export_sha256` der Toleranzliste zeigt auf diesen Export.
+- **POST-APPLY-Export nach `shelly-read` (2026-09-20T15:32:26Z, Run 35519890380):**
+  `acl-live-export-20260920T153225Z.hujson` (sha256 `09a46eb6…e807`).
+  `acls` = o. g. Reihenfolge **+ `shelly-read` an Position 17** (nach `ksem-read`).
+  Das Toleranz-Verify gegen **diesen** Export ist **grün (exit 0)**:
+  **verwalteter Teil fehlend/geändert = 0** (inkl. `energie-read` + `ksem-read` +
+  `shelly-read`), **IaC3-Fremdbestand (5) positionsgenau vorhanden/unverändert**,
+  **kein unerwarteter Eintrag**, **Reihenfolge ok**, **Pending = 0**. Der
+  Provenienz-Anker `source_export_sha256` der Toleranzliste zeigt auf diesen Export.
 
 ## M2-Finding (2026-09-11) → behoben durch J1 (20:24 UTC)
 
@@ -354,6 +362,9 @@ einzubringen: `docs/reference/tailscale-acl.md` + Header-Hinweis im Apply-Workfl
 | 2026-09-12 | **M4 Dry-Run (`ksem-port-probe`, Run [34694648550](https://github.com/HaraldKiessling/IaC4/actions/runs/34694648550), `dry_run=true`):** Fehlend=1, Geändert=0, Zusatz=0, Reihenfolge=0 → **1 Einfügung / 0 Entfernungen**; IaC3-Fremdbestand 5/5 unverändert. Rollback-Anker (read-only Export, Run [34694619632](https://github.com/HaraldKiessling/IaC4/actions/runs/34694619632)): sha256 `52bc662a…7993e`. | erledigt | Engineer |
 | 2026-09-12 | **M4 Apply (`ksem-port-probe`, Run [34694663101](https://github.com/HaraldKiessling/IaC4/actions/runs/34694663101), `dry_run=false`, `confirm=APPLY-ACL`):** ➕ `ksem-port-probe` eingefügt; Pre-POST-Guard rein additiv ✅; `count==1`-Gate ✅; Additivität ✅; **kein Rollback**. | **live** | Engineer |
 | 2026-09-12 | **POST-APPLY-Export** (Run [34694681107](https://github.com/HaraldKiessling/IaC4/actions/runs/34694681107), read-only GET): sha256 `b7c7b2d4…4b40`, 2026-09-12T12:48:34Z; im Workspace `acl-live-export-20260912-post-ksem.json`. Diff vs. pre-ksem-Export = **genau 1 Zusatz (`ksem-port-probe`), 0 Entfernungen**. `--verify --tolerated-foreign` gegen diesen Export **grün (exit 0)** (verwalteter Teil exakt inkl. `energie-read` + `ksem-port-probe`; IaC3-Fremdbestand 5 positionsgenau). Anker `source_export_sha256` aktualisiert. | verifiziert | Engineer |
+| 2026-09-20 | **M4 Dry-Run (`shelly-read`, Run [35519827375](https://github.com/HaraldKiessling/IaC4/actions/runs/35519827375), `dry_run=true`):** Tailscale-Zugriff nach Key-Erneuerung wieder gültig (GET /acl **200**, kein 401); Fehlend=0/Geändert=0/Zusatz=0, IaC3-Fremdbestand 5/5, Reihenfolge 0 → **1 Einfügung / 0 Entfernungen** (rein additiv). | erledigt | Engineer |
+| 2026-09-20 | **M4 Apply (`shelly-read`, Run [35519859126](https://github.com/HaraldKiessling/IaC4/actions/runs/35519859126), `dry_run=false`, `confirm=APPLY-ACL`):** ➕ `shelly-read` eingefügt; Pre-POST-Guard rein additiv ✅; `acls` `count==1`-Gate ✅; Additivität ✅; **kein Rollback**. | **live** | Engineer |
+| 2026-09-20 | **POST-APPLY-Export** (Run [35519890380](https://github.com/HaraldKiessling/IaC4/actions/runs/35519890380), read-only GET): sha256 `09a46eb6…e807`, 2026-09-20T15:32:26Z. Live-Diff pre→post = **acls +1/−0**. `--verify --tolerated-foreign` gegen diesen Export **grün (exit 0)** (verwalteter Teil exakt inkl. `shelly-read`; IaC3-Fremdbestand 5 positionsgenau; **Pending 0**). Anker `source_export_sha256` aktualisiert; `shelly-read` `pending` → `managed`; Layout acls 17 → 18. | verifiziert | Engineer |
 
 ## Offene Lücken (separat als IaC4-Issues, nicht Teil dieser Migration)
 

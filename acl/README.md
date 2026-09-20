@@ -51,11 +51,12 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `energie-read` (= HA-Regel 7) | ia4 → 3 Energie-Ziele (lesend: KSEM + Kostal WR) | **live** (Owner-Go 2026-09-11 21:57 UTC) |
 | `ksem-port-probe` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:80` + `:502` — **temporäre** Port-Diagnose | **2026-09-16 abgelöst** (Block aus dem Modell entfernt; 1:1 durch `ksem-read` substituiert; keine Live-Löschung) |
 | `ksem-read` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:502` (Standard-Modbus) **+ `:80`** (Web/Diagnose) — **dauerhafte** Lese-Regel, löst `ksem-port-probe` (1:1, gleicher Portumfang) ab | **managed/live** (Owner-Go Inhalt 2026-09-15 21:27, Portumfang 2026-09-16 04:28; Substitution in EINEM Schritt 2026-09-16; kein Live-POST nötig) |
-| `shelly-read` | ia4 → Shelly (gen2, nativ via LAN) `192.168.0.26`/`.27`/`.63`/`.67` NUR LESEND auf `:80` (lokale RPC-/HTTP-API) — 4× Gen2, **4 IPs erfasst** (`.26` Plus1_01, `.27` Plus1_02, `.63` **Pro EM**, `.67` **Pro 3EM**); CoAP/UDP `:5683` = nur Gen1, hier nicht nötig | **pending** (deklariert, NICHT Live-Soll; Apply erst nach Review + Owner-Go, explizit via `--rules shelly-read`) |
+| `shelly-read` | ia4 → Shelly (gen2, nativ via LAN) `192.168.0.26`/`.27`/`.63`/`.67` NUR LESEND auf `:80` (lokale RPC-/HTTP-API) — 4× Gen2, **4 IPs erfasst** (`.26` Plus1_01, `.27` Plus1_02, `.63` **Pro EM**, `.67` **Pro 3EM**); CoAP/UDP `:5683` = nur Gen1, hier nicht nötig | **managed/live** (Owner-Go 2026-09-20; additiver IaC4-Apply Run 35519859126: `count==1`-Gate ✅, rein additiv, kein Rollback) |
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
-Es gibt derzeit **genau eine** `pending`-Gruppe: `shelly-read` (deklariert,
-**nicht** Live-Soll; Apply nur explizit via `--rules shelly-read`). `ksem-read` ist seit
+Es gibt derzeit **keine** `pending`-Gruppe mehr: `shelly-read` wurde am
+**2026-09-20** live angewendet (Owner-Go; Run 35519859126) und ist damit
+**managed** (Live-Soll). `ksem-read` ist seit
 **2026-09-16** **managed** (Live-Soll); der vormals temporäre
 `ksem-port-probe`-Block wurde im **selben** Schritt aus dem Modell entfernt
 (1:1-Substitution, **keine** Live-Löschung – der Applier ist rein additiv und die
@@ -133,6 +134,14 @@ aus. Der `--verify` gegen den eingefrorenen **POST-APPLY**-Export
 **grün** (exit 0): verwalteter Teil exakt (inkl. `energie-read` + `ksem-read`),
 Fremdbestand 5/5 positionsgenau vorhanden/unverändert, kein unerwarteter Eintrag,
 Reihenfolge ok.
+
+**POST-APPLY 2026-09-20 (`shelly-read`):** Der Anker wurde auf den neuen Export
+`acl-live-export-20260920T153225Z.hujson` (sha256 `09a46eb6…e807`,
+2026-09-20T15:32:26Z, Run 35519890380) nachgezogen; das positionsgenaue `layout`
+wuchs um EIN `managed`-Token (acls 17 → 18). Der `--verify --tolerated-foreign`
+gegen diesen Export ist **grün (exit 0)**: verwalteter Teil exakt (inkl.
+`shelly-read`), IaC3-Fremdbestand **5/5** positionsgenau, Reihenfolge ok,
+**Pending = 0**.
 
 ## Fremdbestand (nicht von IaC4 verwaltet)
 
@@ -227,7 +236,9 @@ Ohne gültigen `TAILSCALE_API_KEY` (IaC4-Key seit 2026-07-31 **401**) und ohne
 rohen Live-Export war die **Null-Diff-Verifikation** ([Runbook](../docs/workflows/acl-migration-runbook.md)
 M3) nicht ausführbar. **Beide Voraussetzungen sind mit 2026-09-11 geschlossen:**
 Key erneuert (V1) und roher Live-Export liegt vor (V2) — Anker
-`acl-live-export-20260912-post-ksem.json` (sha256 `b7c7b2d4…`), s. o.
+`acl-live-export-20260912-post-ksem.json` (sha256 `b7c7b2d4…`), s. o. Seit dem
+POST-APPLY `shelly-read` (2026-09-20) ist der Anker
+`acl-live-export-20260920T153225Z.hujson` (sha256 `09a46eb6…e807`), s. o.
 
 Der Soll/Ist-Bestand (Modell-Soll + Fixture `tests/fixtures/live-reconstructed.hujson`)
 war eine **Run-Log-Rekonstruktion** (kein roher Export) und ist durch den **rohen
