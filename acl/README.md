@@ -51,9 +51,11 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `energie-read` (= HA-Regel 7) | ia4 → 3 Energie-Ziele (lesend: KSEM + Kostal WR) | **live** (Owner-Go 2026-09-11 21:57 UTC) |
 | `ksem-port-probe` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:80` + `:502` — **temporäre** Port-Diagnose | **2026-09-16 abgelöst** (Block aus dem Modell entfernt; 1:1 durch `ksem-read` substituiert; keine Live-Löschung) |
 | `ksem-read` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:502` (Standard-Modbus) **+ `:80`** (Web/Diagnose) — **dauerhafte** Lese-Regel, löst `ksem-port-probe` (1:1, gleicher Portumfang) ab | **managed/live** (Owner-Go Inhalt 2026-09-15 21:27, Portumfang 2026-09-16 04:28; Substitution in EINEM Schritt 2026-09-16; kein Live-POST nötig) |
+| `shelly-read` | ia4 → Shelly (gen2, nativ via LAN) `192.168.0.26`/`.27`/`.63`/`.67` NUR LESEND auf `:80` (lokale RPC-/HTTP-API) — 4× Gen2, **4 IPs erfasst** (`.26` Plus1_01, `.27` Plus1_02, `.63` **Pro EM**, `.67` **Pro 3EM**); CoAP/UDP `:5683` = nur Gen1, hier nicht nötig | **pending** (deklariert, NICHT Live-Soll; Apply erst nach Review + Owner-Go, explizit via `--rules shelly-read`) |
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
-Es gibt derzeit **keine** `pending`-Gruppe im Modell. `ksem-read` ist seit
+Es gibt derzeit **genau eine** `pending`-Gruppe: `shelly-read` (deklariert,
+**nicht** Live-Soll; Apply nur explizit via `--rules shelly-read`). `ksem-read` ist seit
 **2026-09-16** **managed** (Live-Soll); der vormals temporäre
 `ksem-port-probe`-Block wurde im **selben** Schritt aus dem Modell entfernt
 (1:1-Substitution, **keine** Live-Löschung – der Applier ist rein additiv und die

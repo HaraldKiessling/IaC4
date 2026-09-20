@@ -501,11 +501,20 @@ def main():
     #    ein SYNTHETISCHES Modell mit einer pending-Gruppe geprüft (deterministisch;
     #    belegt, dass der fail-closed-Pfad scharf bleibt). Idempotenz bleibt 0/0.
     # ----------------------------------------------------------------------
-    # Produktions-Modell: keine pending-Gruppe mehr (Invariante „pending=nicht
-    # live" ist damit strukturell erfüllt; kein Live-POST nötig).
+    # Produktions-Modell: pending-Gruppen sind AUSNAHMSLOS einzeln deklariert und
+    # owner-gated. Zulässig ist derzeit NUR die bewusst hinzugefügte, noch nicht
+    # freigegebene Gruppe `shelly-read` (Deklaration; NICHT Live-Soll). Jede
+    # weitere/andere pending-Gruppe bleibt ein Fehler (Invariante „pending=nicht
+    # live" bleibt für alle realen Regeln strukturell erfüllt; kein Live-POST).
     prod_pending = {e.group for s in m.SECTION_ORDER for e in model[s] if e.pending}
-    check("Produktions-Modell enthält KEINE pending-Gruppe (1-Schritt-Substitution)",
-          prod_pending == set(), "pending=%r" % sorted(prod_pending))
+    check("Produktions-Modell: pending nur = {shelly-read} (einzeln deklariert, owner-gated)",
+          prod_pending == {"shelly-read"}, "pending=%r" % sorted(prod_pending))
+    _shelly = [e for s in m.SECTION_ORDER for e in model[s] if e.group == "shelly-read"]
+    check("shelly-read: genau 1 acls-Eintrag, pending (Deklaration, nicht Live-Soll)",
+          len(_shelly) == 1 and _shelly[0].section == "acls" and _shelly[0].pending,
+          "n=%d section=%r pending=%r"
+          % (len(_shelly), _shelly[0].section if _shelly else None,
+             _shelly[0].pending if _shelly else None))
 
     # Synthetisches pending-Modell (NUR für den Gate-Test; NICHT die SSoT):
     # derselbe SSoT-Text, aber `ksem-read` wieder als `pending` markiert.

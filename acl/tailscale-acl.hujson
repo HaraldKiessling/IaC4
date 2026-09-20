@@ -171,6 +171,23 @@
       "src": ["tag:ia4"],
       "dst": ["192.168.0.31:80", "192.168.0.31:502"],
     },
+
+    // rule: shelly-read pending — SHELLY (nativ via LAN): tag:ia4 (BEIDE VPS) →
+    // die vier Shelly-IPs 192.168.0.26/.27/.63/.67 NUR auf :80 (lokale RPC-/HTTP-API).
+    // Geräte (Gen2): .26 Plus1_01, .27 Plus1_02, .63 Pro EM, .67 Pro 3EM.
+    // BEABSICHTIGT READ-ONLY: nur der lokale Lese-/Status-Port, KEINE Steuer-/Schreib-
+    // Ports, KEINE Subnetz-Öffnung. Protokoll-Abgleich (Doku): Shelly Gen2 spricht RPC
+    // über HTTP :80 (HA-Doku: Gen2 braucht keine Zusatzkonfiguration); CoAP/UDP :5683
+    // betrifft NUR Gen1-CoIoT — hier (4× Gen2) NICHT nötig. PENDING: deklariert, NICHT
+    // Teil des Live-Solls — Apply erst nach technischem Review (Autor != Reviewer) +
+    // Owner-Freigabe, explizit via `--rules shelly-read` (nie `all`). VOR dem Apply
+    // .63/.67 frisch read-only gegen die live-Registry verifizieren (DHCP-Drift;
+    // configuration_url des Pro 3EM .67 zuletzt 2025-11-02).
+    {
+      "action": "accept",
+      "src": ["tag:ia4"],
+      "dst": ["192.168.0.26:80", "192.168.0.27:80", "192.168.0.63:80", "192.168.0.67:80"],
+    },
   ],
 
   "ssh": [
