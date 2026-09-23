@@ -503,13 +503,14 @@ def main():
     #    ein SYNTHETISCHES Modell mit einer pending-Gruppe geprüft (deterministisch;
     #    belegt, dass der fail-closed-Pfad scharf bleibt). Idempotenz bleibt 0/0.
     # ----------------------------------------------------------------------
-    # Produktions-Modell: KEINE pending-Gruppe mehr. Nach dem Live-Apply von
-    # `shelly-read` (2026-09-20, Run 35519859126) ist die letzte zuvor deklarierte
-    # pending-Gruppe `managed` geworden -> die Invariante „pending = nicht live"
-    # gilt damit für ALLE realen Regeln (keine pending-Gruppe im Modell).
+    # Produktions-Modell: pending-Gruppen sind AUSNAHMSLOS einzeln deklariert und
+    # owner-gated. Zulässig ist derzeit NUR die bewusst hinzugefügte, noch nicht
+    # freigegebene Gruppe `goe-read` (Deklaration; NICHT Live-Soll; in diesem
+    # Schritt KEIN Apply). Jede weitere/andere pending-Gruppe bleibt ein Fehler
+    # (Invariante „pending = nicht live“ bleibt für alle realen Regeln erfüllt).
     prod_pending = {e.group for s in m.SECTION_ORDER for e in model[s] if e.pending}
-    check("Produktions-Modell: KEINE pending-Gruppe mehr (Invariante pending=nicht live)",
-          prod_pending == set(), "pending=%r" % sorted(prod_pending))
+    check("Produktions-Modell: pending nur = {goe-read} (einzeln deklariert, owner-gated)",
+          prod_pending == {"goe-read"}, "pending=%r" % sorted(prod_pending))
     _shelly = [e for s in m.SECTION_ORDER for e in model[s] if e.group == "shelly-read"]
     check("shelly-read: genau 1 acls-Eintrag, managed (live seit 2026-09-20)",
           len(_shelly) == 1 and _shelly[0].section == "acls"
@@ -517,6 +518,14 @@ def main():
           "n=%d section=%r pending=%r"
           % (len(_shelly), _shelly[0].section if _shelly else None,
              _shelly[0].pending if _shelly else None))
+    _goe = [e for s in m.SECTION_ORDER for e in model[s] if e.group == "goe-read"]
+    check("goe-read: genau 1 acls-Eintrag, pending (Deklaration, nicht Live-Soll)",
+          len(_goe) == 1 and _goe[0].section == "acls" and _goe[0].pending
+          and _goe[0].obj.get("dst") == ["192.168.0.56:80", "192.168.0.56:502"],
+          "n=%d section=%r pending=%r dst=%r"
+          % (len(_goe), _goe[0].section if _goe else None,
+             _goe[0].pending if _goe else None,
+             _goe[0].obj.get("dst") if _goe else None))
 
     # Synthetisches pending-Modell (NUR für den Gate-Test; NICHT die SSoT):
     # derselbe SSoT-Text, aber `ksem-read` wieder als `pending` markiert.
