@@ -22,23 +22,22 @@
   //   3. Kommentare sind huJSON-Kommentare (// oder /* */); Trailing-Kommas sind
   //      erlaubt. `scripts/ensure-acl.py` parst die Datei semantisch (huJSON→JSON).
   //
-  // Live-Bezug (Stand 2026-09-20, roher POST-APPLY-Live-Export):
+  // Live-Bezug (Stand 2026-09-23, roher POST-APPLY-Live-Export):
   //   live = base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner
   //          + owner-8123 + console-owner + ha-ssh + energie-read
-  //          + ksem-read + shelly-read
-  //   pending (deklariert, NICHT Teil des Live-Solls): goe-read
-  //           (seit 2026-09-23 deklariert; NOCH KEIN Apply. Aktivierung
-  //           zweistufig, Owner-Entscheid 2026-09-23: Review → Dry-Run →
-  //           Owner-Bestätigungswort → APPLY, s. u.)
-  //          (seit 2026-09-16 ist ksem-read managed; shelly-read wurde am
+  //          + ksem-read + goe-read + shelly-read
+  //   pending (deklariert, NICHT Teil des Live-Solls): — (derzeit KEINE)
+  //          (goe-read wurde am 2026-09-23 live angewendet und ist damit managed;
+  //           seit 2026-09-16 ist ksem-read managed; shelly-read wurde am
   //           2026-09-20 live angewendet und ist damit ebenfalls managed, s. u.)
   //          (HA-Regeln 1–7; energie-read aktiviert: Owner-Go 2026-09-11 21:57 UTC;
   //           ksem-port-probe aktiviert: Owner-Go 2026-09-12 12:41 UTC –
   //           am 2026-09-16 04:28 UTC 1:1 durch ksem-read substituiert;
-  //           shelly-read aktiviert: Owner-Go 2026-09-20, Apply Run 35519859126)
-  //   Anker: roher Live-Export acl-live-export-20260920T153225Z.hujson
-  //   (sha256 09a46eb6…e807, 2026-09-20T15:32:26Z, Run 35519890380 – POST-APPLY
-  //   nach shelly-read). `--verify --tolerated-foreign` gegen diesen Export
+  //           shelly-read aktiviert: Owner-Go 2026-09-20, Apply Run 35519859126;
+  //           goe-read aktiviert: Owner-Go 2026-09-23, Apply Run 35847592020)
+  //   Anker: roher Live-Export acl-live-export-20260923T101428Z.hujson
+  //   (sha256 31fb6d91…d8e6, 2026-09-23T10:14:28Z, Run 35847628450 – POST-APPLY
+  //   nach goe-read). `--verify --tolerated-foreign` gegen diesen Export
   //   ist grün (exit 0). Der rohe Export wird NICHT versioniert (.gitignore;
   //   Kopie im Workspace; siehe acl/README.md + Runbook). V1/V2 (Key, Roh-Export)
   //   sind damit geschlossen.
@@ -177,16 +176,16 @@
       "dst": ["192.168.0.31:80", "192.168.0.31:502"],
     },
 
-    // rule: goe-read pending — GO-E CHARGER (nativ via LAN): tag:ia4 (BEIDE VPS) →
+    // rule: goe-read — GO-E CHARGER (nativ via LAN): tag:ia4 (BEIDE VPS) →
     // 192.168.0.56 auf GENAU zwei Ports: :80 (HTTP API v2 – GET /api/status) UND
     // :502 (Modbus TCP – FC3/FC4 lesend). Gedacht für Lese-/Statuswerte des Chargers.
     // Die ACL selbst ist accept-only; KEIN Schreib-Block, KEINE Subnetz-Öffnung.
-    // PENDING: deklariert, NICHT Teil des Live-Solls — in diesem Schritt KEIN Apply.
-    // Aktivierung zweistufig (Owner-Entscheid 2026-09-23): erst Review (Autor !=
-    // Reviewer), dann Dry-Run, dann Owner-Bestätigungswort → APPLY, explizit via
-    // `--rules goe-read` (nie `all`). ROLLBACK: diesen Block entfernen + Commit
-    // zurücknehmen — der Applier ist rein additiv und löscht nie, daher KEIN
-    // Live-POST zum Entfernen nötig.
+    // ✅ LIVE-SOLL (Owner-Go 2026-09-23): additiver IaC4-Apply am 2026-09-23T10:13:59Z
+    //    (00-acl-apply.yml Run 35847592020, rules=goe-read, dry_run=false,
+    //    confirm=APPLY-ACL): "➕ [goe-read] eingefügt", Pre-POST-Guard rein additiv,
+    //    acls count==1-Gate ✅, Additivität ✅, kein Rollback. ROLLBACK: diesen Block
+    //    entfernen + Commit zurücknehmen — der Applier ist rein additiv und löscht
+    //    nie, daher KEIN Live-POST zum Entfernen nötig.
     {
       "action": "accept",
       "src": ["tag:ia4"],

@@ -52,12 +52,12 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `ksem-port-probe` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:80` + `:502` — **temporäre** Port-Diagnose | **2026-09-16 abgelöst** (Block aus dem Modell entfernt; 1:1 durch `ksem-read` substituiert; keine Live-Löschung) |
 | `ksem-read` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:502` (Standard-Modbus) **+ `:80`** (Web/Diagnose) — **dauerhafte** Lese-Regel, löst `ksem-port-probe` (1:1, gleicher Portumfang) ab | **managed/live** (Owner-Go Inhalt 2026-09-15 21:27, Portumfang 2026-09-16 04:28; Substitution in EINEM Schritt 2026-09-16; kein Live-POST nötig) |
 | `shelly-read` | ia4 → Shelly (gen2, nativ via LAN) `192.168.0.26`/`.27`/`.63`/`.67` NUR LESEND auf `:80` (lokale RPC-/HTTP-API) — 4× Gen2, **4 IPs erfasst** (`.26` Plus1_01, `.27` Plus1_02, `.63` **Pro EM**, `.67` **Pro 3EM**); CoAP/UDP `:5683` = nur Gen1, hier nicht nötig | **managed/live** (Owner-Go 2026-09-20; additiver IaC4-Apply Run 35519859126: `count==1`-Gate ✅, rein additiv, kein Rollback) |
-| `goe-read` | ia4 → go-e Charger `192.168.0.56` auf **genau zwei** Ports: `:80` (HTTP API v2, GET `/api/status`) **+ `:502`** (Modbus TCP, Lese-/Statuswerte) — accept-only, kein Schreib-Block, keine Subnetz-Öffnung | **pending** (deklariert, NICHT Live-Soll; **kein** Apply in diesem Schritt — Aktivierung zweistufig: Review → Dry-Run → Owner-Wort → APPLY, explizit via `--rules goe-read`) |
+| `goe-read` | ia4 → go-e Charger `192.168.0.56` auf **genau zwei** Ports: `:80` (HTTP API v2, GET `/api/status`) **+ `:502`** (Modbus TCP, Lese-/Statuswerte) — accept-only, kein Schreib-Block, keine Subnetz-Öffnung | **managed/live** (Owner-Go 2026-09-23; additiver IaC4-Apply Run 35847592020: `count==1`-Gate ✅, rein additiv, kein Rollback) |
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
-Es gibt derzeit **genau eine** `pending`-Gruppe: `goe-read` (seit 2026-09-23
-deklariert, **nicht** Live-Soll; noch KEIN Apply — Apply nur explizit via
-`--rules goe-read`). `shelly-read` wurde am
+Es gibt derzeit **keine** `pending`-Gruppe mehr: `goe-read` wurde am
+**2026-09-23** live angewendet (Owner-Go; Run 35847592020) und ist damit
+**managed** (Live-Soll). `shelly-read` wurde am
 **2026-09-20** live angewendet (Owner-Go; Run 35519859126) und ist damit
 **managed** (Live-Soll). `ksem-read` ist seit
 **2026-09-16** **managed** (Live-Soll); der vormals temporäre
@@ -144,6 +144,15 @@ Reihenfolge ok.
 wuchs um EIN `managed`-Token (acls 17 → 18). Der `--verify --tolerated-foreign`
 gegen diesen Export ist **grün (exit 0)**: verwalteter Teil exakt (inkl.
 `shelly-read`), IaC3-Fremdbestand **5/5** positionsgenau, Reihenfolge ok,
+**Pending = 0**.
+
+**POST-APPLY 2026-09-23 (`goe-read`):** Der Anker wurde auf den neuen Export
+`acl-live-export-20260923T101428Z.hujson` (sha256 `31fb6d91…d8e6`,
+2026-09-23T10:14:28Z, Run 35847628450) nachgezogen; das positionsgenaue `layout`
+wuchs um EIN `managed`-Token (acls 18 → 19) — `goe-read` an Live-Position 17
+(zwischen `ksem-read` und `shelly-read`). Der `--verify --tolerated-foreign`
+gegen diesen Export ist **grün (exit 0)**: verwalteter Teil exakt (inkl.
+`goe-read`), IaC3-Fremdbestand **5/5** positionsgenau, Reihenfolge ok,
 **Pending = 0**.
 
 ## Fremdbestand (nicht von IaC4 verwaltet)
