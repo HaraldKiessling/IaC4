@@ -330,15 +330,17 @@ def main():
           and len(tol["sections"]["ssh"]["entries"]) == 1, "n=%d" % n_tol)
     check("Toleranzliste: KEINE Platzhalter (v2)",
           len(tol["pending"]) == 0, "pending=%d" % len(tol["pending"]))
-    check("Toleranzliste: positionsgenaues Layout (acls=18 Tokens, ssh=3 Tokens)",
-          len(tol["sections"]["acls"]["layout"]) == 18
+    check("Toleranzliste: positionsgenaues Layout (acls=19 Tokens, ssh=3 Tokens)",
+          len(tol["sections"]["acls"]["layout"]) == 19
           and len(tol["sections"]["ssh"]["layout"]) == 3)
     check("Toleranzliste: energie-read (Regel 7) ist managed-Token an Position 15",
           tol["sections"]["acls"]["layout"][15]["kind"] == "managed")
     check("Toleranzliste: ksem-read ist managed-Token an Position 16",
           tol["sections"]["acls"]["layout"][16]["kind"] == "managed")
-    check("Toleranzliste: shelly-read ist managed-Token am Layout-Ende (Position 17)",
+    check("Toleranzliste: goe-read ist managed-Token an Position 17 (nach ksem-read)",
           tol["sections"]["acls"]["layout"][17]["kind"] == "managed")
+    check("Toleranzliste: shelly-read ist managed-Token am Layout-Ende (Position 18)",
+          tol["sections"]["acls"]["layout"][18]["kind"] == "managed")
     check("Toleranzliste: Fremdbestand VERSCHRÄNKT (acls: foreign auf Position 7 + 12–14; ssh: Position 0)",
           [t["kind"] for t in tol["sections"]["acls"]["layout"]].count("foreign") == 4
           and tol["sections"]["acls"]["layout"][7]["kind"] == "foreign"
@@ -504,7 +506,7 @@ def main():
     #    belegt, dass der fail-closed-Pfad scharf bleibt). Idempotenz bleibt 0/0.
     # ----------------------------------------------------------------------
     # Produktions-Modell: KEINE pending-Gruppe mehr. Nach dem Live-Apply von
-    # `shelly-read` (2026-09-20, Run 35519859126) ist die letzte zuvor deklarierte
+    # `goe-read` (2026-09-23, Run 35847592020) ist die letzte zuvor deklarierte
     # pending-Gruppe `managed` geworden -> die Invariante „pending = nicht live"
     # gilt damit für ALLE realen Regeln (keine pending-Gruppe im Modell).
     prod_pending = {e.group for s in m.SECTION_ORDER for e in model[s] if e.pending}
@@ -517,6 +519,14 @@ def main():
           "n=%d section=%r pending=%r"
           % (len(_shelly), _shelly[0].section if _shelly else None,
              _shelly[0].pending if _shelly else None))
+    _goe = [e for s in m.SECTION_ORDER for e in model[s] if e.group == "goe-read"]
+    check("goe-read: genau 1 acls-Eintrag, managed (live seit 2026-09-23)",
+          len(_goe) == 1 and _goe[0].section == "acls" and not _goe[0].pending
+          and _goe[0].obj.get("dst") == ["192.168.0.56:80", "192.168.0.56:502"],
+          "n=%d section=%r pending=%r dst=%r"
+          % (len(_goe), _goe[0].section if _goe else None,
+             _goe[0].pending if _goe else None,
+             _goe[0].obj.get("dst") if _goe else None))
 
     # Synthetisches pending-Modell (NUR für den Gate-Test; NICHT die SSoT):
     # derselbe SSoT-Text, aber `ksem-read` wieder als `pending` markiert.

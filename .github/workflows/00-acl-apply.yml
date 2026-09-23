@@ -38,9 +38,10 @@
 #     - rules:    Regel-Auswahl gegen die SSoT-Gruppen. Erlaubt: iac4 | 1..7
 #                 (HA-Regeln) | Gruppennamen (ha-tagowners, ha-acl, ha-ssh,
 #                 ha-runner, owner-8123, console-owner, mqtt-1883, energie-read,
-#                 ksem-read, shelly-read) | all. Default 'iac4' (IaC4-Welt).
-#                 Keine pending-Gruppe (shelly-read ist seit 2026-09-20, Run
-#                 35519859126, managed/live; zuvor owner-gated pending).
+#                 ksem-read, shelly-read, goe-read) | all. Default 'iac4' (IaC4-Welt).
+#                 Keine pending-Gruppe mehr (goe-read ist seit 2026-09-23, Run
+#                 35847592020, managed/live; shelly-read seit 2026-09-20, Run
+#                 35519859126 – beide zuvor owner-gated pending).
 #
 #   Secrets (Namen unveraendert zu Workflow 01): TAILSCALE_TAILNET +
 #   TAILSCALE_API_KEY. Werte werden NIE ausgegeben; zusaetzlich explizite
@@ -95,7 +96,7 @@ on:
         description: >-
           Regel-Auswahl (SSoT-Gruppen), kommagetrennt – iac4 | 1..7 |
           ha-Gruppen | owner-8123 | console-owner | mqtt-1883 | energie-read |
-          ksem-read | shelly-read | all. Default "iac4"
+          ksem-read | shelly-read | goe-read | all. Default "iac4"
         required: true
         default: 'iac4'
         type: string
@@ -150,7 +151,7 @@ jobs:
           esac
           for R in $(echo "${RULES}" | tr ',' ' '); do
             case "${R}" in
-              iac4|all|ha-tagowners|ha-acl|ha-ssh|ha-runner|owner-8123|console-owner|mqtt-1883|energie-read|ksem-read|shelly-read) ;;
+              iac4|all|ha-tagowners|ha-acl|ha-ssh|ha-runner|owner-8123|console-owner|mqtt-1883|energie-read|ksem-read|shelly-read|goe-read) ;;
               1|2|3|4|5|6|7) ;;
               *) echo "::error::rules enthaelt ungueltige Gruppe '${R}'."; exit 1 ;;
             esac
@@ -265,3 +266,4 @@ jobs:
           fi
           echo "Governance: kein automatischer ACL-Apply – jeder Lauf ist manuell (Runbook docs/workflows/acl-migration-runbook.md)."
           echo "Gruppe shelly-read (4 IPs .26/.27/.63/.67; .63 Pro EM, .67 Pro 3EM) ist seit 2026-09-20 managed/live (Run 35519859126)."
+          echo "Gruppe goe-read (192.168.0.56; Ports :80 HTTP-API-v2 + :502 Modbus-TCP) ist seit 2026-09-23 managed/live (Run 35847592020)."
