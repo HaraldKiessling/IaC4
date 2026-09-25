@@ -11,6 +11,10 @@
     "mode": "local",
     "port": {{ oc.port }},
     "bind": "lan",
+{% if oc_trusted_proxies | default([]) | length > 0 %}
+    "trustedProxies": {{ oc_trusted_proxies | tojson }},
+    "allowRealIpFallback": false,
+{% endif %}
     "auth": {
       "mode": "token",
       "allowTailscale": true
