@@ -184,13 +184,35 @@
   changed_when: true
 
 - name: "{{ oc.name }}: Auf Health warten (localhost:{{ oc.port }}/health)"
-  ansible.builtin.uri:
-    url: "http://localhost:{{ oc.port }}/health"
-    status_code: 200
-  register: _oc_health
-  until: _oc_health.status == 200
-  retries: 12
-  delay: 5
+  block:
+    - name: "{{ oc.name }}: Health-Check (localhost:{{ oc.port }}/health)"
+      ansible.builtin.uri:
+        url: "http://localhost:{{ oc.port }}/health"
+        status_code: 200
+      register: _oc_health
+      until: _oc_health.status == 200
+      retries: 12
+      delay: 5
+  rescue:
+    - name: "{{ oc.name }}: DIAGNOSE - docker ps -a"
+      ansible.builtin.command: docker ps -a
+      register: _oc_diag_ps
+      changed_when: false
+      failed_when: false
+    - name: "{{ oc.name }}: DIAGNOSE - docker logs openclaw-{{ oc.name }} (letzte 120)"
+      ansible.builtin.command: docker logs openclaw-{{ oc.name }} --tail 120 2>&1
+      register: _oc_diag_logs
+      changed_when: false
+      failed_when: false
+    - name: "{{ oc.name }}: DIAGNOSE - docker ps Ausgabe"
+      ansible.builtin.debug:
+        var: _oc_diag_ps.stdout_lines
+    - name: "{{ oc.name }}: DIAGNOSE - docker logs Ausgabe"
+      ansible.builtin.debug:
+        var: _oc_diag_logs.stdout_lines
+    - name: "{{ oc.name }}: Health fehlgeschlagen (Diagnose oben)"
+      ansible.builtin.fail:
+        msg: "Health-Check {{ oc.name }} (Port {{ oc.port }}) fehlgeschlagen - Diagnose (docker ps / docker logs) siehe oben."
 
 - name: "{{ oc.name }}: QMD im Container installieren (User-npm, Version gepinnt K3-2)"
   community.docker.docker_container_exec:
