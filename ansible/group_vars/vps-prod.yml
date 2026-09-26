@@ -1,6 +1,11 @@
 ---
 env: prod
 
+# Browser-SSRF (Owner 2026-09-26): private/Tailnet-Ziele, die der Agent-Browser selbst
+# navigieren darf. Enge Host-Ausnahme statt dangerouslyAllowPrivateNetwork.
+openclaw_browser_ssrf_hostnames:
+  - "vps-prod.tailcfea8a.ts.net"
+
 # OpenClaw-Instanzen PROD (Harald 2026-08-01: getrennt je Target deploybar)
 # Secrets-Konvention: <TARGET>_<PROVIDER>_API_KEY (optional, NUR gesetzte Keys landen in der Config)
 # Ollama braucht keinen Key (lokal, Docker-DNS); baseUrl-Override via PROD_OLLAMA_BASEURL optional
