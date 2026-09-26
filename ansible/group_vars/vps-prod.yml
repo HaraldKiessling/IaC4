@@ -26,6 +26,7 @@ openclaw_instances:
     gateway_token_env: "PROD_OC1_GATEWAY_TOKEN"
     telegram_bot_token_env: "PROD_OC1_TELEGRAM_BOT_TOKEN"
     gh_token_env: "PROD_OC1_GH_TOKEN"
+    bitwarden_clientscurect_env: "PROD_OC1_BITWARDEN_CLIENTSECRET"
     agents: []
   - name: oc2
     enabled: true
@@ -36,6 +37,7 @@ openclaw_instances:
     gateway_token_env: "PROD_OC2_GATEWAY_TOKEN"
     telegram_bot_token_env: "PROD_OC2_TELEGRAM_BOT_TOKEN"
     gh_token_env: "PROD_OC2_GH_TOKEN"
+    bitwarden_clientscurect_env: "PROD_OC2_BITWARDEN_CLIENTSECRET"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
   - name: oc3
     enabled: true
@@ -46,6 +48,7 @@ openclaw_instances:
     gateway_token_env: "PROD_OC3_GATEWAY_TOKEN"
     telegram_bot_token_env: "PROD_OC3_TELEGRAM_BOT_TOKEN"
     gh_token_env: "PROD_OC3_GH_TOKEN"
+    bitwarden_clientscurect_env: "PROD_OC3_BITWARDEN_CLIENTSECRET"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
     agent_models:
       Orchestrator:

@@ -18,6 +18,9 @@ services:
 {% if oc_gh_token | default('') | length > 0 %}
       GH_TOKEN: "{{ oc_gh_token }}"
 {% endif %}
+{% if oc_bitwarden_clientscurect | default('') | length > 0 %}
+      BITWARDEN_CLIENTSECRET: "{{ oc_bitwarden_clientscurect }}"
+{% endif %}
       OPENCLAW_WORKSPACE_DIR: "/home/node/.openclaw/workspace"
       PATH: "/home/node/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 {% if oc_telegram_bot_token | default('') | length > 0 %}

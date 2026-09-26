@@ -120,6 +120,12 @@ jobs:
       PROD_OC1_GH_TOKEN: ${{ secrets.PROD_OC1_GH_TOKEN }}
       PROD_OC2_GH_TOKEN: ${{ secrets.PROD_OC2_GH_TOKEN }}
       PROD_OC3_GH_TOKEN: ${{ secrets.PROD_OC3_GH_TOKEN }}
+      DEV_OC1_BITWARDEN_CLIENTSECRET: ${{ secrets.DEV_OC1_BITWARDEN_CLIENTSECRET }}
+      DEV_OC2_BITWARDEN_CLIENTSECRET: ${{ secrets.DEV_OC2_BITWARDEN_CLIENTSECRET }}
+      DEV_OC3_BITWARDEN_CLIENTSECRET: ${{ secrets.DEV_OC3_BITWARDEN_CLIENTSECRET }}
+      PROD_OC1_BITWARDEN_CLIENTSECRET: ${{ secrets.PROD_OC1_BITWARDEN_CLIENTSECRET }}
+      PROD_OC2_BITWARDEN_CLIENTSECRET: ${{ secrets.PROD_OC2_BITWARDEN_CLIENTSECRET }}
+      PROD_OC3_BITWARDEN_CLIENTSECRET: ${{ secrets.PROD_OC3_BITWARDEN_CLIENTSECRET }}
 
     steps:
       - uses: actions/checkout@v4
@@ -259,6 +265,19 @@ jobs:
               "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'traefik|ollama|openclaw|code-server' || true"
           echo ""
           echo "▶️  Nächster Schritt: Workflow 04-bdd-tests.yml (BDD-Verifikation, qa/bdd-testkonzept.md)"
+
+      - name: "Bitwarden-ClientSecret-Verify (nur openclaw)"
+        if: inputs.playbook == 'openclaw'
+        run: |
+          echo "BITWARDEN_CLIENTSECRET im Container (Zeichenzahl > 0 = gesetzt; Wert wird NICHT ausgegeben):"
+          INSTS="${{ inputs.instance }}"
+          [ "$INSTS" = "all" ] && INSTS="oc1 oc2 oc3"
+          for i in $INSTS; do
+            N=$(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
+              "$VPS_USER@$VPS_TS_IP" \
+              "sudo docker exec openclaw-$i printenv BITWARDEN_CLIENTSECRET 2>/dev/null | wc -c")
+            echo "  openclaw-$i: ${N} Zeichen (0 = nicht gesetzt)"
+          done
 
   # ── Temporäre Verifikation (Session 2026-08-06, Owner-Auftrag Gateway-Token-Verifikation) ──
   # Läuft NUR mit verify_token=true. Quellen: docs.openclaw.ai/gateway (Runbook) +

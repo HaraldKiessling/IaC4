@@ -34,6 +34,7 @@ openclaw_instances:
     gateway_token_env: "DEV_OC1_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC1_TELEGRAM_BOT_TOKEN"
     gh_token_env: "DEV_OC1_GH_TOKEN"
+    bitwarden_clientscurect_env: "DEV_OC1_BITWARDEN_CLIENTSECRET"
     agents: []                        # bewusst KEINE Rollen-Agents (Single-Agent, Creator-These)
     # Fairness-Fix (2026-08-03, Kosten-Befund): OC1 lief auf pro (OpenClaw-Default =
     # erstes Provider-Modell). Alle 3 Arme jetzt modellgleich auf flash — einzige
@@ -60,6 +61,7 @@ openclaw_instances:
     gateway_token_env: "DEV_OC2_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC2_TELEGRAM_BOT_TOKEN"
     gh_token_env: "DEV_OC2_GH_TOKEN"
+    bitwarden_clientscurect_env: "DEV_OC2_BITWARDEN_CLIENTSECRET"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
     # Harald 2026-08-03: OC2 = NUR DeepSeek flash (alle 4 Agents).
     # Benchmark-Variable vs. OC3 = Modell-Mix (dort Arch+Rev pro).
@@ -108,6 +110,7 @@ openclaw_instances:
     gateway_token_env: "DEV_OC3_GATEWAY_TOKEN"
     telegram_bot_token_env: "DEV_OC3_TELEGRAM_BOT_TOKEN"
     gh_token_env: "DEV_OC3_GH_TOKEN"
+    bitwarden_clientscurect_env: "DEV_OC3_BITWARDEN_CLIENTSECRET"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
     # Harald 2026-08-03: OC3-Modell-Mix — Orchestrator + Engineer = flash,
     # Reviewer + Architect = pro (Qualität dort, wo Analyse/Prüfung entscheidet).
