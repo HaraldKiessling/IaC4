@@ -103,7 +103,12 @@
       }
     }
 {% endif %}
-  },
+  }{% if openclaw_browser_ssrf_hostnames | default([]) | length > 0 %},
+  "browser": {
+    "ssrfPolicy": {
+      "allowedHostnames": {{ openclaw_browser_ssrf_hostnames | tojson }}
+    }
+  }{% endif %},
   "models": {
     "providers": {
 {% set ns = namespace(first=true) %}

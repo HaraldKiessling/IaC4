@@ -5,6 +5,12 @@ env: dev
 # (qmd-Backend + local memorySearch); prod bleibt vanilla (Default all.yml = false).
 openclaw_memory_seed: true
 
+# Browser-SSRF (Owner 2026-09-26): private/Tailnet-Ziele, die der Agent-Browser selbst
+# navigieren darf (z. B. Home Assistant auf vps-dev:8123). Enge Host-Ausnahme statt
+# dangerouslyAllowPrivateNetwork. Template rendert browser.ssrfPolicy.allowedHostnames nur bei non-empty.
+openclaw_browser_ssrf_hostnames:
+  - "vps-dev.tailcfea8a.ts.net"
+
 # OpenClaw-Instanzen DEV (Harald 2026-08-01: getrennt je Target deploybar)
 # Secrets-Konvention: <TARGET>_<PROVIDER>_API_KEY (optional, NUR gesetzte Keys landen in der Config)
 # Ollama braucht keinen Key (lokal, Docker-DNS); baseUrl-Override via DEV_OLLAMA_BASEURL optional
