@@ -51,7 +51,7 @@ tailscale_accept_routes: true
 # pro Instanz: Container + Config-Volume + openclaw.json (SSoT). Ports localhost-only, TLS via Tailscale Serve.
 # Secrets je Instanz als GH-Secrets: <INST>_TELEGRAM_BOT_TOKEN, <INST>_LLM_API_KEY, <INST>_WEBSEARCH_API_KEY
 openclaw_image: "ghcr.io/openclaw/openclaw"
-openclaw_image_version: "2026.7.1"          # Pin (ADR-017); Update = Variable + Deploy. GHCR-Tag bei Deploy verifizieren
+openclaw_image_version: "2026.9.6"          # Pin (ADR-017); Update = Variable + Deploy. GHCR-Tag bei Deploy verifizieren
 openclaw_qmd_version: "2.5.3"              # Pin (K3-2, PR #83): QMD-Sidecar im Container; Pilot-verifiziert 2026-08-03
 # Memory-Seed-Gate (Design 06 K4-2, PR #83-Fix): DEV-Benchmark-Wissen (MEMORY.md + memory/)
 # NUR in DEV-Instanz-Arme deployen. prod bleibt vanilla (Design 01 Z.65) – der Seed wuerde

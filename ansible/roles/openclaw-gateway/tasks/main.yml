@@ -11,6 +11,34 @@
     state: directory
     mode: '0755'
 
+# Ingress-Attribution (OpenClaw >= 2026.9.6): Gateway-authentifizierte Requests mit
+# X-Forwarded-*-Headern von NICHT vertrauten Quellen werden fail-closed abgelehnt
+# (HTTP 403, type=proxy_attribution_required).
+# Ingress-Pfad der OpenClaw-Container: host-seitiges Tailscale Serve
+# (tailscale serve --bg --https=<port> http://localhost:<port>) -> Docker-Portmap
+# 127.0.0.1:<port>:<port> -> Container. Im Container ist der direkte Peer daher das
+# Docker-Bruecken-Gateway von {{ docker_network }} (nicht Loopback). Genau diese eine
+# Adresse (kein Subnetz) wird als trusted proxy eingetragen.
+# Referenz: docs/gateway/tailscale.md ("Externally managed Serve and Funnel"),
+#           docs/gateway/security/network-exposure.md ("Reverse proxy configuration").
+- name: Docker-Netzwerk-Gateway ermitteln (trusted-proxy Quelle fuer den OpenClaw-Ingress)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - network
+      - inspect
+      - "{{ docker_network }}"
+      - --format
+      - "{{ '{{(index .IPAM.Config 0).Gateway}}' }}"
+  register: _oc_net_gw
+  changed_when: false
+  failed_when: false
+
+- name: Trusted-Proxy-Liste fuer die Gateway-Config setzen (nur bei bekannter Gateway-Adresse)
+  ansible.builtin.set_fact:
+    oc_trusted_proxies: "{{ [_oc_net_gw.stdout | trim] }}"
+  when: (_oc_net_gw.stdout | default('', true) | trim) | length > 0
+
 - name: "Pro Instanz: Verzeichnisse, Config, Compose, Start, Health, Serve"
   ansible.builtin.include_tasks: instance.yml
   loop: "{{ openclaw_instances }}"
