@@ -5,3 +5,4 @@ openclaw_image_version: "2026.9.6"   # Pin (ADR-017); kein latest-Fallback (Revi
 openclaw_instances: []
 openclaw_instance_filter: "all"   # all | oc1 | oc2 | oc3 (Harald 2026-08-01: getrennt deploybar)
 openclaw_data_root: /srv/openclaw
+openclaw_browser_ssrf_hostnames: []   # Fallback (SSoT: group_vars/<target>.yml)
