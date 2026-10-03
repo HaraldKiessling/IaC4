@@ -13,9 +13,9 @@
     ├── Container: traefik      → Port 80 (Tailnet-only, UFW-CGNAT)
     ├── Container: qdrant       → Port 6333, 6334 (lokal + TS)
     ├── Container: code-server  → Port 8443 (via Traefik)
-    ├── Container: openclaw-oc1 → Port 18789 (localhost-only, TS-Serve-TLS) – Default-Gateway
-    ├── Container: openclaw-oc2 → Port 18790 (localhost-only, TS-Serve-TLS) – DevOps (4 Agents)
-    └── Container: openclaw-oc3 → Port 18791 (aktiv, Best-Practice-Referenz)
+    ├── Container: openclaw-oc1 → Port 18789 (localhost-only, TS-Serve-TLS) – Default-Gateway + Upload-Brücke 8099 → Loopback 18099 → TS-Serve 8443 (owner-only, ADR-027)
+    ├── Container: openclaw-oc2 → Port 18790 (localhost-only, TS-Serve-TLS) – DevOps (4 Agents) + Upload-Brücke 8099 → Loopback 18100 → TS-Serve 8444 (owner-only, ADR-027)
+    └── Container: openclaw-oc3 → Port 18791 (aktiv, Best-Practice-Referenz) + Upload-Brücke 8099 → Loopback 18101 → TS-Serve 8445 (owner-only, ADR-027)
 ```
 
 ## Netzwerk-Security (nach SSH-Transition)
@@ -27,6 +27,7 @@
 | Code-Server | Tailscale (Traefik-Route) | Traefik-ForwardAuth |
 | OpenClaw OC1/OC2 | Tailscale via Serve-TLS (18789/18790) | Gateway-Token + Tailscale ACL |
 | OpenClaw OC3 | DEV: aktiv (Best-Practice-Referenz, Benchmark – Design 01-oc2-oc3-benchmark); PROD: aktiv (Best-Practice-Referenz, seit 2026-08-12) | Port 18791 |
+| Upload-Brücke oc1/oc2/oc3 | Tailscale via Serve-TLS (8443/8444/8445, **nur Owner**) | Tailscale ACL (`upload-bridge`: `autogroup:owner` → `tag:ia4:8443-8445`, ADR-027) |
 
 ## SSH-Transition (zeitlich)
 | Phase | SSH-Zugriff | Via | Dauer |

@@ -37,4 +37,4 @@ IaC4
 | traefik | Traefik-Container + Config | docker |
 | qdrant | Qdrant-Container + Collection (3072d/Cosine) | docker |
 | code-server | Code-Server-Container + Reverse-Proxy-Route | docker, traefik |
-| openclaw-gateway | Docker-Container (ghcr.io/openclaw/openclaw, gepinnt); je Instanz Config+Workspace unter /srv/openclaw/<name>/ | docker, traefik-network, ollama, qdrant |
+| openclaw-gateway | Docker-Container (ghcr.io/openclaw/openclaw, gepinnt); je Instanz Config+Workspace unter /srv/openclaw/<name>/; **Upload-Brücken-Transport: Loopback-Publish `127.0.0.1:<upload_bridge_host_port>:8099` + Tailscale-Serve `--https=<upload_bridge_https>` (ADR-027, optional je Instanz via `upload_bridge_enabled`)** | docker, traefik-network, ollama, qdrant |

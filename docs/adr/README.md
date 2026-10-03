@@ -1,7 +1,7 @@
 # ADR-Detailblätter (IaC4)
 
-> **SSoT:** Alle Architekturentscheidungen werden in `docs/arc42/09_architekturentscheidungen.md` geführt (Tabelle ADR-001..026).
-> Diese Dateien sind die **Detailblätter** zu den Entscheidungen ab 2026-07-31 (ADR-015..026, Docker/Traefik/Ollama/ACL) — mit Optionen, fachlichen Auswirkungen, Evidenz, Worst-Case/Rollback.
+> **SSoT:** Alle Architekturentscheidungen werden in `docs/arc42/09_architekturentscheidungen.md` geführt (Tabelle ADR-001..027).
+> Diese Dateien sind die **Detailblätter** zu den Entscheidungen ab 2026-07-31 (ADR-015..027, Docker/Traefik/Ollama/ACL) — mit Optionen, fachlichen Auswirkungen, Evidenz, Worst-Case/Rollback.
 > Status: `Vorgeschlagen` → (Harald-Entscheidung) → `Akzeptiert` → ggf. `Superseded`.
 > **Review:** 5W-Prüfung (AGENTS.md P3) + Konsistenz-Check durch 🏗️ Architect (2026-07-31) — Befunde vollständig eingearbeitet (Worst-Case/Rollback, Supersedes, Quellen).
 
@@ -19,6 +19,7 @@
 | ADR-024 | [024](ADR-024-service-deploy-workflow.md) | Deploy-Workflow | Vorgeschlagen | Ein Workflow + Playbook-Selektion |
 | ADR-025 | [025](ADR-025-openclaw-deployment.md) | OpenClaw-Deployment | Vorgeschlagen | Nativ/systemd (Docker nur Sandbox) |
 | ADR-026 | [026](ADR-026-tailscale-acl-single-source-iac4.md) | Tailscale-ACL SSoT in IaC4 | Vorgeschlagen | SSoT `acl/tailscale-acl.hujson` + semantischer Applier + manueller Apply |
+| ADR-027 | [027](ADR-027-upload-bridge-transport.md) | Upload-Brücke: Tailscale-Serve-Transport | Vorgeschlagen | Loopback-Publish 8099→18099+ + `tailscale serve --https=8443+` (owner-only, ADR-026-ACL) |
 
 **Offene Punkte vor Akzeptanz:**
 1. ~~Harald: VPS-Spec bestätigen (ADR-022)~~ → **erledigt 2026-07-31** (6 vCore / 8 GB / 240 GB NVMe)

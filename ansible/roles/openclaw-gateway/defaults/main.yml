@@ -6,3 +6,4 @@ openclaw_instances: []
 openclaw_instance_filter: "all"   # all | oc1 | oc2 | oc3 (Harald 2026-08-01: getrennt deploybar)
 openclaw_data_root: /srv/openclaw
 openclaw_browser_ssrf_hostnames: []   # Fallback (SSoT: group_vars/<target>.yml)
+openclaw_upload_bridge_internal_port: 8099   # Fallback (SSoT: group_vars/all.yml)

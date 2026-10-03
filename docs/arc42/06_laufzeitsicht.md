@@ -38,6 +38,13 @@
             ╚══════════════════════════════╝
 ```
 
+> **Hinweis Upload-Brücke (ADR-027):** In den Phasen 2c-e wird mit dem
+> OpenClaw-Deploy auch der Upload-Brücken-Transport gesetzt (Serve-Eintrag
+> `tailscale serve --bg --https={{ oc.upload_bridge_https }}` +
+> Loopback-Publish `127.0.0.1:<upload_bridge_host_port>:8099`, nur wenn
+> `upload_bridge_enabled`). Die Brücke selbst ist **extern** und **kein
+> Deploy-Gate** (Deploy bleibt grün, auch ohne laufende Brücke).
+
 ## Disaster Recovery
 ```bash
 # 1. VPS neu provisionieren (cloud-config.yaml)
