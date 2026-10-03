@@ -53,6 +53,11 @@ tailscale_accept_routes: true
 openclaw_image: "ghcr.io/openclaw/openclaw"
 openclaw_image_version: "2026.9.6"          # Pin (ADR-017); Update = Variable + Deploy. GHCR-Tag bei Deploy verifizieren
 openclaw_qmd_version: "2.5.3"              # Pin (K3-2, PR #83): QMD-Sidecar im Container; Pilot-verifiziert 2026-08-03
+# Upload-Bruecke (Issue #167): HTTP-Bruecke fuer Portal-Uploads, im Container auf festem
+# internen Port. Host-Loopback-Port und Tailscale-Serve-HTTPS-Port sind je Instanz
+# parametrisiert (oc.upload_bridge_host_port / oc.upload_bridge_https). Generisch fuer alle
+# Instanzen (oc1/oc2/oc3); Aktivierung je Target via oc.upload_bridge_enabled.
+openclaw_upload_bridge_internal_port: 8099
 # Memory-Seed-Gate (Design 06 K4-2, PR #83-Fix): DEV-Benchmark-Wissen (MEMORY.md + memory/)
 # NUR in DEV-Instanz-Arme deployen. prod bleibt vanilla (Design 01 Z.65) – der Seed wuerde
 # sonst von qmd-Backend + local memorySearch indexiert und DEV-Wissen auf prod liefern.

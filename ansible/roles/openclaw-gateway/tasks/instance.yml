@@ -244,3 +244,15 @@
   when: "'localhost:{{ oc.port }}' not in _serve_status.stdout and '127.0.0.1:{{ oc.port }}' not in _serve_status.stdout"
   register: _serve_set
   changed_when: _serve_set.rc == 0
+
+# Upload-Bruecke (Issue #167): analog zur Gateway-Serve-Logik oben. Der Bridge-Port wird
+# je Instanz als Loopback-Host-Port veroeffentlicht (docker-compose) und hier per HTTPS
+# exponiert. Idempotenz ueber denselben serve-status-Check (_serve_status); Host-Port statt
+# Container-IP, damit Recreate-stabil (keine 172.18.0.x-Hartkodierung). Nur wenn aktiviert.
+- name: "{{ oc.name }}: Tailscale Serve Upload-Bridge aktivieren (HTTPS {{ oc.upload_bridge_https | default('') }} → localhost:{{ oc.upload_bridge_host_port | default('') }})"
+  ansible.builtin.command: tailscale serve --bg --https={{ oc.upload_bridge_https }} http://localhost:{{ oc.upload_bridge_host_port }}
+  when:
+    - oc.upload_bridge_enabled | default(false) | bool
+    - "'localhost:{{ oc.upload_bridge_host_port }}' not in _serve_status.stdout"
+  register: _serve_bridge_set
+  changed_when: _serve_bridge_set.rc == 0

@@ -102,11 +102,20 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                 assert d['tools']['subagents']['tools']['deny'] == oc['subagents_tools_deny'], \
                     f"{oc['name']}: tools.subagents.deny falsch"
             e2 = jinja2.Environment()
+            e2.filters['bool'] = _bool_filter
             e2.globals['lookup'] = fake_lookup
-            yaml.safe_load(e2.from_string(COMPOSE).render(
+            compose = yaml.safe_load(e2.from_string(COMPOSE).render(
                 oc=oc, openclaw_image=gv_all['openclaw_image'],
                 openclaw_image_version=gv_all['openclaw_image_version'],
-                docker_network='traefik-network', oc_gateway_token='tok', oc_telegram_bot_token=''))
+                docker_network='traefik-network', oc_gateway_token='tok', oc_telegram_bot_token='',
+                openclaw_upload_bridge_internal_port=gv_all['openclaw_upload_bridge_internal_port']))
+            # Upload-Bruecke (Issue #167): Loopback-Portmap nur bei aktivierter Instanz
+            _ports = compose['services']['openclaw']['ports']
+            if oc.get('upload_bridge_enabled'):
+                _want = f"127.0.0.1:{oc['upload_bridge_host_port']}:{gv_all['openclaw_upload_bridge_internal_port']}"
+                assert _want in _ports, f"{oc['name']}: Upload-Bridge-Portmap fehlt ({_want})"
+            else:
+                assert len(_ports) == 1, f"{oc['name']}: Upload-Bridge-Portmap unerwartet (disabled)"
             # N5: Key-Pfad (apiKey + models) mit Dummy-Keys durchrendern
             dummy_lookup = {v: 'k-' + k for k, v in target['openclaw_provider_envs'].items() if v}
             if dummy_lookup:
