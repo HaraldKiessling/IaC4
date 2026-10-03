@@ -83,7 +83,7 @@ TOKEN = os.environ.get("TS_TOKEN", "") or os.environ.get("TS_API_KEY", "")
 # HA-Regeln 1–7 (Kontinuität zum bisherigen ha-repo-Workflow).
 GROUP_NAMES = ("iac4", "ha-tagowners", "ha-acl", "ha-ssh", "ha-runner",
                "owner-8123", "console-owner", "mqtt-1883", "energie-read",
-               "ksem-read", "shelly-read", "goe-read")
+               "ksem-read", "shelly-read", "goe-read", "upload-bridge")
 GROUP_ALIASES = {
     "iac4": "iac4",
     "1": "ha-tagowners", "ha-tagowners": "ha-tagowners", "tagowners": "ha-tagowners",
@@ -100,6 +100,8 @@ GROUP_ALIASES = {
     "shelly": "shelly-read",
     "goe-read": "goe-read", "goeread": "goe-read",
     "goe": "goe-read",
+    "upload-bridge": "upload-bridge", "uploadbridge": "upload-bridge",
+    "upload": "upload-bridge",
 }
 
 
@@ -1071,7 +1073,8 @@ def parse_args():
     p.add_argument("--rule", action="append", metavar="GRUPPE", default=None,
                    help="Regel-Auswahl (repeatable): iac4 | 1..7 | ha-tagowners | "
                         "ha-acl | ha-ssh | ha-runner | owner-8123 | console-owner | "
-                        "mqtt-1883 | energie-read | ksem-read | shelly-read | goe-read | all.")
+                        "mqtt-1883 | energie-read | ksem-read | shelly-read | goe-read | "
+                        "upload-bridge | all.")
     p.add_argument("--rules", default=None,
                    help="Regel-Auswahl kommagetrennt (Workflow-Input), z. B. 'iac4' "
                         "oder '1,4'. Alternativ zu wiederholtem --rule.")

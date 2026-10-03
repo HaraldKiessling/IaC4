@@ -53,13 +53,19 @@ Tailnet. Sie ist die **eine Regelquelle für beide Tag-Welten** (`tag:ia3` /
 | `ksem-read` | ia4 → KSEM `192.168.0.31` NUR LESEND auf `:502` (Standard-Modbus) **+ `:80`** (Web/Diagnose) — **dauerhafte** Lese-Regel, löst `ksem-port-probe` (1:1, gleicher Portumfang) ab | **managed/live** (Owner-Go Inhalt 2026-09-15 21:27, Portumfang 2026-09-16 04:28; Substitution in EINEM Schritt 2026-09-16; kein Live-POST nötig) |
 | `shelly-read` | ia4 → Shelly (gen2, nativ via LAN) `192.168.0.26`/`.27`/`.63`/`.67` NUR LESEND auf `:80` (lokale RPC-/HTTP-API) — 4× Gen2, **4 IPs erfasst** (`.26` Plus1_01, `.27` Plus1_02, `.63` **Pro EM**, `.67` **Pro 3EM**); CoAP/UDP `:5683` = nur Gen1, hier nicht nötig | **managed/live** (Owner-Go 2026-09-20; additiver IaC4-Apply Run 35519859126: `count==1`-Gate ✅, rein additiv, kein Rollback) |
 | `goe-read` | ia4 → go-e Charger `192.168.0.56` auf **genau zwei** Ports: `:80` (HTTP API v2, GET `/api/status`) **+ `:502`** (Modbus TCP, Lese-/Statuswerte) — accept-only, kein Schreib-Block, keine Subnetz-Öffnung | **managed/live** (Owner-Go 2026-09-23; additiver IaC4-Apply Run 35847592020: `count==1`-Gate ✅, rein additiv, kein Rollback) |
+| `upload-bridge` | `autogroup:owner` → `tag:ia4` (BEIDE VPS) auf **genau drei** Ports: `:8443` / `:8444` / `:8445` (Tailscale-Serve-HTTPS der Upload-Brücke, oc1/oc2/oc3; vgl. `ansible/group_vars/vps-prod.yml` `upload_bridge_https`) — accept-only, keine Subnetz-Öffnung, kein Schreib-Block | **pending** (Owner-Freigabe Grill 2026-10-03, bindend; **Apply aussteht** und läuft ausschließlich mit Owner-Wort `confirm`. Solange `pending` bricht `--rules all` im APPLY fail-closed ab (exit 2); nur explizit via `--rules upload-bridge` selektierbar. Nach Apply: Marker → `managed`, Live-Anker/Layout nachziehen.) |
 
 Numerische Aliase `1`..`7` der HA-Regeln sind aus Kontinuität weiter erlaubt.
-Es gibt derzeit **keine** `pending`-Gruppe mehr: `goe-read` wurde am
-**2026-09-23** live angewendet (Owner-Go; Run 35847592020) und ist damit
-**managed** (Live-Soll). `shelly-read` wurde am
+`shelly-read` wurde am
 **2026-09-20** live angewendet (Owner-Go; Run 35519859126) und ist damit
-**managed** (Live-Soll). `ksem-read` ist seit
+**managed** (Live-Soll). **`upload-bridge` ist seit dem 2026-10-03 die (einzige)
+`pending`-Gruppe** (Issue #167; Owner-Freigabe im Grill 2026-10-03, bindend): sie
+ist **deklariert, aber noch nicht Teil des Live-Solls**, weil der additive Apply
+noch aussteht und ausschließlich mit dem Owner-Wort `confirm` ausgeführt wird.
+Solange `pending` bricht der APPLY mit `--rules all` fail-closed ab (exit 2); die
+Gruppe ist nur explizit via `--rules upload-bridge` selektierbar. Nach dem Apply
+wird der Marker auf `managed` gesetzt und Live-Anker + Toleranz-Layout
+nachgezogen (Muster wie bei `goe-read`/`shelly-read`). `ksem-read` ist seit
 **2026-09-16** **managed** (Live-Soll); der vormals temporäre
 `ksem-port-probe`-Block wurde im **selben** Schritt aus dem Modell entfernt
 (1:1-Substitution, **keine** Live-Löschung – der Applier ist rein additiv und die
