@@ -501,17 +501,29 @@ def main():
     #    im APPLY KEINE pending-Gruppe mitziehen (der Dry-Run warnt nur); eine
     #    EXPLIZITE Selektion passiert das Gate. Nach der 1-Schritt-Substitution
     #    (PR #153: ksem-read -> managed, ksem-port-probe-Block raus) enthält das
-    #    PRODUKTIONS-Modell KEINE pending-Gruppe mehr – das Gate wird daher gegen
-    #    ein SYNTHETISCHES Modell mit einer pending-Gruppe geprüft (deterministisch;
-    #    belegt, dass der fail-closed-Pfad scharf bleibt). Idempotenz bleibt 0/0.
+    #    PRODUKTIONS-Modell: genau EINE pending-Gruppe (upload-bridge, Issue #167,
+    #    Owner-Freigabe Grill 2026-10-03; Apply aussteht). Das Gate wird dennoch
+    #    gegen ein SYNTHETISCHES Modell mit einer pending-Gruppe geprüft
+    #    (deterministisch; belegt, dass der fail-closed-Pfad scharf bleibt).
+    #    Idempotenz bleibt 0/0.
     # ----------------------------------------------------------------------
-    # Produktions-Modell: KEINE pending-Gruppe mehr. Nach dem Live-Apply von
-    # `goe-read` (2026-09-23, Run 35847592020) ist die letzte zuvor deklarierte
-    # pending-Gruppe `managed` geworden -> die Invariante „pending = nicht live"
-    # gilt damit für ALLE realen Regeln (keine pending-Gruppe im Modell).
+    # Produktions-Modell: genau EINE pending-Gruppe `upload-bridge`. Die
+    # Invariante "pending = nicht live" bleibt scharf: die deklarierte Gruppe ist
+    # NICHT Teil des Live-Solls. Vorherige Gruppen (ksem-read/goe-read/shelly-read)
+    # sind managed geworden (s. u.).
     prod_pending = {e.group for s in m.SECTION_ORDER for e in model[s] if e.pending}
-    check("Produktions-Modell: KEINE pending-Gruppe mehr (Invariante pending=nicht live)",
-          prod_pending == set(), "pending=%r" % sorted(prod_pending))
+    check("Produktions-Modell: genau pending-Gruppe upload-bridge (pending=nicht live)",
+          prod_pending == {"upload-bridge"}, "pending=%r" % sorted(prod_pending))
+    _ub = [e for s in m.SECTION_ORDER for e in model[s] if e.group == "upload-bridge"]
+    check("upload-bridge: genau 1 acls-Eintrag, pending (Apply ausstehend)",
+          len(_ub) == 1 and _ub[0].section == "acls" and _ub[0].pending
+          and _ub[0].obj.get("src") == ["autogroup:owner"]
+          and _ub[0].obj.get("dst") == ["tag:ia4:8443", "tag:ia4:8444", "tag:ia4:8445"],
+          "n=%d section=%r pending=%r src=%r dst=%r"
+          % (len(_ub), _ub[0].section if _ub else None,
+             _ub[0].pending if _ub else None,
+             _ub[0].obj.get("src") if _ub else None,
+             _ub[0].obj.get("dst") if _ub else None))
     _shelly = [e for s in m.SECTION_ORDER for e in model[s] if e.group == "shelly-read"]
     check("shelly-read: genau 1 acls-Eintrag, managed (live seit 2026-09-20)",
           len(_shelly) == 1 and _shelly[0].section == "acls"
