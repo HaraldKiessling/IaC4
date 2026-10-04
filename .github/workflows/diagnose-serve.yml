@@ -7,6 +7,8 @@
 # (Browser-Relay OC3 :18791 reconnectet zyklisch; Verdacht stale/doppelter Handler).
 #
 # Manuell startbar via workflow_dispatch (target: dev|prod, Default prod).
+# Zusätzlich: push auf den `dev`-Branch → Diagnose fest gegen vps-dev (NICHT prod).
+#   Begründung: autonomer Push-Trigger für DEV-Diagnosen ohne manuellen Dispatch.
 # =============================================================================
 name: "Diagnose – Tailscale Serve (read-only)"
 
@@ -21,16 +23,20 @@ on:
         options:
           - dev
           - prod
+  push:
+    branches: [dev]
 
 permissions:
   contents: read
 
 jobs:
   diagnose-serve:
-    name: "Tailscale Serve Status (target: ${{ inputs.target }})"
+    name: "Tailscale Serve Status (target: ${{ github.event_name == 'push' && 'dev' || inputs.target }})"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      # push-Trigger ist fest auf dev gepinnt; workflow_dispatch nutzt die Eingabe.
+      TARGET: ${{ github.event_name == 'push' && 'dev' || inputs.target }}
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
 
@@ -73,7 +79,7 @@ jobs:
             --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
             "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
           echo "::add-mask::$TS_TOKEN"
-          NODE="vps-${{ inputs.target }}"
+          NODE="vps-${{ env.TARGET }}"
           API_BODY=$(curl -sS --max-time 30 \
             "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
             -H "Authorization: Bearer ***")
@@ -97,12 +103,12 @@ jobs:
       - name: Ansible installieren
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
 
-      - name: "Diagnose ausführen (read-only, Inventar: inventories/${{ inputs.target }}/hosts.yml)"
+      - name: "Diagnose ausführen (read-only, Inventar: inventories/${{ env.TARGET }}/hosts.yml)"
         working-directory: ansible
         run: |
           set -euo pipefail
           export SSH_KEY_PATH="$HOME/.ssh/id_ed25519"
-          echo "▶️  tailscale serve status (read-only) auf vps-${{ inputs.target }} – keine Mutation"
+          echo "▶️  tailscale serve status (read-only) auf vps-${TARGET} – keine Mutation"
           ansible-playbook playbooks/diagnose-tailscale-serve.yml \
-            -i "inventories/${{ inputs.target }}/hosts.yml" \
+            -i "inventories/${TARGET}/hosts.yml" \
             -e "ansible_host=$VPS_TS_IP"
