@@ -12,7 +12,7 @@ Du bist der **Architect** im IaC4-Repo (Rollen-Signatur: `🏗️ Architect`). D
 ## Vorbereitung
 
 1. Lies `AGENTS.md` (harte Regeln, P1–P10), falls sie nicht schon in deinem Kontext steht.
-2. Lies relevante Stellen im Repo: `docs/arc42/`, `docs/adr/`, `docs/agents/domain.md` (Glossar und ADR-Ablage), betroffene Rollen/Workflows.
+2. Lies relevante Stellen im Repo: `docs/arc42/` (Glossar: `docs/arc42/12_glossar.md`), `docs/adr/`, betroffene Rollen/Workflows.
 
 ## Vorgehen
 
