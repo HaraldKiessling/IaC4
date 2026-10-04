@@ -1,10 +1,11 @@
-# Herkunft der Skills (grill-me, grilling, grill-with-docs, domain-modeling)
+# Herkunft der Skills (grill-me, grilling, grill-with-docs, domain-modeling, tdd, diagnosing-bugs, codebase-design)
 
 - **Quelle:** <https://github.com/mattpocock/skills> (Matt Pocock), Lizenz MIT (© 2026 Matt Pocock)
-- **Abgerufen:** 2026-10-04, Branch `main`, HEAD `d81f3a183412e71a5b1e84ca21bc1a35eea03a60`
-- **Pfade upstream:** `skills/productivity/grill-me`, `skills/productivity/grilling`, `skills/engineering/grill-with-docs`, `skills/engineering/domain-modeling`
-- **Warum alle vier:** `grill-me` ruft `grilling` auf, `grill-with-docs` ruft `grilling` und `domain-modeling` auf (Skill-Tool-Verkettung).
-- **Abweichungen vom Original:** nur der Block „IaC4-Anpassung" in `domain-modeling/SKILL.md` und je ein Hinweis in `domain-modeling/*-FORMAT.md` (Glossar/ADR-Ablage nach IaC4-Konvention). `grill-me`, `grilling`, `grill-with-docs` sind unverändert.
-- **Nicht installiert:** `setup-matt-pocock-skills` (konfiguriert Issue-Tracker/Labels, in IaC4 nicht nötig) und die übrigen Skills des Pakets.
+- **Abgerufen:** 2026-10-04, Branch `main`. Grill-Skills und `domain-modeling` bei HEAD `d81f3a183412e71a5b1e84ca21bc1a35eea03a60`; `tdd`, `diagnosing-bugs`, `codebase-design` am selben Tag nachgeladen (HEAD dort nicht separat erfasst).
+- **Pfade upstream:** `skills/productivity/grill-me`, `skills/productivity/grilling`, `skills/engineering/grill-with-docs`, `skills/engineering/domain-modeling`, `skills/engineering/tdd`, `skills/engineering/diagnosing-bugs`, `skills/engineering/codebase-design`
+- **Warum diese Skills:** `grill-me` ruft `grilling` auf, `grill-with-docs` ruft `grilling` und `domain-modeling` auf, `tdd` ruft `codebase-design` auf (Skill-Tool-Verkettung). Nebendateien (`tdd/tests.md`, `tdd/mocking.md`, `diagnosing-bugs/scripts/hitl-loop.template.sh`, `codebase-design/DEEPENING.md`, `codebase-design/DESIGN-IT-TWICE.md`) sind mitkopiert.
+- **Warum als Dateien statt Plugin:** Das Plugin „Skills For Real Engineers" (Anthropic Directory, Version 1.2.3) war in einer Cloud-Session auf `main` nicht geladen (Skill-Check 2026-10-04: `ListPlugins` leer, keine Pocock-Skills sichtbar). Repo-Dateien unter `.claude/skills/` werden in Cloud-Sessions auf diesem Branch geladen.
+- **Abweichungen vom Original:** je ein Block „IaC4-Anpassung" oben in `domain-modeling/SKILL.md`, `tdd/SKILL.md` und `diagnosing-bugs/SKILL.md` sowie ein Hinweis in `domain-modeling/*-FORMAT.md`. `grill-me`, `grilling`, `grill-with-docs`, `codebase-design` und die Nebendateien sind unverändert.
+- **Nicht installiert:** `setup-matt-pocock-skills` (konfiguriert Issue-Tracker/Labels, in IaC4 nicht nötig), `code-review` (würde den eingebauten Skill `code-review` überdecken) und die übrigen Skills des Pakets (u. a. `to-tickets`, `triage`, `pr`, `implement`: eigene Ticket-/PR-Abläufe, kollidieren mit dem Merge-Gate in AGENTS.md).
 - **Update:** manuell – Upstream-Stand prüfen, Diff lesen, per PR übernehmen (kein Auto-Update, vgl. ADR-017 Pinning).
 - **Lizenztext:** <https://github.com/mattpocock/skills/blob/main/LICENSE>
