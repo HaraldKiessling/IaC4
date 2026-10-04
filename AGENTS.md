@@ -200,6 +200,7 @@ IaC4/
 | `cloud-config.yaml` | VPS-Bootstrap |
 | `.env.example` | Alle benötigten GH Secrets |
 | `.roo/rules/*.mdc` | Regelwerk – auch für Roo/Zoo Code (P4) |
+| `CLAUDE.md`, `.claude/agents/` | Claude-Code-Rollen: `reviewer` (Modell `opus`, nur lesend, Pflicht vor Fertig-Meldung/DEV-Deploy/Vorstellung), `architect` (Recherche/Konzept); Hauptsession = Engineer + Orchestrator |
 | `.roo/rules/vendor-docs-mandatory.mdc` | Vendor-Docs-Pflicht (neue APIs, Fehler, Entscheidungen) |
 | `.roo/rules/ssh-restriction.mdc` | SSH-Transition (Phasen 0-2c) |
 
