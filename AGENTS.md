@@ -147,7 +147,7 @@ Bevor ein PR als "ready" (bereit für DEV-Deploy und Vorstellung, nicht merge-be
 6. ✅ Kein Force-Push auf PR-Branches
 7. ✅ Overclaiming-Check: jede "fertig/funktioniert/garantiert"-Aussage mit Validierungsnachweis + Test-Kontext (P1/P9)
 8. ✅ Unabhängiger Agenten-Review **bestanden** (vor DEV-Deploy und vor Vorstellung) und dokumentiert: Autor ≠ Reviewer, Ergebnis (✅ Freigabe / ❌ Befunde) im PR-Thread, Befunde bearbeitet oder als Follow-up verfolgt, Beiträge mit Rollen-Signatur (`✨ Nova` / `🔍 Reviewer` / `🏗️ Architect` / `🔧 Engineer`) (Issue #37)
-9. ✅ DEV-Ergebnis Harald vorgestellt (Deploy-Run-Link + Testnachweis) UND ausdrückliche Freigabe danach erhalten (Merge-Gate)
+9. ✅ DEV-Ergebnis Harald vorgestellt (Deploy-Run-Link + Testnachweis; bei Docs-/Regel-PRs ohne Deploy: CI-Run, siehe oben) UND ausdrückliche Freigabe danach erhalten (Merge-Gate)
 
 ### P7c – Post-Merge-Checkliste
 Nach jedem erfolgreichen Merge nach `main` (autonom ausführen, nicht rückfragen):
