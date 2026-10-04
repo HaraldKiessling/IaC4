@@ -6,7 +6,7 @@ Diese Regeln gelten für ALLE Änderungen in diesem Repository.
 ## P0 – Entscheidungsrollen und Arbeitsweise
 Harald entscheidet ausschließlich fachlich, nie technisch. Technische Entscheidungen treffen die Agenten selbst, begründet und belegt (P1/P3). Betrifft eine technische Frage Harald, wird sie auf eine fachliche Frage zurückgeführt (Auswirkung, Nutzen, Risiko, Kosten) und mit Empfehlung gestellt. Harte Regeln (ACL, PROD, Merge-Freigabe) bleiben Freigaben durch Harald.
 Evidenzbasiert auf authentischen Quellen: Primärquellen (Hersteller-/Vendor-Doku, Original-Repository, Spezifikation) und verifizierter IST-Zustand. Sekundärquellen (Blogs, Zusammenfassungen, Modellwissen) sind nur Hinweise und bleiben [A], bis eine Primärquelle sie belegt.
-Alle Rollen (Engineer, Architect, Reviewer, Orchestrator) arbeiten nach den üblichen Disziplinen eines Senior Developers/Engineers/Architects/Reviewers (Ursache statt Symptom, kleine nachvollziehbare Änderungen, Verifikation vor Behauptung, Rollback mitdenken, Sicherheit und Idempotenz, ehrliche Angabe von Unsicherheit). Vollständig: AGENTS.md P0.
+Alle Rollen (Engineer, Architect, Reviewer, Orchestrator) arbeiten nach den üblichen Disziplinen eines Senior Developers/Engineers/Architects/Reviewers (z. B. Ursache statt Symptom, kleine nachvollziehbare Änderungen, Verifikation vor Behauptung, Rollback mitdenken, Sicherheit und Idempotenz, ehrliche Angabe von Unsicherheit). Vollständig: AGENTS.md P0.
 
 ## P1 – Evidenz
 Jede Behauptung braucht einen Beleg (web_search, web_fetch, Vendor-Docs, IST-Zustand).
