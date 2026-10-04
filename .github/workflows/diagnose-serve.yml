@@ -147,3 +147,21 @@ jobs:
           ansible-playbook playbooks/diagnose-tailscale-serve.yml \
             -i "inventories/${TARGET}/hosts.yml" \
             -e "ansible_host=$VPS_TS_IP"
+
+      # =====================================================================
+      # MCP-Diagnose (Issue #171) – STRENG READ-ONLY
+      #   Pro OpenClaw-Instanz (oc1/oc2/oc3): `openclaw mcp list` + gdrive-Probe.
+      #   Nur lesende Inspektion im Container; KEIN Deploy, KEIN `mcp add/remove`,
+      #   keine Host-/Config-Änderung. stdout wird geloggt (keine Secret-Werte).
+      # =====================================================================
+      - name: "MCP-Diagnose (read-only): openclaw mcp list + doctor gdrive --probe"
+        run: |
+          set -uo pipefail
+          SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i $HOME/.ssh/id_ed25519 $VPS_USER@$VPS_TS_IP"
+          for i in oc1 oc2 oc3; do
+            echo "===== INSTANCE openclaw-$i ====="
+            echo "--- openclaw mcp list ---"
+            $SSH "sudo docker exec openclaw-$i openclaw mcp list" 2>&1 || echo "(mcp list rc=$?)"
+            echo "--- openclaw mcp doctor gdrive --probe ---"
+            $SSH "sudo docker exec openclaw-$i openclaw mcp doctor gdrive --probe" 2>&1 || echo "(mcp doctor rc=$?)"
+          done
