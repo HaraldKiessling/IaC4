@@ -6,7 +6,8 @@ description: Diagnosis loop for hard bugs and performance regressions. Use when 
 # Diagnosing Bugs
 
 > **IaC4-Anpassung (hat Vorrang vor dem Folgenden):**
-> - **Kein Host-Zugang.** Der Feedback-Loop (Phase 1) läuft über: einen fehlschlagenden Python-Test (`tests/`, `acl/tests/`), `ansible-playbook --syntax-check`, `scripts/validate-openclaw-templates.py`, den Workflow `04-bdd-tests` (nur `target=dev` für Fix-Versuche) und die Job-Logs der Runs. Der HITL-Weg (`scripts/hitl-loop.template.sh`) ist nur für Schritte, die ausschließlich Harald ausführen kann.
+> - **Kein Host-Zugang.** Der Feedback-Loop (Phase 1) läuft über: einen fehlschlagenden Python-Test (`tests/`, `acl/tests/`), `ansible-playbook --syntax-check`, `scripts/validate-openclaw-templates.py`, den Workflow `04-bdd-tests` (nur `target=dev` für Fix-Versuche) und die Job-Logs der Runs. Der HITL-Weg (`.claude/skills/diagnosing-bugs/scripts/hitl-loop.template.sh`) ist nur für Schritte, die ausschließlich Harald ausführen kann.
+> - **Fix-Deploys auf DEV** (`03`/`04-service-deploy`, `target=dev`) laufen erst nach bestandenem Agenten-Review (AGENTS.md P7); `04-bdd-tests` darf jederzeit lesend laufen.
 > - **Redact:** Zusätzlich zu Tokens/Passwörtern gelten GH-Secrets, Tailscale-Keys/OAuth-Daten, Bot-Tokens und Gateway-Tokens als geheim. Job-Logs vor dem Zitieren prüfen, nur Signalzeilen zitieren.
 > - **PROD:** Nur lesende Analyse (z. B. `04-bdd-tests` mit `target=prod`). Fix-Deploys, ACL-Apply, Bootstrap, SSH-Key, Device-Approve/Remove sind Owner-only (AGENTS.md „Agenten-Auslösung von Workflows").
 > - **Vorfallregeln:** Nie den Gateway-Prozess killen; ACL nie überschreiben (`overwrite_existing_content` nie `true`).

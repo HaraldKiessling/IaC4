@@ -10,7 +10,7 @@ disable-model-invocation: true
 > - **A Issue-Tracker:** GitHub (`HaraldKiessling/IaC4`). In Cloud-Sessions gibt es **kein `gh`**; dort stattdessen die GitHub-MCP-Tools (`mcp__github__*`) verwenden. Das gehört in `docs/agents/issue-tracker.md`.
 > - **B Triage-Labels:** entfällt, solange der Skill `triage` nicht installiert ist (er ist es nicht).
 > - **C Domänen-Doku:** Nicht die Vorlage `domain.md` verbatim schreiben. In IaC4 ist das Glossar `docs/arc42/12_glossar.md` (kein `GLOSSARY.md`/`GLOSSARY-MAP.md`) und ADRs liegen unter `docs/adr/ADR-NNN-*.md` + `docs/arc42/09_architekturentscheidungen.md`. `docs/agents/domain.md` entsprechend schreiben.
-> - **Datei für den Block „Agent skills":** `AGENTS.md` (existiert; `CLAUDE.md` gibt es nicht). Änderungen an `AGENTS.md` gelten als Regeländerung: nach `.roo/rules/*.mdc` spiegeln (P4), als `docs`-PR, Merge nur nach DEV-Vorstellung + ausdrücklicher Freigabe.
+> - **Datei für den Block „Agent skills":** Ziel ist `AGENTS.md`, **nicht** `CLAUDE.md`, obwohl `CLAUDE.md` existiert: Sie bindet `AGENTS.md` per `@AGENTS.md` ein, die Regeln stehen nur dort (abweichend von Schritt 4 `CLAUDE.md` nicht bearbeiten). Der Block „Agent skills" ist ein Verweis, keine Regeländerung; echte Regelinhalte werden nach `.roo/rules/*.mdc` gespiegelt (P4). Änderung als `docs`-PR: Vorstellung im Chat (kein DEV-Deploy) und ausdrückliche Freigabe vor dem Merge (AGENTS.md P7).
 > - Herkunft: `../UPSTREAM.md`.
 
 

@@ -8,7 +8,7 @@ description: Test-driven development. Use when the user wants to build features 
 > **IaC4-Anpassung (hat Vorrang vor dem Folgenden):**
 > - **Vokabular/Doku:** Glossar ist `docs/arc42/12_glossar.md` (kein `GLOSSARY.md`), ADRs liegen unter `docs/adr/ADR-NNN-*.md` und in `docs/arc42/09_architekturentscheidungen.md`.
 > - **Seams in diesem Repo** (vor dem ersten Test mit Harald bestätigen, nicht raten): Python-Tools über ihre CLI/Funktionsschnittstelle (`scripts/ensure-acl.py` → `acl/tests/offline_tests.py` mit Fixtures; `tools/device-approve` → `tests/device-approve/`), das Template-Rendering (`scripts/validate-openclaw-templates.py`) und die BDD-Skripte `scripts/bdd/*.bdd.ps1` (laufen nur über den Workflow `04-bdd-tests`, nicht lokal).
-> - **Ansible-Rollen haben keine Unit-Tests.** Hier heißt „rot vor grün": BDD-Check zuerst schreiben und auf DEV rot sehen, dann Rolle ändern, auf DEV deployen, grün sehen. Beleg ist der Workflow-Run, nicht „sollte gehen" (P9).
+> - **Ansible-Rollen haben keine Unit-Tests.** Hier heißt „rot vor grün": BDD-Check zuerst schreiben und auf DEV rot sehen, dann Rolle ändern, auf DEV deployen, grün sehen. Der DEV-Deploy läuft erst nach bestandenem Agenten-Review (AGENTS.md P7); `04-bdd-tests` mit `target=dev` darf jederzeit lesend laufen. Beleg ist der Workflow-Run, nicht „sollte gehen" (P9).
 > - **Grenzen:** Keine Tests oder Läufe gegen PROD, kein Host-Zugang. ACL-Tests nur offline; ACL-Apply bleibt Owner-only (siehe AGENTS.md).
 > - **Vor Push:** Pre-Flight nach P4b. Merge nur nach DEV-Vorstellung + ausdrücklicher Freigabe (AGENTS.md).
 > - Herkunft: `../UPSTREAM.md`.
