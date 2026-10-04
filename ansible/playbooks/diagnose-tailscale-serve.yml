@@ -1,0 +1,59 @@
+---
+# =============================================================================
+# Diagnose – Tailscale Serve (read-only)
+#
+# Zweck: Live registrierte Serve-Routen eines Ziel-VPS auslesen, OHNE etwas zu
+#        verändern. Kontext: Browser-Relay auf prod OC3 (:18791) reconnectet
+#        zyklisch; Verdacht auf stale/doppelten Serve-Handler. Issue #167.
+#
+# STRENG READ-ONLY:
+#   - nur `tailscale serve status --json` und `tailscale serve status`
+#   - KEIN `tailscale serve --bg`, KEIN `tailscale serve reset`, KEIN Deploy
+#   - keine Datei-/Zustandsänderung auf dem Host (changed_when: false)
+#
+# Aufruf (Runner im Tailnet, SSO-Key via SSH_KEY_PATH):
+#   ansible-playbook playbooks/diagnose-tailscale-serve.yml \
+#     -i inventories/prod/hosts.yml -e ansible_host=<ts-ip>
+# =============================================================================
+
+- name: Tailscale Serve – read-only Status
+  hosts: vps
+  become: true
+  gather_facts: false
+  tasks:
+    - name: "Serve-Status als JSON abfragen (tailscale serve status --json)"
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - serve
+          - status
+          - --json
+      register: ts_serve_json
+      changed_when: false
+      failed_when: false
+
+    - name: "Serve-Status als Text abfragen (tailscale serve status)"
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - serve
+          - status
+      register: ts_serve_text
+      changed_when: false
+      failed_when: false
+
+    - name: "Ergebnis – tailscale serve status --json (roh)"
+      ansible.builtin.debug:
+        msg: "{{ ts_serve_json.stdout }}"
+
+    - name: "Ergebnis – tailscale serve status (Text)"
+      ansible.builtin.debug:
+        msg: "{{ ts_serve_text.stdout_lines }}"
+
+    - name: "Ergebnis – Rückgabecodes / stderr"
+      ansible.builtin.debug:
+        msg:
+          - "rc_json={{ ts_serve_json.rc }}"
+          - "rc_text={{ ts_serve_text.rc }}"
+          - "stdout_json={{ ts_serve_json.stdout }}"
+          - "stderr_text={{ ts_serve_text.stderr }}"
