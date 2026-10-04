@@ -210,6 +210,16 @@ IaC4/
 | `.roo/rules/vendor-docs-mandatory.mdc` | Vendor-Docs-Pflicht (neue APIs, Fehler, Entscheidungen) |
 | `.roo/rules/ssh-restriction.mdc` | SSH-Transition (Phasen 0-2c) |
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues in `HaraldKiessling/IaC4`; in Cloud-Sessions über die GitHub-MCP-Tools, nicht `gh`. Siehe `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Ein Kontext: Glossar `docs/arc42/12_glossar.md`, ADRs `docs/adr/ADR-NNN-*.md` + Tabelle in `docs/arc42/09_architekturentscheidungen.md`. Siehe `docs/agents/domain.md`.
+
 ## 🔒 SSH-Restriktion
 - Phase 0-2a: SSH via Public-IP (Bootstrap, nötig)
 - Phase 2b: SSH über öffentliche IP blocken (UFW)

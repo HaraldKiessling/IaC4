@@ -1,0 +1,5 @@
+# Agent skills (Spiegelung aus AGENTS.md, P4)
+
+- Issue-Tracker: GitHub Issues in `HaraldKiessling/IaC4`; in Cloud-Sessions über die GitHub-MCP-Tools, nicht `gh`. Details: `docs/agents/issue-tracker.md`.
+- Domänen-Doku: ein Kontext. Glossar `docs/arc42/12_glossar.md`, ADRs `docs/adr/ADR-NNN-*.md` + Tabelle in `docs/arc42/09_architekturentscheidungen.md`. Details: `docs/agents/domain.md`.
+- Claude-Code-Skills (Pocock, MIT) liegen unter `.claude/skills/`; Herkunft und IaC4-Anpassungen: `.claude/skills/UPSTREAM.md`.
