@@ -17,11 +17,11 @@
 | **Tailscale-ACL: KEINE Änderung ohne Owner-Zustimmung** (Owner-Regel 2026-09-06) – auch nicht in Feature-Branches / über GH Actions auf Branches; Owner-Vorlage nur mit reviewed Auswirkungen (Autor ≠ Reviewer) + Rollback-Pfad; Details: `.roo/rules/tailscale-acl.mdc` | Alle |
 | **Tailscale-ACL ist Infrastruktur und wird in IaC4 verwaltet** (Owner-Entscheid 2026-09-11) – EINE Regelquelle `acl/tailscale-acl.hujson` für beide Tag-Welten (`tag:ia4` + `tag:ha`/`tag:ha-ci`), fester Reihenfolge `tagOwners → acls → ssh`; einziger Apply-Weg `.github/workflows/00-acl-apply.yml` (manuell, `dry_run`/`confirm`) – **nie automatisch**; Details: `docs/adr/ADR-026-*.md`, `acl/README.md` | Alle |
 | **Nie direkter Push auf `main`** – nur via PR | Alle |
-| **`dev` Push** = autonom (kein PR nötig) | Orchestrator |
+| **`dev` Push** = autonom (kein PR nötig); Push und Merge auf den Branch `dev` sind frei; Merge-Gate und Merge-Freigabe gelten nur für `main`. Der DEV-Deploy (`workflow_dispatch`, `target=dev`) bleibt erst nach bestandenem Agenten-Review erlaubt, auch wenn der Code auf `dev` liegt | Orchestrator |
 | **PR `grün` vor Fertig-Meldung** – erst done, wenn alle CI-Checks pass | Alle |
 | **Nie Secrets committen** – immer GH Secrets + `.env.example` | Alle |
 | **Nie Gateway-Prozess killen** (Vorfall 2026-07-16, 6h Downtime) | Alle |
-| **Merge auf `main` erst nach DEV-Vorstellung + expliziter Freigabe** – Ergebnis auf DEV (Deploy-Run-Link, Testnachweis, Test-Kontext) MUSS Harald vorgestellt sein; erst seine ausdrückliche Freigabe danach = Auftrag zum Merge (dann nicht erneut rückfragen). Freigabe vor der DEV-Vorstellung zählt nicht. Gilt auch für andere Repos von Harald (u. a. Home Assistant) | Alle |
+| **`main` bleibt immer sauber: Merge auf `main` erst nach bestandenem unabhängigem Agenten-Review, DEV-Vorstellung + expliziter Freigabe** – Ergebnis auf DEV (Deploy-Run-Link, Testnachweis, Test-Kontext) MUSS Harald vorgestellt sein; erst seine ausdrückliche Freigabe danach = Auftrag zum Merge (dann nicht erneut rückfragen). Freigabe vor der DEV-Vorstellung zählt nicht. Gilt auch für andere Repos von Harald (u. a. Home Assistant) | Alle |
 | **PROD-Deploy** = nur Harald | Orchestrator |
 | **Pre-Flight Validation vor Push** – yamllint + markdownlint lokal prüfen | Alle |
 | **Nie `sed`/Regex-Editing auf YAML/JSON/Templates** – gezielt editieren + Parser-Validierung (P4b) | Alle |
@@ -29,11 +29,10 @@
 | **Force-Push nicht auf PR-Branches** – nur auf ungeteilte Feature- und `session-*`-Branches (1 Branch = 1 Worktree) | Alle |
 | **PR-Checkliste vor Fertig-Meldung** – CI grün, Doku aktuell, Secrets-Check, Branch rebased, **unabhängiger Review dokumentiert** (Autor ≠ Reviewer, Issue #37) | Orchestrator |
 
-## ✅ Autonom (kein Approval nötig)
-- Feature-Branch → Push → DEV-Deploy
+## ✅ Autonom (kein Approval nötig; Review-Gate und Merge-Gate bleiben unberührt)
+- Feature-Branch → Push → CI grün → Agenten-Review bestanden → DEV-Deploy
 - **`dev` Branch → Push** = direkt (kein PR)
-- **DEV-Deploy auslösen** (auch aus Cloud-Sessions, z. B. vom Handy): `03`/`04-service-deploy` mit `target=dev` per `workflow_dispatch` (Tests: `04-bdd-tests` lesend) – siehe „Agenten-Auslösung von Workflows"
-- **PR merge (main)** = nach DEV-Vorstellung + expliziter Harald-Freigabe → **dann ohne Rückfrage ausführen** (merge, Issues schließen, Branch aufräumen, P7c)
+- **DEV-Deploy auslösen** (Vorbedingung: Agenten-Review bestanden; auch aus Cloud-Sessions, z. B. vom Handy): `03`/`04-service-deploy` mit `target=dev` per `workflow_dispatch` (Tests: `04-bdd-tests` lesend) – siehe „Agenten-Auslösung von Workflows"
 - Code schreiben, testen, committen
 - Issue-Templates verwenden (Feature/Bug/Change)
 - arc42-Doku aktuell halten (P4)
@@ -115,13 +114,14 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 - **Integrativ statt ersetzend:** Geteilte Ressourcen (Tailscale-ACL, OAuth-Client, Configs) nie ersetzen, sondern IST-Zustand laden → merge → validieren → anwenden. Ziel: andere Systeme nie rauskicken (Vorfall 2026-07-30)
 
 ### P7 – Autonome Entwicklung
-- Feature/BugFix → DEV-Deploy = autonom
+- Feature/BugFix → DEV-Deploy = autonom, aber erst nach bestandenem Agenten-Review (siehe Ablauf unten)
 - **PR erst als "erledigt" melden, wenn CI grün ist**
 - **`dev` Branch → Push** = autonom
-- **PR merge (main)** = erst nach **DEV-Vorstellung** und **ausdrücklicher Freigabe durch Harald** → **dann ausführen, ohne erneute Rückfrage** (Freigabe = Auftrag). Reihenfolge: Branch → CI grün → DEV-Deploy → Ergebnis vorstellen → Freigabe → Merge. Eine Freigabe, die vor der DEV-Vorstellung erteilt wurde, ersetzt sie nicht.
+- **Ablauf (verbindlich):** fachliche Klärung im Gespräch (Grill) → Branch → CI grün → **unabhängiger Agenten-Review bestanden** (Befunde eingearbeitet und erneut geprüft) → DEV-Deploy vom Branch + Verifikation → Ergebnis Harald vorstellen (fachlich erklärt, Run-Links, Testnachweis) → ausdrückliche Freigabe → Merge. Harald entscheidet fachlich und prüft keine PR-Reviews; der technische Review läuft durch Agenten **vor** seiner Sicht.
+- **PR merge (main)** = erst nach bestandenem Review, **DEV-Vorstellung** und **ausdrücklicher Freigabe durch Harald** → **dann ausführen, ohne erneute Rückfrage** (Freigabe = Auftrag; danach Issues schließen, Branch aufräumen, P7c). Eine Freigabe vor der Vorstellung ersetzt sie nicht. **`main` bleibt immer sauber:** nichts Ungeprüftes oder Unfreigegebenes (auch kein Terraform-Auto-Apply durch einen Merge ohne Freigabe).
 - Technische Entscheidungen bis DEV: frei
 - MAIN/PROD = Harald
-- **Nachweis vor Genehmigungs-Anfrage:** Merge-/PROD-Anfragen nur mit Beleg – CI-Run-Link (grün) + DEV-Deploy-Run-Link + Testnachweis gegen Anforderungen (Test-Kontext nach P1: von wo, welcher Target, gegen welche Quelle)
+- **Nachweis vor Genehmigungs-Anfrage:** Merge-/PROD-Anfragen nur mit Beleg – CI-Run-Link (grün) + Review bestanden (Rollen-Signatur im PR-Thread) + DEV-Deploy-Run-Link + Testnachweis gegen Anforderungen (Test-Kontext nach P1: von wo, welcher Target, gegen welche Quelle)
 - **Repo-übergreifend:** Diese Merge-Regel gilt auch für Harald's weitere Repos (insbesondere Home Assistant); sie wird dort in die jeweilige AGENTS.md/CLAUDE.md übernommen
 
 ### Agenten-Auslösung von Workflows (Cloud-Sessions, Claude Code)
@@ -129,16 +129,16 @@ Agenten (auch Claude-Code-Cloud-Sessions) haben **keinen Host-Zugang** zu den VP
 
 | Klasse | Workflows | Regel |
 |--------|-----------|-------|
-| Lesend | `04-bdd-tests` (nur Tests, `target=dev` oder `prod`); `00-acl-apply` nur mit `dry_run=true` (Export oder Dry-Run), nie `dry_run=false` oder `confirm=APPLY-ACL`; `05-device-approve` nur `mode=list` mit `target=dev`; `diagnose-serve` (read-only, `target` immer explizit setzen) | autonom |
-| DEV-Deploy | `03-baseline-deploy`, `04-service-deploy` mit `target=dev` | autonom; Ergebnis danach Harald vorstellen |
+| Lesend | `04-bdd-tests` (nur Tests, `target=dev` oder `prod`); `00-acl-apply` nur mit `dry_run=true` (Export oder Dry-Run), nie `dry_run=false` oder `confirm=APPLY-ACL`; `05-device-approve` nur `mode=list` mit `target=dev`; `diagnose-serve` (read-only, `target` immer explizit auf `dev` oder `prod` setzen; der Workflow-Default ist `prod`) | autonom |
+| DEV-Deploy | `03-baseline-deploy`, `04-service-deploy` mit `target=dev` | autonom, aber erst nach bestandenem Agenten-Review; Ergebnis danach Harald vorstellen |
 | Owner-only | alles mit `target=prod` oder `target=both` (außer den lesenden Zeilen oben); `00-acl-apply` mit `dry_run=false`/`confirm`; `02-tailscale-bootstrap`; `00-generate-ssh-key`; `01-tailscale-terraform` Apply (`apply=true`; läuft zusätzlich automatisch bei Push auf `main` mit `terraform/**`: ein Merge solcher Änderungen löst den Apply aus, Merge-Gate beachten); `05-device-approve` (`approve`/`reject`/`remove`/`e2e`) und `05-device-remove` (Default `target=prod`!); `debug-oauth` (nutzt OAuth-Secrets) | nur Harald bzw. nur nach seiner ausdrücklichen Anweisung im Chat |
 
 Hinweis: Die Einordnung der Klassen ist eine Setzung dieser Regel (Stand 2026-10-04) und von Harald zu bestätigen; die ACL-Governance bleibt unberührt (siehe harte Regeln).
 
-**Docs-/Regel-PRs ohne deploybare Änderung** (Setzung, von Harald zu bestätigen): Die „DEV-Vorstellung" besteht dort aus grünem CI-Run + Diff-Zusammenfassung; die ausdrückliche Freigabe vor dem Merge bleibt Pflicht.
+**Docs-/Regel-PRs ohne deploybare Änderung:** Es gibt keinen DEV-Deploy; Agenten-Review, Vorstellung im Chat (fachlich erklärt, mit CI-Run) und ausdrückliche Freigabe vor dem Merge gelten unverändert.
 
 ### Checkliste vor Fertig-Meldung
-Bevor ein PR als "ready" gemeldet wird:
+Bevor ein PR als "ready" (bereit für DEV-Deploy und Vorstellung, nicht merge-bereit) gemeldet wird (Punkte 1–8; Punkt 9 gilt zusätzlich unmittelbar vor dem Merge):
 1. ✅ CI-Checks alle grün
 2. ✅ PR-Beschreibung: Was + Warum + Alternativen + Fehlschlag/Worst-Case + `Closes #N` bei Issue-Bezug (P3)
 3. ✅ Living Docs: arc42 + AGENTS.md aktuell
@@ -146,8 +146,8 @@ Bevor ein PR als "ready" gemeldet wird:
 5. ✅ Branch auf aktuellem `main` (ggf. rebased)
 6. ✅ Kein Force-Push auf PR-Branches
 7. ✅ Overclaiming-Check: jede "fertig/funktioniert/garantiert"-Aussage mit Validierungsnachweis + Test-Kontext (P1/P9)
-8. ✅ Unabhängiger Review dokumentiert: Autor ≠ Reviewer, Ergebnis (✅ Freigabe / ❌ Befunde) im PR-Thread, Befunde bearbeitet oder als Follow-up verfolgt, Beiträge mit Rollen-Signatur (`✨ Nova` / `🔍 Reviewer` / `🏗️ Architect` / `🔧 Engineer`) (Issue #37)
-9. ✅ DEV-Ergebnis Harald vorgestellt (Deploy-Run-Link + Testnachweis) UND ausdrückliche Freigabe danach erhalten (Merge-Gate)
+8. ✅ Unabhängiger Agenten-Review **bestanden** (vor DEV-Deploy und vor Vorstellung) und dokumentiert: Autor ≠ Reviewer, Ergebnis (✅ Freigabe / ❌ Befunde) im PR-Thread, Befunde bearbeitet oder als Follow-up verfolgt, Beiträge mit Rollen-Signatur (`✨ Nova` / `🔍 Reviewer` / `🏗️ Architect` / `🔧 Engineer`) (Issue #37)
+9. ✅ DEV-Ergebnis Harald vorgestellt (Deploy-Run-Link + Testnachweis; bei Docs-/Regel-PRs ohne Deploy: CI-Run, siehe oben) UND ausdrückliche Freigabe danach erhalten (Merge-Gate)
 
 ### P7c – Post-Merge-Checkliste
 Nach jedem erfolgreichen Merge nach `main` (autonom ausführen, nicht rückfragen):
