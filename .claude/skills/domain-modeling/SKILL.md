@@ -8,8 +8,8 @@ description: Build and sharpen a project's domain model. Use when discussing cod
 > **IaC4-Anpassung (hat Vorrang vor allem Folgenden und vor `GLOSSARY-FORMAT.md`/`ADR-FORMAT.md`):**
 > - **Glossar:** Kein `GLOSSARY.md`/`GLOSSARY-MAP.md` im Repo-Root. Das Glossar ist `docs/arc42/12_glossar.md` (Tabelle `Begriff | Bedeutung`, Deutsch). Neue Begriffe dort als Zeile ergänzen, nicht als eigene Datei.
 > - **ADRs:** SSoT ist `docs/arc42/09_architekturentscheidungen.md` (Tabelle) + Detailblatt `docs/adr/ADR-NNN-<slug>.md` im bestehenden Format (Status, Kontext, Entscheidungsfrage, Optionen, Evidenz, Empfehlung, Worst-Case/Rollback; Vorbild: `docs/adr/ADR-016-*.md`). Nummer = höchste vorhandene ADR-Nummer + 1 (nicht `0001-…`). Sprache: Deutsch.
-> - **Repo-Regeln gelten weiter:** Konzepte vor Code (P2), Evidenz (P1), Living Docs + Regel-Spiegelung (P4), kein Overclaiming (P9). Änderungen an Doku laufen über Branch/PR; Merge nur nach DEV-Vorstellung und ausdrücklicher Freigabe (AGENTS.md).
-> - Herkunft: siehe `../UPSTREAM.md` (mattpocock/skills, MIT). Nur diese Anpassung weicht vom Original ab.
+> - **Repo-Regeln gelten weiter:** Konzepte vor Code (P2), Evidenz (P1), Living Docs + Regel-Spiegelung (P4), kein Overclaiming (P9). Änderungen an Doku laufen über Branch/PR; bei Doku-Änderungen ohne DEV-Deploy: Vorstellung im Chat und ausdrückliche Freigabe vor dem Merge (AGENTS.md P7).
+> - Herkunft: siehe `../UPSTREAM.md` (mattpocock/skills, MIT). Von diesem Block und den Hinweiszeilen in `*-FORMAT.md` abgesehen entspricht der Skill dem Original.
 
 Actively build and sharpen the project's domain model as you design. This is the *active* discipline: challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `GLOSSARY.md` for vocabulary is not this skill: that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
 
