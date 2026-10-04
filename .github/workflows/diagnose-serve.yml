@@ -164,4 +164,6 @@ jobs:
             $SSH "sudo docker exec openclaw-$i openclaw mcp list" 2>&1 || echo "(mcp list rc=$?)"
             echo "--- openclaw mcp doctor gdrive --probe ---"
             $SSH "sudo docker exec openclaw-$i openclaw mcp doctor gdrive --probe" 2>&1 || echo "(mcp doctor rc=$?)"
+            echo "--- openclaw mcp probe gdrive (Capabilities/Tools) ---"
+            $SSH "sudo docker exec openclaw-$i openclaw mcp probe gdrive" 2>&1 || echo "(mcp probe rc=$?)"
           done
