@@ -66,5 +66,12 @@
     "telegram": {
       "enabled": false
     }
+  },
+  "mcp": {
+    "servers": {
+      "gdrive": {
+        "enabled": false
+      }
+    }
   }
 }
