@@ -126,6 +126,12 @@ jobs:
       PROD_OC1_BITWARDEN_CLIENTSECRET: ${{ secrets.PROD_OC1_BITWARDEN_CLIENTSECRET }}
       PROD_OC2_BITWARDEN_CLIENTSECRET: ${{ secrets.PROD_OC2_BITWARDEN_CLIENTSECRET }}
       PROD_OC3_BITWARDEN_CLIENTSECRET: ${{ secrets.PROD_OC3_BITWARDEN_CLIENTSECRET }}
+      # Google-Drive-MCP (Issue #171): EIN gemeinsamer Secret-Satz (dediziertes Konto) fuer alle 6 Instanzen.
+      # group_vars/all.yml liest sie via lookup('env'); NICHT pro Instanz/Provider-Block.
+      GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+      GDRIVE_ACCESS_TOKEN: ${{ secrets.GDRIVE_ACCESS_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4

@@ -233,6 +233,24 @@
   changed_when: false
   failed_when: _oc_qmd_ver.rc != 0
 
+- name: "{{ oc.name }}: Google-Drive-MCP im Container installieren (User-npm, Version gepinnt Issue #171)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: /bin/sh -lc "command -v google-drive-mcp >/dev/null 2>&1 || (mkdir -p ~/.local/bin ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g @piotr-agier/google-drive-mcp@{{ openclaw_gdrive_mcp_version }} && ln -sf ~/.npm-global/bin/google-drive-mcp ~/.local/bin/google-drive-mcp)"
+  register: _oc_gdrive_install
+  changed_when: _oc_gdrive_install.stdout | default('') | length > 0
+  failed_when: _oc_gdrive_install.rc != 0
+
+- name: "{{ oc.name }}: Google-Drive-MCP-Version verifizieren (erwartet {{ openclaw_gdrive_mcp_version }})"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: /bin/sh -lc "export PATH=$HOME/.local/bin:$PATH; google-drive-mcp --version | grep -q '{{ openclaw_gdrive_mcp_version }}'"
+  register: _oc_gdrive_ver
+  changed_when: false
+  failed_when: _oc_gdrive_ver.rc != 0
+
 - name: "{{ oc.name }}: Tailscale Serve-Status (Idempotenz)"
   ansible.builtin.shell: tailscale serve status
   register: _serve_status
