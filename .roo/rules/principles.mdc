@@ -31,7 +31,7 @@ Keine Workarounds. Tech-Debt in docs/arc42/11 dokumentieren.
 Geteilte Ressourcen (ACL/Configs) integrativ ändern, nie ersetzen.
 
 ## P7 – Autonome Entwicklung
-Feature/BugFix → DEV-Deploy = autonom, aber erst nach bestandenem Agenten-Review (auch aus Cloud-Sessions via `workflow_dispatch`, target=dev). MAIN/PROD = Harald.
+Feature/BugFix → DEV-Deploy = autonom, aber erst nach bestandenem Agenten-Review (auch aus Cloud-Sessions via `workflow_dispatch`, target=dev). MAIN/PROD = Harald. Push und Merge auf den Branch `dev` sind frei; Review-/Merge-Gate gelten nur für `main`.
 Checkliste vor Fertig-Meldung, harte Regeln und P7c stehen vollständig in AGENTS.md (Punkt 8: Review bestanden vor DEV-Deploy und Vorstellung; Punkt 9: Vorstellung + Freigabe unmittelbar vor dem Merge).
 Ablauf (verbindlich): fachliche Klärung im Gespräch (Grill) → Branch → CI grün → unabhängiger Agenten-Review bestanden (Befunde eingearbeitet, erneut geprüft) → DEV-Deploy vom Branch + Verifikation → Ergebnis Harald vorstellen (fachlich erklärt, Run-Links, Testnachweis) → ausdrückliche Freigabe → Merge. Harald entscheidet fachlich und prüft keine PR-Reviews.
 Merge auf main erst nach bestandenem Review, DEV-Vorstellung UND ausdrücklicher Freigabe durch Harald danach; Freigabe vor der Vorstellung zählt nicht. Danach: Freigabe = Auftrag, nicht erneut rückfragen. main bleibt immer sauber (nichts Ungeprüftes oder Unfreigegebenes, auch kein Terraform-Auto-Apply durch einen Merge ohne Freigabe). Gilt auch für Harald's andere Repos (u. a. Home Assistant).

@@ -17,7 +17,7 @@
 | **Tailscale-ACL: KEINE Änderung ohne Owner-Zustimmung** (Owner-Regel 2026-09-06) – auch nicht in Feature-Branches / über GH Actions auf Branches; Owner-Vorlage nur mit reviewed Auswirkungen (Autor ≠ Reviewer) + Rollback-Pfad; Details: `.roo/rules/tailscale-acl.mdc` | Alle |
 | **Tailscale-ACL ist Infrastruktur und wird in IaC4 verwaltet** (Owner-Entscheid 2026-09-11) – EINE Regelquelle `acl/tailscale-acl.hujson` für beide Tag-Welten (`tag:ia4` + `tag:ha`/`tag:ha-ci`), fester Reihenfolge `tagOwners → acls → ssh`; einziger Apply-Weg `.github/workflows/00-acl-apply.yml` (manuell, `dry_run`/`confirm`) – **nie automatisch**; Details: `docs/adr/ADR-026-*.md`, `acl/README.md` | Alle |
 | **Nie direkter Push auf `main`** – nur via PR | Alle |
-| **`dev` Push** = autonom (kein PR nötig) | Orchestrator |
+| **`dev` Push** = autonom (kein PR nötig); Push und Merge auf `dev` sind frei, Review-/Merge-Gate gelten nur für `main` | Orchestrator |
 | **PR `grün` vor Fertig-Meldung** – erst done, wenn alle CI-Checks pass | Alle |
 | **Nie Secrets committen** – immer GH Secrets + `.env.example` | Alle |
 | **Nie Gateway-Prozess killen** (Vorfall 2026-07-16, 6h Downtime) | Alle |
