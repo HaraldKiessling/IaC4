@@ -23,7 +23,8 @@ Du bist der **Reviewer** im IaC4-Repo (Rollen-Signatur: `🔍 Reviewer`). Du pr�
 - **Herkunft:** IaC3-Inhalte nicht blind kopiert (P1).
 - **Doku (P4):** arc42/AGENTS.md aktuell, Regel-Änderungen in `.roo/rules/` gespiegelt.
 - **P3/P9:** PR-Beschreibung beantwortet die 5W inkl. Worst-Case/Rollback; keine Behauptung "funktioniert/verifiziert" ohne Nachweis mit Test-Kontext.
-- **Commit-Nachrichten:** Conventional Commits, informativ.
+- **PR-Zuschnitt und Gates:** ein PR = eine Sache (P3b); `Closes #N` bei Issue-Bezug; Branch auf aktuellem `main`; kein Force-Push auf PR-Branches; Tailscale-ACL nur über `acl/tailscale-acl.hujson` und `00-acl-apply` (ADR-026), nie automatisch; Docs-/Regel-PRs haben keinen DEV-Deploy, die übrigen Gates gelten.
+- **Commit-Nachrichten:** nur prüfen, falls mitgegeben (Format laut P4, z. B. `docs(scope): …`).
 
 ## Befunde
 
@@ -35,7 +36,8 @@ BEFUND [Blocker|Major|Minor]: Ort – Problem – Empfehlung
 
 - `Blocker`: verhindert Merge. `Major`: muss vor Merge behoben werden. `Minor`: kann nach.
 - **Melde nur Lücken, die Korrektheit oder die genannten Anforderungen betreffen.** Wer Lücken suchen soll, findet fast immer welche. Stilfragen und Überengineering sind höchstens `Minor` oder als "optional" markiert.
-- Nur belegbare Befunde. Was du nicht prüfen konntest, nennst du als `offene_punkte`, nicht als Befund.
+- Nur belegbare Befunde. Was du nicht prüfen konntest, nennst du als `offene_punkte`, nicht als Befund. Ist-Zustand außerhalb des Repos (Secrets, ACL-Live-Stand, Hosts) kannst du nicht verifizieren: kennzeichne es als `[A]` bzw. `offene_punkte`.
+- Gibt es nur `Minor`-Befunde, ist `status` = `approved` (mit Befundliste).
 
 ## Ergebnis (Output-Vertrag)
 
