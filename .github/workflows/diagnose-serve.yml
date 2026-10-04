@@ -9,6 +9,10 @@
 # Manuell startbar via workflow_dispatch (target: dev|prod, Default prod).
 # Zusätzlich: push auf den `dev`-Branch → Diagnose fest gegen vps-dev (NICHT prod).
 #   Begründung: autonomer Push-Trigger für DEV-Diagnosen ohne manuellen Dispatch.
+#
+# Robustheit (2026-10-04): OAuth-Token mit Retry + sichtbarem HTTP-Code;
+#   Geräte-Lookup mit HTTP-Code-Diagnose; MagicDNS-FQDN-Fallback (Runner ist im
+#   Tailnet), damit die read-only Diagnose auch bei API-Ausfall durchläuft.
 # =============================================================================
 name: "Diagnose – Tailscale Serve (read-only)"
 
@@ -68,30 +72,61 @@ jobs:
       - name: Netmap-Sync abwarten
         run: sleep 15
 
-      - name: VPS Tailscale-IP ermitteln (Tailscale-API)
+      - name: VPS Tailscale-IP ermitteln (Tailscale-API; Fallback MagicDNS)
         env:
           TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
         run: |
-          set -euo pipefail
-          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
-            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
-            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
-          echo "::add-mask::$TS_TOKEN"
+          set -uo pipefail
           NODE="vps-${{ env.TARGET }}"
-          API_BODY=$(curl -sS --max-time 30 \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
-            -H "Authorization: Bearer ***")
-          JQ_FILTER='[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))]'
-          JQ_FILTER="$JQ_FILTER | sort_by(.lastSeen // \"\") | reverse | .[0].addresses[0] // empty"
-          TS_IP=$(printf '%s' "$API_BODY" | jq -r --arg n "$NODE" "$JQ_FILTER" | head -1)
-          if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
-            echo "❌ Keine Tailscale-IP für Node ${NODE} – Workflow 02/03 müssen zuerst laufen"
-            exit 1
+          FQDN="${NODE}.${TS_TAILNET}"
+          TS_TOKEN=""
+          TS_IP=""
+
+          # OAuth-Token holen (bis zu 3 Versuche; nur HTTP-Code sichtbar, Token maskiert)
+          for try in 1 2 3; do
+            RESP=$(curl -sS --max-time 30 -w '\n%{http_code}' \
+              --data-urlencode "client_id=$TS_CLIENT_ID" \
+              --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+              "https://api.tailscale.com/api/v2/oauth/token")
+            CODE=$(printf '%s' "$RESP" | tail -1)
+            BODY=$(printf '%s' "$RESP" | sed '$d')
+            TS_TOKEN=$(printf '%s' "$BODY" | jq -r '.access_token // empty' 2>/dev/null || true)
+            if [ -n "$TS_TOKEN" ]; then
+              echo "::add-mask::$TS_TOKEN"
+              echo "✅ OAuth-Token erhalten (HTTP ${CODE}, Versuch ${try})"
+              break
+            fi
+            echo "⚠️ OAuth-Token fehlgeschlagen (HTTP ${CODE}, Versuch ${try})"
+            sleep 5
+          done
+
+          # Geräteliste abfragen (nur wenn Token vorhanden)
+          if [ -n "$TS_TOKEN" ]; then
+            RESP=$(curl -sS --max-time 30 -w '\n%{http_code}' \
+              "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+              -H "Authorization: Bearer ${TS_TOKEN}")
+            CODE=$(printf '%s' "$RESP" | tail -1)
+            BODY=$(printf '%s' "$RESP" | sed '$d')
+            if [ "$CODE" = "200" ]; then
+              TS_IP=$(printf '%s' "$BODY" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' 2>/dev/null | head -1 || true)
+              [ "$TS_IP" = "null" ] && TS_IP=""
+            else
+              echo "⚠️ Devices-API Fehler (HTTP ${CODE}): $(printf '%s' "$BODY" | head -c 300)"
+            fi
           fi
-          echo "VPS_TS_IP=${TS_IP}" >> "$GITHUB_ENV"
-          echo "✅ Node ${NODE} → ${TS_IP}"
+
+          # Fallback: MagicDNS-FQDN aus dem Inventar (Runner ist im Tailnet)
+          if [ -z "$TS_IP" ]; then
+            echo "⚠️ Keine Tailscale-IP via API – Fallback auf MagicDNS-FQDN ${FQDN}"
+            VPS_TS_IP="$FQDN"
+          else
+            echo "✅ Node ${NODE} → ${TS_IP}"
+            VPS_TS_IP="$TS_IP"
+          fi
+          echo "VPS_TS_IP=${VPS_TS_IP}" >> "$GITHUB_ENV"
+          echo "✅ SSH-Ziel: ${VPS_TS_IP}"
 
       - name: SSH-Key vorbereiten
         run: |
