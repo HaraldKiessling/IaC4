@@ -29,10 +29,10 @@
 | **Force-Push nicht auf PR-Branches** – nur auf ungeteilte Feature- und `session-*`-Branches (1 Branch = 1 Worktree) | Alle |
 | **PR-Checkliste vor Fertig-Meldung** – CI grün, Doku aktuell, Secrets-Check, Branch rebased, **unabhängiger Review dokumentiert** (Autor ≠ Reviewer, Issue #37) | Orchestrator |
 
-## ✅ Autonom (kein Approval nötig)
-- Feature-Branch → Push → DEV-Deploy
+## ✅ Autonom (kein Approval nötig; Review-Gate und Merge-Gate bleiben unberührt)
+- Feature-Branch → Push → CI grün → Agenten-Review bestanden → DEV-Deploy
 - **`dev` Branch → Push** = direkt (kein PR)
-- **DEV-Deploy auslösen** (auch aus Cloud-Sessions, z. B. vom Handy): `03`/`04-service-deploy` mit `target=dev` per `workflow_dispatch` (Tests: `04-bdd-tests` lesend) – siehe „Agenten-Auslösung von Workflows"
+- **DEV-Deploy auslösen** (Vorbedingung: Agenten-Review bestanden; auch aus Cloud-Sessions, z. B. vom Handy): `03`/`04-service-deploy` mit `target=dev` per `workflow_dispatch` (Tests: `04-bdd-tests` lesend) – siehe „Agenten-Auslösung von Workflows"
 - Code schreiben, testen, committen
 - Issue-Templates verwenden (Feature/Bug/Change)
 - arc42-Doku aktuell halten (P4)
@@ -114,7 +114,7 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 - **Integrativ statt ersetzend:** Geteilte Ressourcen (Tailscale-ACL, OAuth-Client, Configs) nie ersetzen, sondern IST-Zustand laden → merge → validieren → anwenden. Ziel: andere Systeme nie rauskicken (Vorfall 2026-07-30)
 
 ### P7 – Autonome Entwicklung
-- Feature/BugFix → DEV-Deploy = autonom
+- Feature/BugFix → DEV-Deploy = autonom, aber erst nach bestandenem Agenten-Review (siehe Ablauf unten)
 - **PR erst als "erledigt" melden, wenn CI grün ist**
 - **`dev` Branch → Push** = autonom
 - **Ablauf (verbindlich):** fachliche Klärung im Gespräch (Grill) → Branch → CI grün → **unabhängiger Agenten-Review bestanden** (Befunde eingearbeitet und erneut geprüft) → DEV-Deploy vom Branch + Verifikation → Ergebnis Harald vorstellen (fachlich erklärt, Run-Links, Testnachweis) → ausdrückliche Freigabe → Merge. Harald entscheidet fachlich und prüft keine PR-Reviews; der technische Review läuft durch Agenten **vor** seiner Sicht.
@@ -130,7 +130,7 @@ Agenten (auch Claude-Code-Cloud-Sessions) haben **keinen Host-Zugang** zu den VP
 | Klasse | Workflows | Regel |
 |--------|-----------|-------|
 | Lesend | `04-bdd-tests` (nur Tests, `target=dev` oder `prod`); `00-acl-apply` nur mit `dry_run=true` (Export oder Dry-Run), nie `dry_run=false` oder `confirm=APPLY-ACL`; `05-device-approve` nur `mode=list` mit `target=dev`; `diagnose-serve` (read-only, `target` immer explizit auf `dev` oder `prod` setzen; der Workflow-Default ist `prod`) | autonom |
-| DEV-Deploy | `03-baseline-deploy`, `04-service-deploy` mit `target=dev` | autonom; Ergebnis danach Harald vorstellen |
+| DEV-Deploy | `03-baseline-deploy`, `04-service-deploy` mit `target=dev` | autonom, aber erst nach bestandenem Agenten-Review; Ergebnis danach Harald vorstellen |
 | Owner-only | alles mit `target=prod` oder `target=both` (außer den lesenden Zeilen oben); `00-acl-apply` mit `dry_run=false`/`confirm`; `02-tailscale-bootstrap`; `00-generate-ssh-key`; `01-tailscale-terraform` Apply (`apply=true`; läuft zusätzlich automatisch bei Push auf `main` mit `terraform/**`: ein Merge solcher Änderungen löst den Apply aus, Merge-Gate beachten); `05-device-approve` (`approve`/`reject`/`remove`/`e2e`) und `05-device-remove` (Default `target=prod`!); `debug-oauth` (nutzt OAuth-Secrets) | nur Harald bzw. nur nach seiner ausdrücklichen Anweisung im Chat |
 
 Hinweis: Die Einordnung der Klassen ist eine Setzung dieser Regel (Stand 2026-10-04) und von Harald zu bestätigen; die ACL-Governance bleibt unberührt (siehe harte Regeln).
@@ -138,7 +138,7 @@ Hinweis: Die Einordnung der Klassen ist eine Setzung dieser Regel (Stand 2026-10
 **Docs-/Regel-PRs ohne deploybare Änderung:** Es gibt keinen DEV-Deploy; Agenten-Review, Vorstellung im Chat (fachlich erklärt, mit CI-Run) und ausdrückliche Freigabe vor dem Merge gelten unverändert.
 
 ### Checkliste vor Fertig-Meldung
-Bevor ein PR als "ready" gemeldet wird (Punkte 1–8; Punkt 9 gilt zusätzlich unmittelbar vor dem Merge):
+Bevor ein PR als "ready" (bereit für DEV-Deploy und Vorstellung, nicht merge-bereit) gemeldet wird (Punkte 1–8; Punkt 9 gilt zusätzlich unmittelbar vor dem Merge):
 1. ✅ CI-Checks alle grün
 2. ✅ PR-Beschreibung: Was + Warum + Alternativen + Fehlschlag/Worst-Case + `Closes #N` bei Issue-Bezug (P3)
 3. ✅ Living Docs: arc42 + AGENTS.md aktuell
