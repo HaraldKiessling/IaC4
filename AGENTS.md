@@ -37,7 +37,12 @@
 - Issue-Templates verwenden (Feature/Bug/Change)
 - arc42-Doku aktuell halten (P4)
 
-## 📋 Prinzipien P1–P10 (ausführlich)
+## 📋 Prinzipien P0–P10 (ausführlich)
+
+### P0 – Entscheidungsrollen und Arbeitsweise
+- **Harald entscheidet ausschließlich fachlich, nie technisch.** Technische Entscheidungen treffen die Agenten selbst, begründet und belegt (P1/P3). Betrifft eine technische Frage Harald, wird sie auf eine **fachliche Frage zurückgeführt** (Auswirkung, Nutzen, Risiko, Kosten) und mit Empfehlung gestellt. Beispiel: nicht "opus oder inherit?", sondern "Wie viel Prüftiefe ist dir die Mehrkosten wert?". Die harten Regeln und Owner-Freigaben (z. B. ACL, PROD, Merge-Freigabe, Owner-only-Workflows) bleiben Freigaben durch Harald, weil sie Risiko-/Fachentscheidungen sind.
+- **Evidenzbasiert auf authentischen Quellen:** Grundlage sind Primärquellen (Hersteller-/Vendor-Doku, Original-Repository, Spezifikation) und der verifizierte IST-Zustand. Sekundärquellen (Blogs, Zusammenfassungen, Modellwissen) sind nur Hinweise und bleiben `[A]`, bis eine Primärquelle sie belegt (P1).
+- **Üblicher Standard je Rolle:** Alle Rollen (Engineer, Architect, Reviewer, Orchestrator) arbeiten nach den üblichen Disziplinen eines Senior Developers/Engineers/Architects/Reviewers, z. B. Ursache statt Symptom beheben, kleine nachvollziehbare Änderungen, Verifikation vor Behauptung, Rollback mitdenken, Sicherheit und Idempotenz, ehrliche Angabe von Unsicherheit.
 
 ### P1 – Evidenz
 Jede Behauptung braucht einen Beleg. Nutze `web_search` oder `web_fetch` für:
@@ -119,7 +124,7 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 - **`dev` Branch → Push** = autonom
 - **Ablauf (verbindlich):** fachliche Klärung im Gespräch (Grill) → Branch → CI grün → **unabhängiger Agenten-Review bestanden** (Befunde eingearbeitet und erneut geprüft) → DEV-Deploy vom Branch + Verifikation → Ergebnis Harald vorstellen (fachlich erklärt, Run-Links, Testnachweis) → ausdrückliche Freigabe → Merge. Harald entscheidet fachlich und prüft keine PR-Reviews; der technische Review läuft durch Agenten **vor** seiner Sicht.
 - **PR merge (main)** = erst nach bestandenem Review, **DEV-Vorstellung** und **ausdrücklicher Freigabe durch Harald** → **dann ausführen, ohne erneute Rückfrage** (Freigabe = Auftrag; danach Issues schließen, Branch aufräumen, P7c). Eine Freigabe vor der Vorstellung ersetzt sie nicht. **`main` bleibt immer sauber:** nichts Ungeprüftes oder Unfreigegebenes (auch kein Terraform-Auto-Apply durch einen Merge ohne Freigabe).
-- Technische Entscheidungen bis DEV: frei
+- Technische Entscheidungen treffen die Agenten (P0), ohne harte Regeln und Freigaben zu berühren; Harald entscheidet nur fachlich
 - MAIN/PROD = Harald
 - **Nachweis vor Genehmigungs-Anfrage:** Merge-/PROD-Anfragen nur mit Beleg – CI-Run-Link (grün) + Review bestanden (Rollen-Signatur im PR-Thread) + DEV-Deploy-Run-Link + Testnachweis gegen Anforderungen (Test-Kontext nach P1: von wo, welcher Target, gegen welche Quelle)
 - **Repo-übergreifend:** Diese Merge-Regel gilt auch für Harald's weitere Repos (insbesondere Home Assistant); sie wird dort in die jeweilige AGENTS.md/CLAUDE.md übernommen
