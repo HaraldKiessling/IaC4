@@ -31,8 +31,10 @@ Keine Workarounds. Tech-Debt in docs/arc42/11 dokumentieren.
 Geteilte Ressourcen (ACL/Configs) integrativ ändern, nie ersetzen.
 
 ## P7 – Autonome Entwicklung
-Feature/BugFix → DEV-Deploy = autonom. MAIN/PROD = Harald.
-Nachweis (grüne CI + Tests) vor Genehmigungs-Anfrage. Approval = Auftrag: handeln, nicht erneut rückfragen.
+Feature/BugFix → DEV-Deploy = autonom (auch aus Cloud-Sessions via `workflow_dispatch`, target=dev). MAIN/PROD = Harald.
+Merge auf main erst nach DEV-Vorstellung (Deploy-Run-Link + Testnachweis) UND ausdrücklicher Freigabe durch Harald danach; Freigabe vor der Vorstellung zählt nicht. Danach: Freigabe = Auftrag, nicht erneut rückfragen. Gilt auch für Harald's andere Repos (u. a. Home Assistant).
+Agenten haben keinen Host-Zugang zu den VPS – Analyse nur über GH-Workflows. Lesend + DEV-Deploy autonom; target=prod, ACL-Apply, Bootstrap, SSH-Key, Terraform-Apply, Device-Approve/Remove = Owner-only (Details: AGENTS.md „Agenten-Auslösung von Workflows").
+Nachweis (grüne CI + DEV-Deploy + Tests) vor Genehmigungs-Anfrage.
 Unabhängiger PR-Review (Autor ≠ Reviewer) vor Merge – Ergebnis im PR-Thread dokumentieren, Befunde bearbeiten oder als Follow-up verfolgen (Issue #37).
 
 ## P8 – Wiederholungsfehler-Stopp

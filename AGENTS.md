@@ -21,7 +21,7 @@
 | **PR `grün` vor Fertig-Meldung** – erst done, wenn alle CI-Checks pass | Alle |
 | **Nie Secrets committen** – immer GH Secrets + `.env.example` | Alle |
 | **Nie Gateway-Prozess killen** (Vorfall 2026-07-16, 6h Downtime) | Alle |
-| **PR mergen** = Harald genehmigt → Agent merge (Approval = Auftrag, nicht erneut rückfragen) | Orchestrator |
+| **Merge auf `main` erst nach DEV-Vorstellung + expliziter Freigabe** – Ergebnis auf DEV (Deploy-Run-Link, Testnachweis, Test-Kontext) MUSS Harald vorgestellt sein; erst seine ausdrückliche Freigabe danach = Auftrag zum Merge (dann nicht erneut rückfragen). Freigabe vor der DEV-Vorstellung zählt nicht. Gilt auch für andere Repos von Harald (u. a. Home Assistant) | Alle |
 | **PROD-Deploy** = nur Harald | Orchestrator |
 | **Pre-Flight Validation vor Push** – yamllint + markdownlint lokal prüfen | Alle |
 | **Nie `sed`/Regex-Editing auf YAML/JSON/Templates** – gezielt editieren + Parser-Validierung (P4b) | Alle |
@@ -32,7 +32,8 @@
 ## ✅ Autonom (kein Approval nötig)
 - Feature-Branch → Push → DEV-Deploy
 - **`dev` Branch → Push** = direkt (kein PR)
-- **PR merge (main)** = nach Harald-Approval → **dann ohne Rückfrage ausführen** (merge, Issues schließen, Branch aufräumen, P7c)
+- **DEV-Deploy auslösen** (auch aus Cloud-Sessions, z. B. vom Handy): `03`/`04-service-deploy`/`04-bdd-tests` mit `target=dev` per `workflow_dispatch` – siehe „Agenten-Auslösung von Workflows"
+- **PR merge (main)** = nach DEV-Vorstellung + expliziter Harald-Freigabe → **dann ohne Rückfrage ausführen** (merge, Issues schließen, Branch aufräumen, P7c)
 - Code schreiben, testen, committen
 - Issue-Templates verwenden (Feature/Bug/Change)
 - arc42-Doku aktuell halten (P4)
@@ -117,10 +118,22 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 - Feature/BugFix → DEV-Deploy = autonom
 - **PR erst als "erledigt" melden, wenn CI grün ist**
 - **`dev` Branch → Push** = autonom
-- **PR merge (main)** = nach Harald-Approval → **dann ausführen, ohne erneute Rückfrage** (Approval = Auftrag)
+- **PR merge (main)** = erst nach **DEV-Vorstellung** und **ausdrücklicher Freigabe durch Harald** → **dann ausführen, ohne erneute Rückfrage** (Freigabe = Auftrag). Reihenfolge: Branch → CI grün → DEV-Deploy → Ergebnis vorstellen → Freigabe → Merge. Eine Freigabe, die vor der DEV-Vorstellung erteilt wurde, ersetzt sie nicht.
 - Technische Entscheidungen bis DEV: frei
 - MAIN/PROD = Harald
-- **Nachweis vor Genehmigungs-Anfrage:** Merge-/PROD-Anfragen nur mit Beleg – CI-Run-Link (grün) + Testnachweis gegen Anforderungen
+- **Nachweis vor Genehmigungs-Anfrage:** Merge-/PROD-Anfragen nur mit Beleg – CI-Run-Link (grün) + DEV-Deploy-Run-Link + Testnachweis gegen Anforderungen (Test-Kontext nach P1: von wo, welcher Target, gegen welche Quelle)
+- **Repo-übergreifend:** Diese Merge-Regel gilt auch für Harald's weitere Repos (insbesondere Home Assistant); sie wird dort in die jeweilige AGENTS.md/CLAUDE.md übernommen
+
+### Agenten-Auslösung von Workflows (Cloud-Sessions, Claude Code)
+Agenten (auch Claude-Code-Cloud-Sessions) haben **keinen Host-Zugang** zu den VPS; Analyse und Eingriffe laufen ausschließlich über GH-Actions-Workflows.
+
+| Klasse | Workflows | Regel |
+|--------|-----------|-------|
+| Lesend | `04-bdd-tests` (target=dev/prod), `00-acl-apply` nur Export/Dry-Run, `05-device-approve` `mode=list` | autonom |
+| DEV-Deploy | `03-baseline-deploy`, `04-service-deploy` mit `target=dev` | autonom; Ergebnis danach Harald vorstellen |
+| Owner-only | alles mit `target=prod`; `00-acl-apply` mit Apply/`confirm`; `02-tailscale-bootstrap`; `00-generate-ssh-key`; `01-tailscale-terraform` Apply; `05-device-approve`/`05-device-remove` (approve/reject/remove) | nur Harald bzw. nur nach seiner ausdrücklichen Anweisung im Chat |
+
+Hinweis: Die Einordnung der Owner-only-Zeile ist eine Setzung dieser Regel (Stand 2026-10-04) und von Harald zu bestätigen; die ACL-Governance bleibt unberührt (siehe harte Regeln).
 
 ### Checkliste vor Fertig-Meldung
 Bevor ein PR als "ready" gemeldet wird:
@@ -132,6 +145,7 @@ Bevor ein PR als "ready" gemeldet wird:
 6. ✅ Kein Force-Push auf PR-Branches
 7. ✅ Overclaiming-Check: jede "fertig/funktioniert/garantiert"-Aussage mit Validierungsnachweis + Test-Kontext (P1/P9)
 8. ✅ Unabhängiger Review dokumentiert: Autor ≠ Reviewer, Ergebnis (✅ Freigabe / ❌ Befunde) im PR-Thread, Befunde bearbeitet oder als Follow-up verfolgt, Beiträge mit Rollen-Signatur (`✨ Nova` / `🔍 Reviewer` / `🏗️ Architect` / `🔧 Engineer`) (Issue #37)
+9. ✅ DEV-Ergebnis Harald vorgestellt (Deploy-Run-Link + Testnachweis) UND ausdrückliche Freigabe danach erhalten (Merge-Gate)
 
 ### P7c – Post-Merge-Checkliste
 Nach jedem erfolgreichen Merge nach `main` (autonom ausführen, nicht rückfragen):
