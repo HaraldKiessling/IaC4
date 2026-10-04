@@ -32,7 +32,7 @@
 ## ✅ Autonom (kein Approval nötig)
 - Feature-Branch → Push → DEV-Deploy
 - **`dev` Branch → Push** = direkt (kein PR)
-- **DEV-Deploy auslösen** (auch aus Cloud-Sessions, z. B. vom Handy): `03`/`04-service-deploy`/`04-bdd-tests` mit `target=dev` per `workflow_dispatch` – siehe „Agenten-Auslösung von Workflows"
+- **DEV-Deploy auslösen** (auch aus Cloud-Sessions, z. B. vom Handy): `03`/`04-service-deploy` mit `target=dev` per `workflow_dispatch` (Tests: `04-bdd-tests` lesend) – siehe „Agenten-Auslösung von Workflows"
 - **PR merge (main)** = nach DEV-Vorstellung + expliziter Harald-Freigabe → **dann ohne Rückfrage ausführen** (merge, Issues schließen, Branch aufräumen, P7c)
 - Code schreiben, testen, committen
 - Issue-Templates verwenden (Feature/Bug/Change)
@@ -125,15 +125,17 @@ Regelmäßig (alle 2-3 Iterationen): IST vs. SOLL in docs/arc42/
 - **Repo-übergreifend:** Diese Merge-Regel gilt auch für Harald's weitere Repos (insbesondere Home Assistant); sie wird dort in die jeweilige AGENTS.md/CLAUDE.md übernommen
 
 ### Agenten-Auslösung von Workflows (Cloud-Sessions, Claude Code)
-Agenten (auch Claude-Code-Cloud-Sessions) haben **keinen Host-Zugang** zu den VPS; Analyse und Eingriffe laufen ausschließlich über GH-Actions-Workflows.
+Agenten (auch Claude-Code-Cloud-Sessions) haben **keinen Host-Zugang** zu den VPS; Analyse und Eingriffe sind darauf ausgelegt, ausschließlich über GH-Actions-Workflows zu laufen (Stand 2026-10-04, `[A]`: keine technische Sperre geprüft).
 
 | Klasse | Workflows | Regel |
 |--------|-----------|-------|
-| Lesend | `04-bdd-tests` (target=dev/prod), `00-acl-apply` nur Export/Dry-Run, `05-device-approve` `mode=list` | autonom |
+| Lesend | `04-bdd-tests` (nur Tests, `target=dev` oder `prod`); `00-acl-apply` nur mit `dry_run=true` (Export oder Dry-Run), nie `dry_run=false` oder `confirm=APPLY-ACL`; `05-device-approve` nur `mode=list` mit `target=dev`; `diagnose-serve` (read-only, `target` immer explizit setzen) | autonom |
 | DEV-Deploy | `03-baseline-deploy`, `04-service-deploy` mit `target=dev` | autonom; Ergebnis danach Harald vorstellen |
-| Owner-only | alles mit `target=prod`; `00-acl-apply` mit Apply/`confirm`; `02-tailscale-bootstrap`; `00-generate-ssh-key`; `01-tailscale-terraform` Apply; `05-device-approve`/`05-device-remove` (approve/reject/remove) | nur Harald bzw. nur nach seiner ausdrücklichen Anweisung im Chat |
+| Owner-only | alles mit `target=prod` oder `target=both` (außer den lesenden Zeilen oben); `00-acl-apply` mit `dry_run=false`/`confirm`; `02-tailscale-bootstrap`; `00-generate-ssh-key`; `01-tailscale-terraform` Apply (`apply=true`; läuft zusätzlich automatisch bei Push auf `main` mit `terraform/**`: ein Merge solcher Änderungen löst den Apply aus, Merge-Gate beachten); `05-device-approve` (`approve`/`reject`/`remove`/`e2e`) und `05-device-remove` (Default `target=prod`!); `debug-oauth` (nutzt OAuth-Secrets) | nur Harald bzw. nur nach seiner ausdrücklichen Anweisung im Chat |
 
-Hinweis: Die Einordnung der Owner-only-Zeile ist eine Setzung dieser Regel (Stand 2026-10-04) und von Harald zu bestätigen; die ACL-Governance bleibt unberührt (siehe harte Regeln).
+Hinweis: Die Einordnung der Klassen ist eine Setzung dieser Regel (Stand 2026-10-04) und von Harald zu bestätigen; die ACL-Governance bleibt unberührt (siehe harte Regeln).
+
+**Docs-/Regel-PRs ohne deploybare Änderung** (Setzung, von Harald zu bestätigen): Die „DEV-Vorstellung" besteht dort aus grünem CI-Run + Diff-Zusammenfassung; die ausdrückliche Freigabe vor dem Merge bleibt Pflicht.
 
 ### Checkliste vor Fertig-Meldung
 Bevor ein PR als "ready" gemeldet wird:
