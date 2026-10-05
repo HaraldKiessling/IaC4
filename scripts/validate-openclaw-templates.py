@@ -126,6 +126,61 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
         except Exception as ex:
             failures.append(f"{tf}/{oc['name']}: {ex}")
 
+# Google-Drive-MCP file-based Credentials (Token-Hygiene 2026-10-05, Owner-Entscheid 'A'):
+# Mit Dummy-Secrets muss openclaw.json gdrive enabled:true rendern, aber NUR Pfad/Scope-Env
+# (keine sensiblen Werte); das Compose-Template mountet die Dateien read-only und rollt KEIN
+# GDRIVE_*-Env mehr aus. Ohne Secrets: enabled:false und kein Mount/Env.
+_gdrive_dummy = {
+    'openclaw_gdrive_client_id': 'cid-dummy.apps.googleusercontent.com',
+    'openclaw_gdrive_client_secret': 'csec-dummy',
+    'openclaw_gdrive_refresh_token': 'refresh-dummy',
+    'openclaw_gdrive_access_token': 'access-dummy',
+}
+TOKEN_PATH = '/home/node/.config/google-drive-mcp/tokens.json'
+try:
+    dev_t = yaml.safe_load(open(f'{ROOT}/group_vars/vps-dev.yml'))
+    oc_t = dev_t['openclaw_instances'][0]
+    _base = dict(oc=oc_t, openclaw_agent_models=gv_all['openclaw_agent_models'],
+                 openclaw_provider_envs=dev_t['openclaw_provider_envs'],
+                 openclaw_provider_models=gv_all['openclaw_provider_models'],
+                 oc_llm_provider=oc_t['llm_provider'], oc_llm_api_key='k',
+                 oc_websearch_api_key='k', oc_gateway_token='tok', oc_telegram_bot_token='')
+    _compose_base = dict(oc=oc_t, openclaw_image=gv_all['openclaw_image'],
+                         openclaw_image_version=gv_all['openclaw_image_version'],
+                         docker_network='traefik-network', oc_gateway_token='tok',
+                         oc_telegram_bot_token='', openclaw_data_root='/srv/openclaw')
+
+    def _env():
+        e = jinja2.Environment(trim_blocks=True, lstrip_blocks=True, keep_trailing_newline=True)
+        e.filters['bool'] = _bool_filter
+        e.globals['lookup'] = fake_lookup
+        return e
+
+    # mit Dummy-Secrets
+    dg = json.loads(_env().from_string(SRC).render(**_base, **_gdrive_dummy))
+    srv = dg['mcp']['servers']['gdrive']
+    assert srv.get('enabled') is True, "gdrive nicht enabled trotz gesetzter Credentials"
+    assert set(srv.get('env', {}).keys()) == {'GOOGLE_DRIVE_MCP_SCOPES', 'GOOGLE_DRIVE_MCP_TOKEN_PATH'}, \
+        f"gdrive env nicht minimal (nur Pfad/Scope): {sorted(srv.get('env', {}))}"
+    assert srv['env']['GOOGLE_DRIVE_MCP_TOKEN_PATH'] == TOKEN_PATH, "TOKEN_PATH falsch"
+    blob = json.dumps(dg)
+    for v in _gdrive_dummy.values():
+        assert v not in blob, "sensible Dummy-Werte in openclaw.json-Render (Token-Hygiene verletzt)"
+
+    comp = _env().from_string(COMPOSE).render(**_compose_base, **_gdrive_dummy)
+    for leaked in ('GDRIVE_CLIENT_ID', 'GDRIVE_CLIENT_SECRET', 'GDRIVE_REFRESH_TOKEN', 'GDRIVE_ACCESS_TOKEN'):
+        assert leaked not in comp, f"{leaked} leakt im Compose-Render (Env-Passthrough nicht entfernt)"
+    assert comp.count('/home/node/.config/google-drive-mcp/') == 2, \
+        "gdrive-Credential-Mounts fehlen/unvollstaendig im Compose-Render"
+    assert './gdrive/tokens.json' in comp and ':ro' in comp, "Mount nicht read-only/relativ"
+
+    # ohne Secrets -> disabled, keine Mounts
+    comp_off = _env().from_string(COMPOSE).render(**_compose_base)
+    assert '/home/node/.config/google-drive-mcp/' not in comp_off, "Mount trotz fehlender Secrets"
+    assert 'GDRIVE_' not in comp_off, "GDRIVE-Env trotz fehlender Secrets"
+except Exception as ex:
+    failures.append(f"gdrive-file-based: {ex}")
+
 # Golden-File-Renderdiff (Design 01 Kap. 4.4 Worst-Case 3, DoD Issue #63): OC1-Render
 # (kanonische JSON-Form) muss identisch zum committeten Referenz-Render bleiben – fängt
 # semantische Template-Regressionen. OC1 ist seit 2026-08-01 aktiver Benchmark-Arm
