@@ -6,7 +6,16 @@
 {% set orch_tool_scope = oc.orchestrator_tool_scope | default('', true) %}
 {% set subagent_tools = oc.subagent_tools | default([], true) %}
 {% set agent_thinking = oc.agent_thinking | default({}, true) %}
-{# Google-Drive-MCP (Issue #171): enabled nur wenn ALLE 4 Secrets gesetzt sind (ein dediziertes Konto). #}
+{# Google-Drive-MCP (Issue #171): enabled nur wenn ALLE 4 Secrets gesetzt sind (ein dediziertes Konto).
+   Token-Hygiene (2026-10-05): KEINE Secret-Literale mehr in openclaw.json -> nur noch
+   Env-Substitution ${GDRIVE_*}. Werte kommen zur Laufzeit aus der Container-Umgebung
+   (docker-compose.yml.j2 Env-Passthrough aus der GH-Secret-Kette); Aufloesung beim
+   Gateway-Config-Load, bevor der MCP-Server startet (docs/gateway/config-secrets-env.md).
+   Das Google-Konto ist AUSSCHLIESSLICH fuer die OC-Instanzen (dev+prod, oc1-3) gedacht;
+   bewusst EIN gemeinsamer Secret-Satz, keine Rotation und keine pro-Instanz-Isolation. #}
+{# Env-Substitution ${VAR} ist strikt: fehlt die Var zur Laufzeit, schlaegt der Config-Load fehl
+   (MissingEnvVarError). Deshalb rendert _gdrive_ready=true NUR, wenn der Container die Werte auch
+   wirklich bekommt (identisches Gate in docker-compose.yml.j2). #}
 {% set _gdrive_ready = (openclaw_gdrive_client_id | default('', true) | length > 0)
                        and (openclaw_gdrive_client_secret | default('', true) | length > 0)
                        and (openclaw_gdrive_refresh_token | default('', true) | length > 0)
@@ -156,10 +165,10 @@
         "command": "google-drive-mcp",
         "transport": "stdio",
         "env": {
-          "GOOGLE_DRIVE_MCP_ACCESS_TOKEN": "{{ openclaw_gdrive_access_token }}",
-          "GOOGLE_DRIVE_MCP_REFRESH_TOKEN": "{{ openclaw_gdrive_refresh_token }}",
-          "GOOGLE_DRIVE_MCP_CLIENT_ID": "{{ openclaw_gdrive_client_id }}",
-          "GOOGLE_DRIVE_MCP_CLIENT_SECRET": "{{ openclaw_gdrive_client_secret }}",
+          "GOOGLE_DRIVE_MCP_ACCESS_TOKEN": "${GDRIVE_ACCESS_TOKEN}",
+          "GOOGLE_DRIVE_MCP_REFRESH_TOKEN": "${GDRIVE_REFRESH_TOKEN}",
+          "GOOGLE_DRIVE_MCP_CLIENT_ID": "${GDRIVE_CLIENT_ID}",
+          "GOOGLE_DRIVE_MCP_CLIENT_SECRET": "${GDRIVE_CLIENT_SECRET}",
           "GOOGLE_DRIVE_MCP_SCOPES": "drive"
         }
 {% else %}

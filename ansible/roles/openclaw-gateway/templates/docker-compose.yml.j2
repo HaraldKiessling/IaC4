@@ -1,3 +1,12 @@
+{# Google-Drive-MCP (Token-Hygiene 2026-10-05): openclaw.json referenziert nur noch
+   ${GDRIVE_*}; die Werte werden hier als Container-Env bereitgestellt, damit die
+   Env-Substitution beim Gateway-Config-Load greift. Gate identisch zu openclaw.json.j2
+   (_gdrive_ready): ohne Werte -> kein Env und dort enabled:false (kein MissingEnvVarError).
+   Quelle bleibt ausschliesslich die GH-Secret-Kette (Workflow 04 -> lookup('env')). #}
+{% set _gdrive_ready = (openclaw_gdrive_client_id | default('', true) | length > 0)
+                       and (openclaw_gdrive_client_secret | default('', true) | length > 0)
+                       and (openclaw_gdrive_refresh_token | default('', true) | length > 0)
+                       and (openclaw_gdrive_access_token | default('', true) | length > 0) %}
 # OpenClaw-Gateway {{ oc.name }} (ADR-025 revidiert) – gepinnt, localhost-only, traefik-network
 services:
   openclaw:
@@ -20,6 +29,13 @@ services:
 {% endif %}
 {% if oc_bitwarden_clientscurect | default('') | length > 0 %}
       BITWARDEN_CLIENTSECRET: "{{ oc_bitwarden_clientscurect }}"
+{% endif %}
+{# Google-Drive-MCP: Ref-Ziel fuer openclaw.json ${GDRIVE_*}; ein gemeinsames Konto nur fuer OCs. #}
+{% if _gdrive_ready %}
+      GDRIVE_CLIENT_ID: "{{ openclaw_gdrive_client_id }}"
+      GDRIVE_CLIENT_SECRET: "{{ openclaw_gdrive_client_secret }}"
+      GDRIVE_REFRESH_TOKEN: "{{ openclaw_gdrive_refresh_token }}"
+      GDRIVE_ACCESS_TOKEN: "{{ openclaw_gdrive_access_token }}"
 {% endif %}
       OPENCLAW_WORKSPACE_DIR: "/home/node/.openclaw/workspace"
       PATH: "/home/node/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
