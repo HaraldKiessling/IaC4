@@ -1,0 +1,334 @@
+---
+# Einzelne OpenClaw-Instanz (oc = loop_var)
+
+- name: "{{ oc.name }}: Verzeichnisse anlegen (uid 1000 = node-User im Image, Reviewer B3)"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: '1000'
+    group: '1000'
+  loop:
+    - "{{ openclaw_data_root }}/{{ oc.name }}"
+    - "{{ openclaw_data_root }}/{{ oc.name }}/config"
+    - "{{ openclaw_data_root }}/{{ oc.name }}/workspace"
+
+- name: "{{ oc.name }}: Secrets aus env aufloesen (set_fact, fuer Jinja-Conditionals)"
+  ansible.builtin.set_fact:
+    oc_llm_provider: "{{ oc.llm_provider | default('deepseek', true) }}"
+    oc_llm_api_key: "{{ lookup('env', openclaw_provider_envs[oc.llm_provider | default('deepseek', true)]) | default('', true) }}"
+    oc_websearch_api_key: "{{ lookup('env', oc.websearch_api_key_env) | default('', true) }}"
+    oc_gateway_token: "{{ lookup('env', oc.gateway_token_env) | default('', true) }}"
+    oc_telegram_bot_token: "{{ lookup('env', oc.telegram_bot_token_env) | default('', true) }}"
+    oc_gh_token: "{{ lookup('env', oc.gh_token_env) | default('', true) }}"
+    oc_bitwarden_clientscurect: "{{ lookup('env', oc.bitwarden_clientscurect_env) | default('', true) }}"
+    # Gate-Doku (Review-Minor a, 2026-10-05): GDRIVE_ACCESS_TOKEN ist operativ REDUNDANT – der
+    # Refresh-Token traegt (der MCP erneuert Access-Tokens selbst aus tokens.json). Das Gate
+    # verlangt trotzdem alle 4 Werte und bleibt bewusst konsistent mit openclaw.json.j2 /
+    # docker-compose.yml.j2 (identisches _gdrive_ready), damit sich der Deploy-Zustand nicht
+    # zwischen den drei Stellen unterscheidet. Nur dokumentiert, kein Gate-Change.
+    oc_gdrive_ready: >-
+      {{ (openclaw_gdrive_client_id | default('', true) | length > 0)
+         and (openclaw_gdrive_client_secret | default('', true) | length > 0)
+         and (openclaw_gdrive_refresh_token | default('', true) | length > 0)
+         and (openclaw_gdrive_access_token | default('', true) | length > 0) }}
+
+- name: "{{ oc.name }}: Assert – API-Key des aktiven Providers ({{ oc_llm_provider }}) gesetzt"
+  ansible.builtin.assert:
+    that:
+      - oc_llm_api_key | length > 0
+    fail_msg: >-
+      API-Key für aktiven Provider '{{ oc_llm_provider }}' von {{ oc.name }} fehlt
+      (Secret {{ openclaw_provider_envs[oc_llm_provider] }} nicht gesetzt). Weitere Provider optional –
+      nur gesetzte Keys werden konfiguriert; später im Betrieb: docker exec openclaw-{{ oc.name }} openclaw config set providers.<name>.apiKey <key>
+
+- name: "{{ oc.name }}: Assert – Gateway-Token gesetzt (Auth deterministisch, arc42/07)"
+  ansible.builtin.assert:
+    that:
+      - oc_gateway_token | length > 0
+    fail_msg: >-
+      Gateway-Token für {{ oc.name }} fehlt (Secret {{ oc.gateway_token_env }} nicht gesetzt).
+      Auth-Zustand wäre sonst unbestimmt (K3-1) – Token zwingend, da Gateway nur via Tailnet erreichbar sein soll.
+
+- name: "{{ oc.name }}: BOOTSTRAP.md entfernen (Benchmark-Vergleich, skip_bootstrap)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/BOOTSTRAP.md"
+    state: absent
+  when: skip_bootstrap | default(false) | bool
+- name: "{{ oc.name }}: CLEAN – Container stoppen (alter Prozess darf nicht in geloeschte Pfade schreiben)"
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ openclaw_data_root }}/{{ oc.name }}/docker-compose.yml stop openclaw"
+  when: openclaw_clean | default(false) | bool
+  register: _oc_clean_stop
+  changed_when: false   # F3 (Review): kein Konsument, nur kosmetisch – vermeidet irrelevante changed-Counts
+  failed_when: false
+
+- name: "{{ oc.name }}: CLEAN – Session-Store/QMD-Index/Agent-Dirs entfernen (openclaw_clean)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/config/agents"
+    state: absent
+  when: openclaw_clean | default(false) | bool
+  register: _oc_clean_agents
+
+# credentials/ bewusst NICHT geloescht (Review M2): IaC4 nutzt statische API-Keys via ENV/Template-Render,
+# kein OAuth/QR-Auth – nach Clean rendert das Template die Keys frisch in openclaw.json (SSoT).
+- name: "{{ oc.name }}: CLEAN – Runtime-State entfernen (openclaw.sqlite, TaskFlow/Plugin-State – Review M2)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/config/state"
+    state: absent
+  when: openclaw_clean | default(false) | bool
+  register: _oc_clean_state
+
+- name: "{{ oc.name }}: CLEAN – Workspace leeren (Bootstrap wird beim Start neu erzeugt)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace"
+    state: absent
+  when: openclaw_clean | default(false) | bool
+  register: _oc_clean_ws
+
+- name: "{{ oc.name }}: CLEAN – config/workspace neu anlegen (uid 1000)"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: '1000'
+    group: '1000'
+  loop:
+    - "{{ openclaw_data_root }}/{{ oc.name }}/config"
+    - "{{ openclaw_data_root }}/{{ oc.name }}/workspace"
+  when: openclaw_clean | default(false) | bool
+
+
+- name: "{{ oc.name }}: Design 06 – Agent-Workspaces anlegen (feature: agent_workspaces)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ agent_id }}"
+    state: directory
+    mode: '0755'
+    owner: '1000'
+    group: '1000'
+  loop: "{{ oc.agents }}"
+  loop_control:
+    loop_var: a
+  vars:
+    agent_id: "{{ a | lower | replace(' ', '-') }}"
+  when: oc.agent_workspaces | default(false) | bool and oc.agents | length > 0
+
+- name: "{{ oc.name }}: Design 06 – Rollen-AGENTS.md je Agent deployen (nach Clean!)"
+  ansible.builtin.copy:
+    src: "agent-workspaces/{{ agent_id }}/AGENTS.md"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ '/AGENTS.md' if agent_id == 'orchestrator' else '/' + agent_id + '/AGENTS.md' }}"
+    mode: '0644'
+    owner: '1000'
+    group: '1000'
+  loop: "{{ oc.agents }}"
+  loop_control:
+    loop_var: a
+  vars:
+    agent_id: "{{ a | lower | replace(' ', '-') }}"
+  when: oc.agent_workspaces | default(false) | bool and oc.agents | length > 0
+
+- name: "{{ oc.name }}: GH-Read-Token als Datei im Workspace ablegen (Agent-lesbar, 0600)"
+  ansible.builtin.copy:
+    content: "{{ oc_gh_token }}"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/.gh-read-token"
+    mode: '0600'
+    owner: '1000'
+    group: '1000'
+  when: oc_gh_token | length > 0
+
+- name: "{{ oc.name }}: GH-Token-Datei entfernen (kein Secret gesetzt – optional)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/.gh-read-token"
+    state: absent
+  when: oc_gh_token | length == 0
+
+- name: "{{ oc.name }}: Design 06 – memory/-Verzeichnis anlegen (Copy-Ziel, nur wenn Seed aktiv K4-2)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/memory"
+    state: directory
+    mode: '0755'
+    owner: '1000'
+    group: '1000'
+  when: oc.memory_seed | default(openclaw_memory_seed) | default(false, true)
+
+- name: "{{ oc.name }}: Design 06 – MEMORY.md + memory/ ins Root-Workspace deployen (nur Seed-Aktiv, K4-2)"
+  ansible.builtin.copy:
+    src: "agent-workspaces/orchestrator/{{ item.src }}"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/workspace/{{ item.dest }}"
+    mode: '0644'
+    owner: '1000'
+    group: '1000'
+  loop:
+    - {src: 'MEMORY.md', dest: 'MEMORY.md'}
+    - {src: 'memory/2026-08-03.md', dest: 'memory/2026-08-03.md'}
+  when: oc.memory_seed | default(openclaw_memory_seed) | default(false, true)
+
+- name: "{{ oc.name }}: Google-Drive-MCP – gdrive-Verzeichnis anlegen (file-based Credentials, uid 1000)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/gdrive"
+    state: directory
+    mode: '0700'
+    owner: '1000'
+    group: '1000'
+  when: oc_gdrive_ready | bool
+
+# Review-Minor b (2026-10-05): tokens.json wird read-only in den Container gemountet. Der MCP
+# versucht beim Token-Refresh zurueckzuschreiben und loggt dann erwartbar 'Failed to persist
+# refreshed tokens' (ro-Mount). Das ist ERWARTET und kein Fehler – der Refresh wirkt im Speicher,
+# der Mount bleibt unveraendert. Bewusst keine rw-Freigabe (Token-Hygiene, Owner-Entscheid 'A').
+- name: "{{ oc.name }}: Google-Drive-MCP – tokens.json rendern (v2-Schema, 0600, no_log)"
+  ansible.builtin.template:
+    src: gdrive/tokens.json.j2
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/gdrive/tokens.json"
+    mode: '0600'
+    owner: '1000'
+    group: '1000'
+  no_log: true
+  when: oc_gdrive_ready | bool
+
+- name: "{{ oc.name }}: Google-Drive-MCP – gcp-oauth.keys.json rendern (OAuth-Client-Credentials, 0600, no_log)"
+  ansible.builtin.template:
+    src: gdrive/gcp-oauth.keys.json.j2
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/gdrive/gcp-oauth.keys.json"
+    mode: '0600'
+    owner: '1000'
+    group: '1000'
+  no_log: true
+  when: oc_gdrive_ready | bool
+
+- name: "{{ oc.name }}: Google-Drive-MCP – gdrive-Credentials entfernen (keine Secrets gesetzt)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/gdrive"
+    state: absent
+  when: not (oc_gdrive_ready | bool)
+
+- name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
+
+  ansible.builtin.template:
+    src: openclaw.json.j2
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/config/openclaw.json"
+    mode: '0600'
+    owner: '1000'
+    group: '1000'
+  register: _oc_cfg
+
+- name: "{{ oc.name }}: docker-compose.yml deployen (gepinnt, ADR-017)"
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/docker-compose.yml"
+    mode: '0600'   # enthält OPENCLAW_GATEWAY_TOKEN-ENV – nicht weltlesbar (Reviewer 2. Runde)
+
+- name: "{{ oc.name }}: Container starten"
+  community.docker.docker_compose_v2:
+    project_src: "{{ openclaw_data_root }}/{{ oc.name }}"
+    state: present
+    pull: always
+
+# F5 (Review): Nach Clean ist der Container durch "Container starten" bereits frisch; dieser
+# Restart ist Safety-Net fuer den Fall, dass der Stop still fehlschlug (alter Prozess haelt sonst
+# geloeschte Inodes offen) – bewusst beibehalten, nur 1. Clean-Run feuert ihn via *_clean*.changed.
+- name: "{{ oc.name }}: Container neu starten (Config geaendert oder CLEAN – frischer Prozess)"
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ openclaw_data_root }}/{{ oc.name }}/docker-compose.yml restart openclaw"
+  when: _oc_cfg.changed or (_oc_clean_agents.changed | default(false)) or (_oc_clean_ws.changed | default(false)) or (_oc_clean_state.changed | default(false))
+  changed_when: true
+
+# Stabilisierungs-Wartezeit VOR Install/Health (Härtung 2026-10-05): Beim Recreate startete der
+# Container nach dem Restart transient neu -> die alten 12x5s reichten knapp nicht. wait_for
+# wartet auf den offenen Host-Port (127.0.0.1-Bind, ADR-025) und puffert den Start ab; der
+# Health-Check bleibt der massgebliche Gate (hier bewusst failed_when:false, nur Stabilisierung).
+- name: "{{ oc.name }}: Container-Port stabilisieren (transiente Restarts abwarten)"
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ oc.port }}"
+    delay: 10
+    timeout: 90
+  register: _oc_port_wait
+  failed_when: false
+
+# Reihenfolge-Härtung (Härtung 2026-10-05): QMD + Google-Drive-MCP werden VOR dem Health-Gate
+# installiert/verifiziert. Vorher lagen sie dahinter – brach der Health-Check ab, lief der Deploy
+# nie bis zu den Installationen und die Instanz hatte keine Binaries. Jetzt: Start/Recreate ->
+# Install/Verify -> Health. Idempotent (command -v ... || install), 2. Lauf = 1. Lauf.
+- name: "{{ oc.name }}: QMD im Container installieren (User-npm, Version gepinnt K3-2)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: /bin/sh -lc "command -v qmd >/dev/null 2>&1 || (mkdir -p ~/.local/bin ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g @tobilu/qmd@{{ openclaw_qmd_version }} && ln -sf ~/.npm-global/bin/qmd ~/.local/bin/qmd)"
+  register: _oc_qmd
+  changed_when: _oc_qmd.stdout | default('') | length > 0
+  failed_when: _oc_qmd.rc != 0
+
+- name: "{{ oc.name }}: QMD-Version verifizieren (erwartet {{ openclaw_qmd_version }})"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: /bin/sh -lc "export PATH=$HOME/.local/bin:$PATH; qmd --version | grep -q '{{ openclaw_qmd_version }}'"
+  register: _oc_qmd_ver
+  changed_when: false
+  failed_when: _oc_qmd_ver.rc != 0
+
+- name: "{{ oc.name }}: Google-Drive-MCP im Container installieren (User-npm, Version gepinnt Issue #171)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: /bin/sh -lc "command -v google-drive-mcp >/dev/null 2>&1 || (mkdir -p ~/.local/bin ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g @piotr-agier/google-drive-mcp@{{ openclaw_gdrive_mcp_version }} && ln -sf ~/.npm-global/bin/google-drive-mcp ~/.local/bin/google-drive-mcp)"
+  register: _oc_gdrive_install
+  changed_when: _oc_gdrive_install.stdout | default('') | length > 0
+  failed_when: _oc_gdrive_install.rc != 0
+
+- name: "{{ oc.name }}: Google-Drive-MCP-Version verifizieren (erwartet {{ openclaw_gdrive_mcp_version }})"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: /bin/sh -lc "export PATH=$HOME/.local/bin:$PATH; google-drive-mcp --version | grep -q '{{ openclaw_gdrive_mcp_version }}'"
+  register: _oc_gdrive_ver
+  changed_when: false
+  failed_when: _oc_gdrive_ver.rc != 0
+
+# Health-Gate NACH Install/Verify (s.o.). Retry-Budget 24x5s (~120s) zzgl. 10s Vorlauf aus
+# wait_for: deckt den transienten Container-Restart beim Recreate ab (Runs 37282760139 /
+# 37290260456: 12x5s = 60s zu knapp). Ein Fehlschlag faellt in den rescue des Wrappers
+# (instance.yml) -> Folge-Instanzen laufen weiter, Aggregat-Assert in main.yml failt den Run.
+- name: "{{ oc.name }}: Auf Health warten (localhost:{{ oc.port }}/health)"
+  block:
+    - name: "{{ oc.name }}: Health-Check (localhost:{{ oc.port }}/health, retries 24 x 5s)"
+      ansible.builtin.uri:
+        url: "http://localhost:{{ oc.port }}/health"
+        status_code: 200
+      register: _oc_health
+      until: _oc_health.status == 200
+      retries: 24
+      delay: 5
+  rescue:
+    - name: "{{ oc.name }}: DIAGNOSE - docker ps -a"
+      ansible.builtin.command: docker ps -a
+      register: _oc_diag_ps
+      changed_when: false
+      failed_when: false
+    - name: "{{ oc.name }}: DIAGNOSE - docker logs openclaw-{{ oc.name }} (letzte 120)"
+      ansible.builtin.command: docker logs openclaw-{{ oc.name }} --tail 120 2>&1
+      register: _oc_diag_logs
+      changed_when: false
+      failed_when: false
+    - name: "{{ oc.name }}: DIAGNOSE - docker ps Ausgabe"
+      ansible.builtin.debug:
+        var: _oc_diag_ps.stdout_lines
+    - name: "{{ oc.name }}: DIAGNOSE - docker logs Ausgabe"
+      ansible.builtin.debug:
+        var: _oc_diag_logs.stdout_lines
+    - name: "{{ oc.name }}: Health fehlgeschlagen (Diagnose oben)"
+      ansible.builtin.fail:
+        msg: "Health-Check {{ oc.name }} (Port {{ oc.port }}) fehlgeschlagen - Diagnose (docker ps / docker logs) siehe oben."
+
+- name: "{{ oc.name }}: Tailscale Serve-Status (Idempotenz)"
+  ansible.builtin.shell: tailscale serve status
+  register: _serve_status
+  changed_when: false
+  failed_when: false
+
+- name: "{{ oc.name }}: Tailscale Serve aktivieren (HTTPS {{ oc.port }} → localhost:{{ oc.port }})"
+  ansible.builtin.command: tailscale serve --bg --https={{ oc.port }} http://localhost:{{ oc.port }}
+  when: "'localhost:{{ oc.port }}' not in _serve_status.stdout and '127.0.0.1:{{ oc.port }}' not in _serve_status.stdout"
+  register: _serve_set
+  changed_when: _serve_set.rc == 0

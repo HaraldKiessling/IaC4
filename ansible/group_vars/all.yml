@@ -70,6 +70,11 @@ openclaw_qmd_version: "2.5.3"              # Pin (K3-2, PR #83): QMD-Sidecar im 
 openclaw_gdrive_mcp_version: "2.12.0"      # Pin (ADR-017); Update = Variable + Deploy
 openclaw_gdrive_client_id: "{{ lookup('env', 'GDRIVE_CLIENT_ID') | default('', true) }}"
 openclaw_gdrive_client_secret: "{{ lookup('env', 'GDRIVE_CLIENT_SECRET') | default('', true) }}"
+# Annahme (Review-Minor c, 2026-10-05): Der Refresh-Token traegt den VOLLEN 'drive'-Scope (der
+# MCP setzt GOOGLE_DRIVE_MCP_SCOPES=drive). Wird der Scope am Google-Konto eingeschraenkt, schlaegt
+# der Refresh mit insufficient_scope fehl – dann Secret neu erzeugen. Kein Code-Gate, nur Annahme.
+# Minor a: GDRIVE_ACCESS_TOKEN ist operativ REDUNDANT (Refresh traegt), bleibt aber im Gate, damit
+# ansible/openclaw.json.j2/docker-compose.yml.j2 dasselbe _gdrive_ready haben (nur dokumentiert).
 openclaw_gdrive_refresh_token: "{{ lookup('env', 'GDRIVE_REFRESH_TOKEN') | default('', true) }}"
 openclaw_gdrive_access_token: "{{ lookup('env', 'GDRIVE_ACCESS_TOKEN') | default('', true) }}"
 # Memory-Seed-Gate (Design 06 K4-2, PR #83-Fix): DEV-Benchmark-Wissen (MEMORY.md + memory/)
