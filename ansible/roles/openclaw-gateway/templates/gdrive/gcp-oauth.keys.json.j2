@@ -1,0 +1,15 @@
+{# OAuth-Client-Credentials fuer den lokalen OAuth-Modus des Google-Drive-MCP.
+   Schema-Quelle: npm-Paket @piotr-agier/google-drive-mcp 2.12.0, dist/index.js
+   (parseCredentialsFile/getKeysFilePaths): "installed" (Desktop-App) mit
+   client_id/client_secret/redirect_uris; loopback-Redirect 127.0.0.1:3000.
+   Lookup-Reihenfolge (src/auth/client.ts): GOOGLE_DRIVE_OAUTH_CREDENTIALS, dann
+   $XDG_CONFIG_HOME/google-drive-mcp/gcp-oauth.keys.json (= hier gemounteter Pfad),
+   dann Projekt-Root. Wird nur gerendert, wenn ALLE GDRIVE_*-Secrets gesetzt sind.
+   Keine Secret-Werte im Repo; Quelle bleibt die GH-Secret-Kette (Workflow 04). #}
+{
+  "installed": {
+    "client_id": {{ openclaw_gdrive_client_id | tojson }},
+    "client_secret": {{ openclaw_gdrive_client_secret | tojson }},
+    "redirect_uris": ["http://127.0.0.1:3000/oauth2callback"]
+  }
+}

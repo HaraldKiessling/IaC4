@@ -1,3 +1,13 @@
+{# Google-Drive-MCP (Token-Hygiene 2026-10-05, Owner-Entscheid 'A'): openclaw.json referenziert
+   KEINE Credentials mehr; der stdio-MCP liest die Token-Datei ueber GOOGLE_DRIVE_MCP_TOKEN_PATH.
+   Ansible rendert gdrive/tokens.json + gdrive/gcp-oauth.keys.json (instance.yml) aus der
+   GH-Secret-Kette; hier werden sie read-only in den Container gemountet.
+   Gate identisch zu openclaw.json.j2 (_gdrive_ready): ohne Werte -> kein Mount und dort
+   enabled:false (kein Start-/Config-Load-Fehler). #}
+{% set _gdrive_ready = (openclaw_gdrive_client_id | default('', true) | length > 0)
+                       and (openclaw_gdrive_client_secret | default('', true) | length > 0)
+                       and (openclaw_gdrive_refresh_token | default('', true) | length > 0)
+                       and (openclaw_gdrive_access_token | default('', true) | length > 0) %}
 # OpenClaw-Gateway {{ oc.name }} (ADR-025 revidiert) – gepinnt, localhost-only, traefik-network
 services:
   openclaw:
@@ -21,6 +31,8 @@ services:
 {% if oc_bitwarden_clientscurect | default('') | length > 0 %}
       BITWARDEN_CLIENTSECRET: "{{ oc_bitwarden_clientscurect }}"
 {% endif %}
+{# Google-Drive-MCP: Credentials werden NICHT als Container-Env ausgerollt (Token-Hygiene);
+   die Dateien werden unten read-only gemountet und ueber GOOGLE_DRIVE_MCP_TOKEN_PATH gelesen. #}
       OPENCLAW_WORKSPACE_DIR: "/home/node/.openclaw/workspace"
       PATH: "/home/node/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 {% if oc_telegram_bot_token | default('') | length > 0 %}
@@ -29,6 +41,11 @@ services:
     volumes:
       - ./config:/home/node/.openclaw
       - ./workspace:/home/node/.openclaw/workspace
+{% if _gdrive_ready %}
+      # Google-Drive-MCP: read-only Credential-Mounts (ein gemeinsames Konto nur fuer OCs).
+      - ./gdrive/tokens.json:/home/node/.config/google-drive-mcp/tokens.json:ro
+      - ./gdrive/gcp-oauth.keys.json:/home/node/.config/google-drive-mcp/gcp-oauth.keys.json:ro
+{% endif %}
     networks:
       - {{ docker_network }}
 

@@ -55,7 +55,18 @@ openclaw_image_version: "2026.9.6"          # Pin (ADR-017); Update = Variable +
 openclaw_qmd_version: "2.5.3"              # Pin (K3-2, PR #83): QMD-Sidecar im Container; Pilot-verifiziert 2026-08-03
 # Google-Drive-MCP (Issue #171, S3): read-write Drive-Tool als stdio-Server je Instanz.
 # EIN dediziertes Google-Konto -> EIN gemeinsamer Secret-Satz fuer alle 6 Instanzen (dev+prod, oc1/oc2/oc3).
-# Secrets werden in den GH-Workflow-env injiziert (Workflow 04); hier nur via lookup('env') -> Literal in openclaw.json (0600).
+# Das Konto ist AUSSCHLIESSLICH fuer die OC-Instanzen gedacht; bewusst KEINE Rotation und
+# KEINE pro-Instanz-Schluessel/Isolation (Owner-Weisung 2026-10-05).
+# Token-Hygiene (2026-10-05, Owner-Entscheid 'A'): Werte werden NICHT mehr in openclaw.json
+# gerendert (auch nicht als ${env}-Ref). Ansible rendert sie file-based auf den Host
+# (instance.yml -> <data_root>/<instance>/gdrive/tokens.json + gcp-oauth.keys.json, 0600,
+# no_log); docker-compose.yml.j2 mountet die Dateien read-only in den Container, und der
+# stdio-MCP liest sie ueber GOOGLE_DRIVE_MCP_TOKEN_PATH (Key endet auf _PATH -> keine
+# 'literal sensitive value'-Warnung im doctor). Quelle bleibt die GH-Secret-Kette
+# (Workflow 04); hier nur via lookup('env') aufgeloest.
+# Schema belegt aus npm-Paket @piotr-agier/google-drive-mcp 2.12.0 (docs/authentication.md,
+# docs/configuration.md, dist/index.js): v2-Token-Store {version:2,accounts:{...}} plus
+# OAuth-Client-Credentials in gcp-oauth.keys.json (die Token-Datei enthaelt KEINE client_id/secret).
 openclaw_gdrive_mcp_version: "2.12.0"      # Pin (ADR-017); Update = Variable + Deploy
 openclaw_gdrive_client_id: "{{ lookup('env', 'GDRIVE_CLIENT_ID') | default('', true) }}"
 openclaw_gdrive_client_secret: "{{ lookup('env', 'GDRIVE_CLIENT_SECRET') | default('', true) }}"

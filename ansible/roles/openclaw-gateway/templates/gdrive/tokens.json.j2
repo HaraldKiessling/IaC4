@@ -1,0 +1,30 @@
+{# Google-Drive-MCP Token-Store (file-based, Token-Hygiene 2026-10-05).
+   Schema-Quelle: npm-Paket @piotr-agier/google-drive-mcp 2.12.0,
+   docs/authentication.md ("Token file format (v2)") + dist/index.js (AccountStore):
+   { "version": 2, "defaultAccount": <alias>, "accounts": { <alias>: <record> } }
+   Record-Felder sind camelCase: accessToken/refreshToken/scope/tokenType/expiryDate.
+   Die Token-Datei enthaelt BEWUSST keine client_id/client_secret – diese kommen aus
+   gcp-oauth.keys.json (siehe gdrive/gcp-oauth.keys.json.j2).
+   expiryDate=1 (1970, truthy) erzwingt beim ersten getClient einen Refresh ueber
+   refresh_token + Client-Credentials -> gueltiges Access-Token, auch wenn das
+   kurzlebige GH-Secret GDRIVE_ACCESS_TOKEN beim Deploy bereits abgelaufen ist.
+   Deterministische Zeitstempel -> idempotentes Rendern (2. Lauf = 1. Lauf). #}
+{
+  "version": 2,
+  "defaultAccount": "default",
+  "accounts": {
+    "default": {
+      "alias": "default",
+      "email": "unknown",
+      "sub": "pending:default",
+      "accessToken": {{ openclaw_gdrive_access_token | tojson }},
+      "refreshToken": {{ openclaw_gdrive_refresh_token | tojson }},
+      "scope": "https://www.googleapis.com/auth/drive",
+      "tokenType": "Bearer",
+      "expiryDate": 1,
+      "addedAt": "1970-01-01T00:00:00.000Z",
+      "lastRefreshedAt": "1970-01-01T00:00:00.000Z",
+      "pendingIdentity": true
+    }
+  }
+}

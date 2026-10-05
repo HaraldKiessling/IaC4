@@ -6,7 +6,17 @@
 {% set orch_tool_scope = oc.orchestrator_tool_scope | default('', true) %}
 {% set subagent_tools = oc.subagent_tools | default([], true) %}
 {% set agent_thinking = oc.agent_thinking | default({}, true) %}
-{# Google-Drive-MCP (Issue #171): enabled nur wenn ALLE 4 Secrets gesetzt sind (ein dediziertes Konto). #}
+{# Google-Drive-MCP (Issue #171): enabled nur wenn ALLE 4 Secrets gesetzt sind (ein dediziertes Konto).
+   Token-Hygiene (2026-10-05, Owner-Entscheid 'A'): KEINE Credentials mehr in openclaw.json –
+   weder Literale noch ${env}-Refs. Der stdio-MCP liest die Token-Datei stattdessen ueber
+   GOOGLE_DRIVE_MCP_TOKEN_PATH; der Env-Key endet auf _PATH (kein sensibler Wert -> keine
+   'literal sensitive value'-Warnung im doctor). Die Wertquelle bleibt die GH-Secret-Kette
+   (Workflow 04): Ansible rendert daraus gdrive/tokens.json + gdrive/gcp-oauth.keys.json auf den
+   Host (instance.yml), docker-compose.yml.j2 mountet sie read-only in den Container.
+   Das Google-Konto ist AUSSCHLIESSLICH fuer die OC-Instanzen (dev+prod, oc1-3) gedacht;
+   bewusst EIN gemeinsamer Secret-Satz, keine Rotation und keine pro-Instanz-Isolation. #}
+{# Gate: ohne die 4 Secrets -> enabled:false, kein Mount (identisches Gate in
+   docker-compose.yml.j2 und instance.yml). #}
 {% set _gdrive_ready = (openclaw_gdrive_client_id | default('', true) | length > 0)
                        and (openclaw_gdrive_client_secret | default('', true) | length > 0)
                        and (openclaw_gdrive_refresh_token | default('', true) | length > 0)
@@ -156,11 +166,8 @@
         "command": "google-drive-mcp",
         "transport": "stdio",
         "env": {
-          "GOOGLE_DRIVE_MCP_ACCESS_TOKEN": "{{ openclaw_gdrive_access_token }}",
-          "GOOGLE_DRIVE_MCP_REFRESH_TOKEN": "{{ openclaw_gdrive_refresh_token }}",
-          "GOOGLE_DRIVE_MCP_CLIENT_ID": "{{ openclaw_gdrive_client_id }}",
-          "GOOGLE_DRIVE_MCP_CLIENT_SECRET": "{{ openclaw_gdrive_client_secret }}",
-          "GOOGLE_DRIVE_MCP_SCOPES": "drive"
+          "GOOGLE_DRIVE_MCP_SCOPES": "drive",
+          "GOOGLE_DRIVE_MCP_TOKEN_PATH": "/home/node/.config/google-drive-mcp/tokens.json"
         }
 {% else %}
         "enabled": false
