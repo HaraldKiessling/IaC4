@@ -19,7 +19,14 @@ Geprueft wird (offline, nur stdlib, keine Secrets):
      Pin-Bump muss explizit freigegeben werden: PIN_DRIFT_ALLOW_UPGRADE=1
      erlaubt ein Upgrade und blockt dann nur noch Downgrades.
 
-Exit != 0 bei Downgrade, interner Inkonsistenz oder (Default) Abweichung.
+Fail-closed: ist die Baseline in CI nicht aufloesbar (z. B. origin/main nicht
+gefetcht), schlaegt das Gate hart fehl (exit != 0) -> kein stilles Gruen im
+Downgrade-Fall. Nur lokal wird dieser Fall als Warnung toleriert;
+PIN_DRIFT_STRICT=1 erzwingt auch lokal den Fehler. CI-Erkennung ueber
+CI=true bzw. GITHUB_ACTIONS=true.
+
+Exit != 0 bei Downgrade, interner Inkonsistenz, nicht aufloesbarer Baseline
+(CI oder PIN_DRIFT_STRICT=1) oder (Default) Abweichung.
 """
 import os
 import re
@@ -62,6 +69,14 @@ def git_show(ref, rel):
 def parse(version):
     nums = re.findall(r"[0-9]+", version or "")
     return tuple(int(n) for n in nums) if nums else None
+
+
+def is_ci():
+    """CI-Erkennung ohne Fremdabhaengigkeit (GH Actions setzt CI + GITHUB_ACTIONS)."""
+    for var in ("CI", "GITHUB_ACTIONS"):
+        if os.environ.get(var, "").strip().lower() in ("1", "true", "yes"):
+            return True
+    return False
 
 
 def main():
@@ -108,9 +123,14 @@ def main():
         else:
             print("OK: Pin identisch mit Baseline.")
     elif branch_version and not baseline_version:
-        print("::warning::Baseline " + baseline_ref
-              + " nicht aufloesbar - Downgrade-Check uebersprungen "
-              + "(Workflow muss 'git fetch origin main' ausfuehren).")
+        msg = ("Baseline " + baseline_ref + " nicht aufloesbar - "
+               + "Downgrade-Check nicht moeglich (Workflow muss "
+               + "'git fetch --no-tags --depth=1 origin main' ausfuehren).")
+        if is_ci() or os.environ.get("PIN_DRIFT_STRICT", "") == "1":
+            failures.append("BASELINE NICHT AUFLOESBAR (fail-closed): " + msg)
+        else:
+            print("::warning::" + msg
+                  + " Lokal toleriert; in CI/PIN_DRIFT_STRICT=1 ist das ein harter Fehler.")
 
     if failures:
         print("")
