@@ -12,7 +12,7 @@ Fehlt etwas, still weitermachen. `domain-modeling` legt Einträge lazy an, wenn 
 ## Dateistruktur (ein Kontext)
 
 - Glossar: Zeile in `docs/arc42/12_glossar.md` (kein `GLOSSARY.md`/`GLOSSARY-MAP.md`)
-- ADR: neues Detailblatt `docs/adr/ADR-NNN-<slug>.md` im bestehenden Format (Vorbild ADR-016), Nummer = höchste vorhandene + 1; zusätzlich Zeile in der Tabelle von `docs/arc42/09_architekturentscheidungen.md`
+- ADR: neues Detailblatt `docs/adr/ADR-NNN-<slug>.md` im bestehenden Format (Vorbild ADR-016), Nummer = höchste vorhandene + 1; zusätzlich Zeile in der Tabelle von `docs/arc42/09_architekturentscheidungen.md` und im Index `docs/adr/README.md`
 
 ## Vokabular des Glossars nutzen
 
