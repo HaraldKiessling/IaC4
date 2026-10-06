@@ -63,21 +63,24 @@ openclaw_instances:
     gh_token_env: "DEV_OC2_GH_TOKEN"
     bitwarden_clientscurect_env: "DEV_OC2_BITWARDEN_CLIENTSECRET"
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
-    # Harald 2026-08-03: OC2 = NUR DeepSeek flash (alle 4 Agents).
+    # Harald 2026-08-03: OC2 = NUR DeepSeek flash (alle 4 Agents) als Primary.
     # Benchmark-Variable vs. OC3 = Modell-Mix (dort Arch+Rev pro).
+    # Owner-Entscheid 2026-10-06 (Q6b): Fallback-Luecke geschlossen — architect/
+    # engineer-pro/reviewer erhalten analog defaults/orchestrator den Cross-Provider-
+    # Fallback google/gemini-3.5-flash (Primary + Benchmark-Variable unveraendert).
     agent_models:
       Orchestrator:
         primary: "deepseek/deepseek-v4-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Architect:
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro"]
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       "Engineer Pro":
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro"]
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Reviewer:
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro"]
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
     # Reasoning (evidenzbasiert, 2026-08-03): T2-Befund Reasoning-Explosion bei flash
     # (64,7k Reasoning-Tokens, Latenz-Treiber) -> Orchestrator/Engineer Medium begrenzen.
     # DeepSeek-BP: Think High fuer Architektur/Review, Max nur Security-Audit.
@@ -114,19 +117,22 @@ openclaw_instances:
     agents: [Orchestrator, Architect, "Engineer Pro", Reviewer]
     # Harald 2026-08-03: OC3-Modell-Mix — Orchestrator + Engineer = flash,
     # Reviewer + Architect = pro (Qualität dort, wo Analyse/Prüfung entscheidet).
+    # Owner-Entscheid 2026-10-06 (Q6b): Cross-Provider-Fallback google/gemini-3.5-flash
+    # fuer architect/engineer-pro/reviewer ergaenzt (analog defaults/orchestrator;
+    # Primary-Mix und damit Benchmark-Variable unveraendert).
     agent_models:
       Orchestrator:
         primary: "deepseek/deepseek-v4-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Architect:
         primary: "deepseek/deepseek-v4-pro"
-        fallbacks: ["deepseek/deepseek-v4-flash"]
+        fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
       "Engineer Pro":
         primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro"]
+        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Reviewer:
         primary: "deepseek/deepseek-v4-pro"
-        fallbacks: ["deepseek/deepseek-v4-flash"]
+        fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
     # Reasoning (evidenzbasiert, 2026-08-03): DeepSeek-BP Think High fuer Architektur/Review,
     # Medium fuer Ausfuehrung (T2: Reasoning-Explosion = Latenz-Treiber).
     agent_thinking:
