@@ -38,6 +38,9 @@ jobs:
           python3 -m pip install --quiet pyyaml jinja2
           python3 scripts/validate-openclaw-templates.py
 
+      - name: Deploy-Haertung (Install vor Health, Retry-Budget, rescue/Aggregat)
+        run: python3 scripts/validate/check-health-gate-order.py
+
       - name: Persona-Check (deployte Seed-Dateien, 8b)
         run: bash scripts/validate/persona-check.sh
 

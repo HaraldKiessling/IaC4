@@ -39,7 +39,7 @@
     oc_trusted_proxies: "{{ [_oc_net_gw.stdout | trim] }}"
   when: (_oc_net_gw.stdout | default('', true) | trim) | length > 0
 
-- name: "Pro Instanz: Verzeichnisse, Config, Compose, Start, Health, Serve"
+- name: "Pro Instanz: Verzeichnisse, Config, Compose, Start, Install, Health, Serve"
   ansible.builtin.include_tasks: instance.yml
   loop: "{{ openclaw_instances }}"
   loop_control:
@@ -47,3 +47,32 @@
   when:
     - oc.enabled | default(false)
     - openclaw_instance_filter == 'all' or oc.name == openclaw_instance_filter
+
+# Härtung 2026-10-05 (fail-closed, aber kein Skip): Erwartete (enabled+gefilterte) Instanzen
+# ableiten und den gesammelten openclaw_instance_results aus instance.yml dagegen pruefen.
+- name: Erwartete Instanzen (enabled, ggf. Filter) ermitteln
+  ansible.builtin.set_fact:
+    openclaw_expected_instances: >-
+      {{ (openclaw_instances | selectattr('enabled', 'defined') | selectattr('enabled')
+          | map(attribute='name') | list)
+         if openclaw_instance_filter == 'all'
+         else ([openclaw_instance_filter]
+               if (openclaw_instance_filter in (openclaw_instances | selectattr('enabled', 'defined')
+                                                | selectattr('enabled') | map(attribute='name') | list))
+               else []) }}
+
+- name: "Aggregat-Assert – ALLE Instanzen bearbeitet, keine ungesund (fail-closed)"
+  ansible.builtin.assert:
+    that:
+      - (openclaw_instance_results | default([]) | map(attribute='name') | list | sort)
+        == (openclaw_expected_instances | sort)
+      - (openclaw_instance_results | default([]) | selectattr('health', 'equalto', 'failed') | list | length) == 0
+    fail_msg: >-
+      Deploy NICHT gruen. Erwartet/bearbeitet: {{ openclaw_expected_instances | join(', ') }} /
+      {{ openclaw_instance_results | default([]) | map(attribute='name') | list | join(', ') }}.
+      Ungesund: {{ openclaw_instance_results | default([]) | selectattr('health', 'equalto', 'failed')
+                   | map(attribute='name') | list | join(', ') | default('keine', true) }}.
+      Details: {{ openclaw_instance_results | default([]) | selectattr('health', 'equalto', 'failed') | list }}.
+    success_msg: >-
+      Alle {{ openclaw_instance_results | default([]) | length }} Instanzen gesund:
+      {{ openclaw_instance_results | default([]) | map(attribute='name') | list | join(', ') }}.
