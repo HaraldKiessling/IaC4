@@ -4,7 +4,7 @@
 Belegt statisch (YAML-Parsing, kein Ansible-Lauf, kein Netz):
   1. instance-body.yml installiert/verifiziert QMD + Google-Drive-MCP VOR dem Health-Gate
      (ein fehlgeschlagenes Health darf die Installation nicht mehr ueberspringen).
-  2. Der Health-Check hat ein erhoehtes Retry-Budget (>=24 x >=5s) und vor der ersten
+  2. Der Health-Check hat ein erhoehtes Retry-Budget (>=36 x >=10s) und vor der ersten
      Pruefung eine Stabilisierung (wait_for).
   3. instance.yml kapselt den Instanz-Ablauf in block/rescue -> ein Fehler einer Instanz
      ueberspringt die Folge-Instanzen nicht mehr.
@@ -70,10 +70,10 @@ try:
         if not uri:
             failures.append('instance-body.yml: Health-uri fehlt')
         else:
-            if uri.get('retries', 0) < 24 or uri.get('delay', 0) < 5:
+            if uri.get('retries', 0) < 36 or uri.get('delay', 0) < 10:
                 failures.append(
                     f'Health-Retry zu klein: retries={uri.get("retries")} delay={uri.get("delay")} '
-                    '(>=24 x >=5s erwartet)')
+                    '(>=36 x >=10s erwartet)')
     # Stabilisierung nutzt wait_for + delay
     if i_wait >= 0:
         wf = next((t for t in body if 'Container-Port stabilisieren' in t.get('name', '')), None)

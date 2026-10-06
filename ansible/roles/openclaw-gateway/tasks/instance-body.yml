@@ -286,20 +286,21 @@
   changed_when: false
   failed_when: _oc_gdrive_ver.rc != 0
 
-# Health-Gate NACH Install/Verify (s.o.). Retry-Budget 24x5s (~120s) zzgl. 10s Vorlauf aus
-# wait_for: deckt den transienten Container-Restart beim Recreate ab (Runs 37282760139 /
-# 37290260456: 12x5s = 60s zu knapp). Ein Fehlschlag faellt in den rescue des Wrappers
-# (instance.yml) -> Folge-Instanzen laufen weiter, Aggregat-Assert in main.yml failt den Run.
+# Health-Gate NACH Install/Verify (s.o.). Retry-Budget 36x10s (~360s) zzgl. 10s Vorlauf aus
+# wait_for: deckt den transienten Container-Restart beim Recreate UND die einmalige
+# 2026.9.8-State-DB-/Config-Migration (~3 Min) beim ersten Start ab (Runs 37282760139 /
+# 37290260456: 12x5s = 60s, 24x5s = 120s zu knapp). Ein Fehlschlag faellt in den rescue des
+# Wrappers (instance.yml) -> Folge-Instanzen laufen weiter, Aggregat-Assert in main.yml failt den Run.
 - name: "{{ oc.name }}: Auf Health warten (localhost:{{ oc.port }}/health)"
   block:
-    - name: "{{ oc.name }}: Health-Check (localhost:{{ oc.port }}/health, retries 24 x 5s)"
+    - name: "{{ oc.name }}: Health-Check (localhost:{{ oc.port }}/health, retries 36 x 10s)"
       ansible.builtin.uri:
         url: "http://localhost:{{ oc.port }}/health"
         status_code: 200
       register: _oc_health
       until: _oc_health.status == 200
-      retries: 24
-      delay: 5
+      retries: 36
+      delay: 10
   rescue:
     - name: "{{ oc.name }}: DIAGNOSE - docker ps -a"
       ansible.builtin.command: docker ps -a
