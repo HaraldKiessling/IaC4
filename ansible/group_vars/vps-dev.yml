@@ -39,10 +39,11 @@ openclaw_instances:
     # Fairness-Fix (2026-08-03, Kosten-Befund): OC1 lief auf pro (OpenClaw-Default =
     # erstes Provider-Modell). Alle 3 Arme jetzt modellgleich auf flash — einzige
     # Benchmark-Variable = Team-Setup (OC1: Single, OC2/OC3: Team).
-    agent_models:
-      Orchestrator:
-        primary: "deepseek/deepseek-v4-flash"
-        fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
+    # SSoT-Erbung (Cleanup 2026-10-06): KEIN oc1-eigenes agent_models mehr — der
+    # Template-Default (openclaw.json.j2:1, oc.agent_models | default(openclaw_agent_models))
+    # zieht die SSoT all.yml (Orchestrator: primary v4-flash, fallbacks [v4-pro, gemini])
+    # wie in PROD. Bit-identischer Render (Golden scripts/validate/golden/oc1-openclaw.json
+    # unveraendert); nur das Dev-Duplikat entfaellt.
     # Konstant-Haltung wie OC2 (Design 01 Kap. 6.1): identische Timeouts/Concurrency
     # fuer alle 3 Benchmark-Arme – Timeout/Concurrency duerfen keine Variable sein.
     # Bewusst NICHT Doku-Defaults (maxConcurrent 8, runTimeout 0) – Abweichung dokumentiert.
