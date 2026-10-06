@@ -224,37 +224,13 @@
   when: _oc_cfg.changed or (_oc_clean_agents.changed | default(false)) or (_oc_clean_ws.changed | default(false)) or (_oc_clean_state.changed | default(false))
   changed_when: true
 
-- name: "{{ oc.name }}: Auf Health warten (localhost:{{ oc.port }}/health)"
-  block:
-    - name: "{{ oc.name }}: Health-Check (localhost:{{ oc.port }}/health)"
-      ansible.builtin.uri:
-        url: "http://localhost:{{ oc.port }}/health"
-        status_code: 200
-      register: _oc_health
-      until: _oc_health.status == 200
-      retries: 12
-      delay: 5
-  rescue:
-    - name: "{{ oc.name }}: DIAGNOSE - docker ps -a"
-      ansible.builtin.command: docker ps -a
-      register: _oc_diag_ps
-      changed_when: false
-      failed_when: false
-    - name: "{{ oc.name }}: DIAGNOSE - docker logs openclaw-{{ oc.name }} (letzte 120)"
-      ansible.builtin.command: docker logs openclaw-{{ oc.name }} --tail 120 2>&1
-      register: _oc_diag_logs
-      changed_when: false
-      failed_when: false
-    - name: "{{ oc.name }}: DIAGNOSE - docker ps Ausgabe"
-      ansible.builtin.debug:
-        var: _oc_diag_ps.stdout_lines
-    - name: "{{ oc.name }}: DIAGNOSE - docker logs Ausgabe"
-      ansible.builtin.debug:
-        var: _oc_diag_logs.stdout_lines
-    - name: "{{ oc.name }}: Health fehlgeschlagen (Diagnose oben)"
-      ansible.builtin.fail:
-        msg: "Health-Check {{ oc.name }} (Port {{ oc.port }}) fehlgeschlagen - Diagnose (docker ps / docker logs) siehe oben."
-
+# Google-Drive-MCP nachziehen (Owner-Go 2026-10-06 / Item 2): Binaer-Install VOR dem Health-Gate.
+# Beleg (read-only dev 2026-10-06 10:25): oc2 -> 'stdio command not found or not executable:
+# google-drive-mcp' + 'spawn google-drive-mcp ENOENT'; oc1/oc3 -> ok (gleiche Config/Image).
+# Ursache: Das 2026.9.8-Image migriert beim ersten Start State-DB/Config (~3 Min); das bisher
+# NACH dem Gate liegende Install/Verify (QMD + GDrive) lief dann nie -> Instanz ohne Binary.
+# Install/Verify sind idempotent (command -v ... || install) -> vor dem Gate unkritisch.
+# Siehe PR #182 (allgemeine Deploy-Haertung/Health-Budget); dies ist der gdrive-scoped Restore.
 - name: "{{ oc.name }}: QMD im Container installieren (User-npm, Version gepinnt K3-2)"
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
@@ -290,6 +266,37 @@
   register: _oc_gdrive_ver
   changed_when: false
   failed_when: _oc_gdrive_ver.rc != 0
+
+- name: "{{ oc.name }}: Auf Health warten (localhost:{{ oc.port }}/health)"
+  block:
+    - name: "{{ oc.name }}: Health-Check (localhost:{{ oc.port }}/health)"
+      ansible.builtin.uri:
+        url: "http://localhost:{{ oc.port }}/health"
+        status_code: 200
+      register: _oc_health
+      until: _oc_health.status == 200
+      retries: 12
+      delay: 5
+  rescue:
+    - name: "{{ oc.name }}: DIAGNOSE - docker ps -a"
+      ansible.builtin.command: docker ps -a
+      register: _oc_diag_ps
+      changed_when: false
+      failed_when: false
+    - name: "{{ oc.name }}: DIAGNOSE - docker logs openclaw-{{ oc.name }} (letzte 120)"
+      ansible.builtin.command: docker logs openclaw-{{ oc.name }} --tail 120 2>&1
+      register: _oc_diag_logs
+      changed_when: false
+      failed_when: false
+    - name: "{{ oc.name }}: DIAGNOSE - docker ps Ausgabe"
+      ansible.builtin.debug:
+        var: _oc_diag_ps.stdout_lines
+    - name: "{{ oc.name }}: DIAGNOSE - docker logs Ausgabe"
+      ansible.builtin.debug:
+        var: _oc_diag_logs.stdout_lines
+    - name: "{{ oc.name }}: Health fehlgeschlagen (Diagnose oben)"
+      ansible.builtin.fail:
+        msg: "Health-Check {{ oc.name }} (Port {{ oc.port }}) fehlgeschlagen - Diagnose (docker ps / docker logs) siehe oben."
 
 - name: "{{ oc.name }}: Tailscale Serve-Status (Idempotenz)"
   ansible.builtin.shell: tailscale serve status
