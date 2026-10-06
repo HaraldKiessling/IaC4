@@ -41,7 +41,7 @@ openclaw_instances:
     # Benchmark-Variable = Team-Setup (OC1: Single, OC2/OC3: Team).
     agent_models:
       Orchestrator:
-        primary: "deepseek/deepseek-v4-flash"
+        primary: "deepseek/deepseek-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
     # Konstant-Haltung wie OC2 (Design 01 Kap. 6.1): identische Timeouts/Concurrency
     # fuer alle 3 Benchmark-Arme – Timeout/Concurrency duerfen keine Variable sein.
@@ -70,16 +70,16 @@ openclaw_instances:
     # Fallback google/gemini-3.5-flash (Primary + Benchmark-Variable unveraendert).
     agent_models:
       Orchestrator:
-        primary: "deepseek/deepseek-v4-flash"
+        primary: "deepseek/deepseek-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Architect:
-        primary: "deepseek/deepseek-v4-flash"
+        primary: "deepseek/deepseek-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       "Engineer Pro":
-        primary: "deepseek/deepseek-v4-flash"
+        primary: "deepseek/deepseek-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Reviewer:
-        primary: "deepseek/deepseek-v4-flash"
+        primary: "deepseek/deepseek-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
     # Reasoning (evidenzbasiert, 2026-08-03): T2-Befund Reasoning-Explosion bei flash
     # (64,7k Reasoning-Tokens, Latenz-Treiber) -> Orchestrator/Engineer Medium begrenzen.
@@ -122,17 +122,17 @@ openclaw_instances:
     # Primary-Mix und damit Benchmark-Variable unveraendert).
     agent_models:
       Orchestrator:
-        primary: "deepseek/deepseek-v4-flash"
+        primary: "deepseek/deepseek-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Architect:
         primary: "deepseek/deepseek-v4-pro"
-        fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+        fallbacks: ["deepseek/deepseek-flash", "google/gemini-3.5-flash"]
       "Engineer Pro":
-        primary: "deepseek/deepseek-v4-flash"
+        primary: "deepseek/deepseek-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Reviewer:
         primary: "deepseek/deepseek-v4-pro"
-        fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+        fallbacks: ["deepseek/deepseek-flash", "google/gemini-3.5-flash"]
     # Reasoning (evidenzbasiert, 2026-08-03): DeepSeek-BP Think High fuer Architektur/Review,
     # Medium fuer Ausfuehrung (T2: Reasoning-Explosion = Latenz-Treiber).
     agent_thinking:

@@ -80,17 +80,17 @@ openclaw_memory_seed: false
 # Agent-Modell-Matrix (Stand 2026-08-01, bisherige Instanz) – je Instanz referenzierbar
 openclaw_agent_models:
   Orchestrator:
-    primary: "deepseek/deepseek-v4-flash"
+    primary: "deepseek/deepseek-flash"
     fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
   Architect:   # RFC-0040/IaC3-Konvention (N3); ID wird "architect"
     primary: "deepseek/deepseek-v4-pro"
-    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+    fallbacks: ["deepseek/deepseek-flash", "google/gemini-3.5-flash"]
   "Engineer Pro":
-    primary: "deepseek/deepseek-v4-flash"
+    primary: "deepseek/deepseek-flash"
     fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
   Reviewer:
     primary: "deepseek/deepseek-v4-pro"
-    fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+    fallbacks: ["deepseek/deepseek-flash", "google/gemini-3.5-flash"]
 
 # Instanz-Definitionen je Target: group_vars/vps-dev.yml (DEV_-Secrets) und vps-prod.yml (PROD_-Secrets)
 
@@ -101,7 +101,7 @@ openclaw_provider_models:
     baseUrl: "https://api.deepseek.com"
     models:
       - {id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", reasoning: true, input: ["text"], contextWindow: 1048576, maxTokens: 384000}
-      - {id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", reasoning: true, input: ["text"], contextWindow: 1048576, maxTokens: 384000}
+      - {id: "deepseek-flash", name: "DeepSeek V4.1 Flash", reasoning: true, input: ["text"], contextWindow: 1048576, maxTokens: 384000}
   openrouter:
     api: "openai-completions"
     baseUrl: "https://openrouter.ai/api/v1"

@@ -55,17 +55,17 @@ openclaw_instances:
     # Primary-Mix und damit Benchmark-Variable unveraendert).
     agent_models:
       Orchestrator:
-        primary: "deepseek/deepseek-v4-flash"
+        primary: "deepseek/deepseek-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Architect:
         primary: "deepseek/deepseek-v4-pro"
-        fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+        fallbacks: ["deepseek/deepseek-flash", "google/gemini-3.5-flash"]
       "Engineer Pro":
-        primary: "deepseek/deepseek-v4-flash"
+        primary: "deepseek/deepseek-flash"
         fallbacks: ["deepseek/deepseek-v4-pro", "google/gemini-3.5-flash"]
       Reviewer:
         primary: "deepseek/deepseek-v4-pro"
-        fallbacks: ["deepseek/deepseek-v4-flash", "google/gemini-3.5-flash"]
+        fallbacks: ["deepseek/deepseek-flash", "google/gemini-3.5-flash"]
     agent_thinking:
       Orchestrator: "medium"
       Architect: "high"
