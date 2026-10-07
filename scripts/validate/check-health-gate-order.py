@@ -113,6 +113,8 @@ try:
             failures.append('main.yml: Aggregat-Assert prueft nicht auf ungesunde Instanzen (fail-closed)')
         if 'openclaw_expected_instances' not in joined:
             failures.append('main.yml: Aggregat-Assert prueft nicht, dass ALLE erwarteten Instanzen bearbeitet wurden')
+        if 'openclaw_instance_filter' not in joined:
+            failures.append('main.yml: Aggregat-Assert prueft nicht auf den Zero-Match-Fall (openclaw_instance_filter)')
 except Exception as ex:  # noqa: BLE001
     failures.append(f'main.yml nicht parsebar: {ex}')
 
