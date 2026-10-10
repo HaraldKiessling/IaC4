@@ -27,6 +27,6 @@
 | **Freigabe-Dienst** | Dienst, der als Einziger den Agenten-Tresor öffnen kann und Agenten-Zugangsdaten nur nach den Freigabe-Regeln herausgibt |
 | **Freigabe** | Haralds Bestätigung per Telegram-Knopf für einen Eintrag und eine OC-Instanz; gilt beim Lesen 30 Minuten, beim Anlegen oder Ändern für genau diesen einen Vorgang |
 | **Notfall-Stopp** | `/sperren` im Freigabe-Bot: blockiert jeden Zugriff auf den Agenten-Tresor, bis Harald `/entsperren` sendet |
-| **Platzhalter-Einsetzung** | Der Agent nennt nur den Namen eines Eintrags; der Freigabe-Dienst setzt den Wert direkt ein, sodass das Passwort nie das KI-Modell erreicht |
+| **Platzhalter-Einsetzung** | Der Agent nennt nur den Namen eines Eintrags; der Freigabe-Dienst setzt den Wert direkt ein, mit dem Ziel, dass das Passwort nie das KI-Modell erreicht |
 | **P1–P7** | Leitprinzipien (Evidenz, Living Docs, etc.) |
 | **GitOps** | Deployment-Status = Repository-Status |
