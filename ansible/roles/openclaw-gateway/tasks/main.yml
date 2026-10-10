@@ -67,11 +67,15 @@
       - (openclaw_instance_results | default([]) | map(attribute='name') | list | sort)
         == (openclaw_expected_instances | sort)
       - (openclaw_instance_results | default([]) | selectattr('health', 'equalto', 'failed') | list | length) == 0
+      - (openclaw_instance_filter == 'all') or (openclaw_expected_instances | length > 0)
     fail_msg: >-
       Deploy NICHT gruen. Erwartet/bearbeitet: {{ openclaw_expected_instances | join(', ') }} /
       {{ openclaw_instance_results | default([]) | map(attribute='name') | list | join(', ') }}.
       Ungesund: {{ openclaw_instance_results | default([]) | selectattr('health', 'equalto', 'failed')
                    | map(attribute='name') | list | join(', ') | default('keine', true) }}.
+      {% if openclaw_instance_filter != 'all' and openclaw_expected_instances | length == 0 %}
+      Filter '{{ openclaw_instance_filter }}' matched no active/enabled instances (Zero-Match).
+      {% endif %}
       Details: {{ openclaw_instance_results | default([]) | selectattr('health', 'equalto', 'failed') | list }}.
     success_msg: >-
       Alle {{ openclaw_instance_results | default([]) | length }} Instanzen gesund:
