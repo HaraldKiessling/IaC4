@@ -91,8 +91,9 @@ openclaw_exec_allowlist:
   - pattern: "/sbin/*"
   - pattern: "/usr/local/bin/*"
   - pattern: "/usr/local/sbin/*"
-  - pattern: "/home/node/.local/bin/*"
-  - pattern: "/home/node/.npm-global/bin/*"
+# Bewusst NICHT: /home/node/.local/bin/* und /home/node/.npm-global/bin/* – dort kann der Agent
+# selbst schreiben (eigenes Script, das ia4-bw ohne Nachfrage aufruft). qmd/google-drive-mcp per
+# exec fragen daher nach; Gateway/MCP starten sie ohne exec-Tool [A, auf DEV pruefen].
 # Memory-Seed-Gate (Design 06 K4-2, PR #83-Fix): DEV-Benchmark-Wissen (MEMORY.md + memory/)
 # NUR in DEV-Instanz-Arme deployen. prod bleibt vanilla (Design 01 Z.65) – der Seed wuerde
 # sonst von qmd-Backend + local memorySearch indexiert und DEV-Wissen auf prod liefern.

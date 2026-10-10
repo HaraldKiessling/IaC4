@@ -7,8 +7,8 @@
 # create/edit: reines JSON auf stdin wird vorher kodiert (wie `bw encode`).
 set -eu
 
-BW="{{ openclaw_bitwarden_prefix }}/bin/bw"
-SERVER="{{ openclaw_bitwarden_server }}"
+BW="/opt/ia4-bitwarden/cli/bin/bw"
+SERVER="https://vault.bitwarden.eu"
 
 if [ -z "${BW_CLIENTID:-}" ] || [ -z "${BW_CLIENTSECRET:-}" ] || [ -z "${BW_PASSWORD:-}" ]; then
   echo "ia4-bw: Agenten-Tresor ist auf dieser Instanz nicht eingerichtet." >&2

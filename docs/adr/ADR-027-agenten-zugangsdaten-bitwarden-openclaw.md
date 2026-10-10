@@ -124,8 +124,8 @@ Ausrollen in jede Instanz ab.
 
 ## Konsequenzen
 
-- OpenClaw-Rolle: Bitwarden CLI einbinden, Skill nach `./config/skills/`
-  schreibgeschützt ausrollen, Exec-Freigaben und Telegram-Approver
+- OpenClaw-Rolle: Bitwarden CLI einbinden, Skill aus `./bitwarden/skills/`
+  schreibgeschützt nach `/home/node/.openclaw/skills/ia4-bitwarden` einbinden, Exec-Freigaben und Telegram-Approver
   konfigurieren. OpenClaw speichert Freigaben und Allowlist in der
   State-Datenbank (`$OPENCLAW_STATE_DIR/state/openclaw.sqlite`) [V]
   (<https://docs.openclaw.ai/tools/exec-approvals>); die Rolle setzt die
@@ -165,8 +165,12 @@ Ausrollen in jede Instanz ab.
 - Tests auf DEV: Lesen, Anlegen, Ändern, Löschen je mit Telegram-Freigabe;
   Ablehnung und Zeitablauf führen zu keiner Ausführung; `bw` über `sh -c`,
   über `node` und ein direkter Aufruf der Bitwarden-API mit den
-  Umgebungsvariablen (z. B. `curl`) lösen eine Nachfrage aus oder sind
-  gesperrt (Ergebnis wird dokumentiert); der Skill ist in einer Session
+  Umgebungsvariablen (z. B. `curl`), `sh /opt/ia4-bitwarden/ia4-bw …`
+  (Script-Datei über eine freigegebene Shell), ein eigenes Script des Agenten,
+  das `ia4-bw` aufruft, sowie `env` und `cat /proc/1/environ` lösen eine
+  Nachfrage aus oder sind gesperrt (Ergebnis wird dokumentiert und Harald vor
+  der Freigabe gezeigt); parallele `ia4-bw`-Aufrufe einer Instanz stören sich
+  nicht gegenseitig [A]; der Skill ist in einer Session
   außerhalb des IaC4-Workspace verfügbar und lässt sich vom Agenten nicht
   ändern; ein `allow-always`-Eintrag für `bw` ist nach erneutem Deploy weg;
   nach Recreate und zweitem Deploy ist alles unverändert da.
@@ -181,9 +185,13 @@ Ausrollen in jede Instanz ab.
   bewusst nicht aus (`OPENCLAW_EXEC_SHELL_SNAPSHOT=0`,
   `docker-compose.yml.j2:21-23`) [I]. Jedes freigegebene Programm, das die
   Umgebung liest oder die Bitwarden-API direkt anspricht, kommt ohne Nachfrage
-  an den Tresor. Das kann auch ohne böse Absicht bei normaler Arbeit passieren
-  (z. B. `npx @bitwarden/cli` statt des eingebundenen `bw`), nicht nur durch
-  Prompt-Injection.
+  an den Tresor (z. B. `env`, `cat /proc/1/environ`). Ob eine freigegebene
+  Shell die Hülle als Script-Datei ohne Nachfrage startet
+  (`sh /opt/ia4-bitwarden/ia4-bw …`), ist offen [A]. Das kann auch ohne böse
+  Absicht bei normaler Arbeit passieren (z. B. `npx @bitwarden/cli` statt des
+  eingebundenen `bw`), nicht nur durch Prompt-Injection. Ordner, in die der
+  Agent selbst schreiben kann (`~/.local/bin`, `~/.npm-global/bin`), stehen
+  deshalb nicht in der Allowlist.
 - **Agent kann eigene Freigaben ändern:** `./config` ist beschreibbar
   eingebunden [I], dort liegt die State-Datenbank mit Allowlist und
   `allow-always`-Einträgen [V]. Ein Agent könnte sie verändern oder eigene
