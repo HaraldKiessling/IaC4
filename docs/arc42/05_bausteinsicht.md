@@ -37,4 +37,4 @@ IaC4
 | traefik | Traefik-Container + Config | docker |
 | qdrant | Qdrant-Container + Collection (3072d/Cosine) | docker |
 | code-server | Code-Server-Container + Reverse-Proxy-Route | docker, traefik |
-| openclaw-gateway | Docker-Container (ghcr.io/openclaw/openclaw, gepinnt); je Instanz Config+Workspace unter /srv/openclaw/<name>/ | docker, traefik-network, ollama, qdrant |
+| openclaw-gateway | Docker-Container (ghcr.io/openclaw/openclaw, gepinnt); je Instanz Config+Workspace unter /srv/openclaw/<name>/; mit Tresor-Datei zusätzlich Bitwarden CLI, Skill `ia4-bitwarden` und Exec-Freigaben per Telegram (ADR-027) | docker, traefik-network, ollama, qdrant |

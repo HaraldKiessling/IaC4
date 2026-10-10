@@ -8,6 +8,10 @@
 #   Reihenfolge (Operator-Verantwortung): 1. docker-traefik, 2. services, 3. openclaw
 #   Vorbedingung: Workflow 03 (Baseline) gelaufen, VPS via Tailscale erreichbar.
 #   Optionen: skip_bootstrap (Benchmark), clean (destruktiv – PROD nur mit confirm_clean_prod)
+#   bitwarden_secret (ADR-027, Owner-only): write|delete der Tresor-Datei VOR dem Deploy, im
+#     geschuetzten GH Environment oc-bitwarden-<target> (Required Reviewer Harald). Als Job in
+#     diesem Workflow, weil der "Run workflow"-Knopf nur fuer Workflows auf main erscheint –
+#     so laeuft der DEV-Test vom Branch vor dem Merge (Owner-Reihenfolge 2026-10-10).
 # =============================================================================
 name: "04 – Service-Deploy (docker-traefik | services | openclaw)"
 
@@ -64,6 +68,15 @@ on:
         options:
           - 'false'
           - 'true'
+      bitwarden_secret:
+        description: 'OWNER-ONLY (ADR-027): Tresor-Datei /etc/ia4/oc-bitwarden.env schreiben/loeschen – wartet auf Freigabe im GH Environment oc-bitwarden-<target>'
+        required: false
+        default: 'none'
+        type: choice
+        options:
+          - none
+          - write
+          - delete
       verify_token:
         description: 'Gateway-Token-Verifikation nach Deploy (temporär, Session 2026-08-06): Container-ENV vs GH-Secret (sha256) + echte HTTP-API-Auth (/v1/models, Bearer). Keine Klartextwerte in Logs.'
         required: false
@@ -77,8 +90,116 @@ permissions:
   contents: read
 
 jobs:
+  # ── ADR-027: Tresor-Datei (Owner-only, laeuft nur mit bitwarden_secret=write|delete) ──
+  bitwarden-secret:
+    name: "Bitwarden-Secret-Datei (${{ inputs.bitwarden_secret }}, target: ${{ inputs.target }})"
+    if: inputs.bitwarden_secret != 'none'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: oc-bitwarden-${{ inputs.target }}
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      ENV_FILE: /etc/ia4/oc-bitwarden.env
+    steps:
+      - name: Vorbedingungen pruefen (Secrets vorhanden, Werte nicht ausgeben)
+        env:
+          BW_CLIENTID: ${{ secrets.BW_CLIENTID }}
+          BW_CLIENTSECRET: ${{ secrets.BW_CLIENTSECRET }}
+          BW_PASSWORD: ${{ secrets.BW_PASSWORD }}
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          FAIL=0
+          [ -n "$SSH_KEY" ] || { echo "❌ Secret SSH_KEY fehlt"; FAIL=1; }
+          [ -n "$VPS_USER" ] || { echo "❌ Secret VPS_USER fehlt"; FAIL=1; }
+          [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt"; FAIL=1; }
+          [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt"; FAIL=1; }
+          [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
+          if [ "${{ inputs.bitwarden_secret }}" = "write" ]; then
+            for v in BW_CLIENTID BW_CLIENTSECRET BW_PASSWORD; do
+              eval "VAL=\$$v"
+              [ -n "$VAL" ] || { echo "❌ Environment-Secret fuer $v fehlt (Environment oc-bitwarden-${{ inputs.target }})"; FAIL=1; continue; }
+              # env_file-Format: Wert in einfachen Anfuehrungszeichen (literal, keine Interpolation)
+              case "$VAL" in
+                *"'"*) echo "❌ $v enthaelt ein einfaches Anfuehrungszeichen – im env_file nicht darstellbar"; FAIL=1 ;;
+              esac
+              if [ "$(printf '%s' "$VAL" | wc -l)" -ne 0 ]; then
+                echo "❌ $v enthaelt einen Zeilenumbruch"; FAIL=1
+              fi
+            done
+          fi
+          [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfuellt – Abbruch"; exit 1; }
+          echo "✅ Vorbedingungen ok (bitwarden_secret=${{ inputs.bitwarden_secret }})"
+
+      - name: Connect Runner to Tailnet (MagicDNS)
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: Netmap-Sync abwarten
+        run: sleep 15
+
+      - name: VPS Tailscale-IP ermitteln (Tailscale-API)
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          set -euo pipefail
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          echo "::add-mask::$TS_TOKEN"
+          NODE="vps-${{ inputs.target }}"
+          TS_IP=$(curl -sS "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            -H "Authorization: Bearer ${TS_TOKEN}" \
+            | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+          [ -n "$TS_IP" ] && [ "$TS_IP" != "null" ] || { echo "❌ Keine Tailscale-IP für Node ${NODE}"; exit 1; }
+          echo "VPS_TS_IP=${TS_IP}" >> "$GITHUB_ENV"
+          echo "✅ Node ${NODE} → ${TS_IP}"
+
+      - name: SSH-Key vorbereiten
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_TS_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Secret-Datei schreiben (root, 0600; Werte nur ueber stdin, nie als Argument)
+        if: inputs.bitwarden_secret == 'write'
+        env:
+          BW_CLIENTID: ${{ secrets.BW_CLIENTID }}
+          BW_CLIENTSECRET: ${{ secrets.BW_CLIENTSECRET }}
+          BW_PASSWORD: ${{ secrets.BW_PASSWORD }}
+        run: |
+          set -euo pipefail
+          printf "BW_CLIENTID='%s'\nBW_CLIENTSECRET='%s'\nBW_PASSWORD='%s'\n" \
+            "$BW_CLIENTID" "$BW_CLIENTSECRET" "$BW_PASSWORD" \
+          | ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
+              "$VPS_USER@$VPS_TS_IP" \
+              "sudo install -d -m 0700 -o root -g root /etc/ia4 \
+               && sudo sh -c 'umask 077; cat > ${ENV_FILE}.tmp && chown root:root ${ENV_FILE}.tmp && chmod 0600 ${ENV_FILE}.tmp && mv ${ENV_FILE}.tmp ${ENV_FILE}'"
+          ssh -o ConnectTimeout=10 -o LogLevel=ERROR "$VPS_USER@$VPS_TS_IP" \
+            "sudo stat -c '%U:%G %a %s Bytes' ${ENV_FILE}"
+          echo "✅ Secret-Datei geschrieben. Der Deploy-Job dieses Laufs bindet sie ein (playbook=openclaw)."
+
+      - name: Secret-Datei loeschen (Rueckbau)
+        if: inputs.bitwarden_secret == 'delete'
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
+            "$VPS_USER@$VPS_TS_IP" "sudo rm -f ${ENV_FILE} ${ENV_FILE}.tmp && echo geloescht"
+          echo "✅ Secret-Datei entfernt. Der Deploy-Job dieses Laufs (playbook=openclaw) erstellt die Container ohne Zugangsdaten neu."
+
   service-deploy:
     name: "Service-Deploy (${{ inputs.playbook }}, target: ${{ inputs.target }})"
+    needs: bitwarden-secret
+    # laeuft auch, wenn der Tresor-Job uebersprungen wurde (bitwarden_secret=none)
+    if: always() && (needs.bitwarden-secret.result == 'success' || needs.bitwarden-secret.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -120,12 +241,6 @@ jobs:
       PROD_OC1_GH_TOKEN: ${{ secrets.PROD_OC1_GH_TOKEN }}
       PROD_OC2_GH_TOKEN: ${{ secrets.PROD_OC2_GH_TOKEN }}
       PROD_OC3_GH_TOKEN: ${{ secrets.PROD_OC3_GH_TOKEN }}
-      DEV_OC1_BITWARDEN_CLIENTSECRET: ${{ secrets.DEV_OC1_BITWARDEN_CLIENTSECRET }}
-      DEV_OC2_BITWARDEN_CLIENTSECRET: ${{ secrets.DEV_OC2_BITWARDEN_CLIENTSECRET }}
-      DEV_OC3_BITWARDEN_CLIENTSECRET: ${{ secrets.DEV_OC3_BITWARDEN_CLIENTSECRET }}
-      PROD_OC1_BITWARDEN_CLIENTSECRET: ${{ secrets.PROD_OC1_BITWARDEN_CLIENTSECRET }}
-      PROD_OC2_BITWARDEN_CLIENTSECRET: ${{ secrets.PROD_OC2_BITWARDEN_CLIENTSECRET }}
-      PROD_OC3_BITWARDEN_CLIENTSECRET: ${{ secrets.PROD_OC3_BITWARDEN_CLIENTSECRET }}
       # Google-Drive-MCP (Issue #171): EIN gemeinsamer Secret-Satz (dediziertes Konto) fuer alle 6 Instanzen.
       # group_vars/all.yml liest sie via lookup('env'); NICHT pro Instanz/Provider-Block.
       GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
@@ -272,17 +387,24 @@ jobs:
           echo ""
           echo "▶️  Nächster Schritt: Workflow 04-bdd-tests.yml (BDD-Verifikation, qa/bdd-testkonzept.md)"
 
-      - name: "Bitwarden-ClientSecret-Verify (nur openclaw)"
+      # ADR-027: Agenten-Tresor-Status je Instanz (nur Laengen/Versionen, keine Werte).
+      # Zugangsdaten kommen aus der Host-Datei (Job bitwarden-secret oben, nur mit bitwarden_secret=write).
+      - name: "Bitwarden-Verify (nur openclaw, ADR-027)"
         if: inputs.playbook == 'openclaw'
         run: |
-          echo "BITWARDEN_CLIENTSECRET im Container (Zeichenzahl > 0 = gesetzt; Wert wird NICHT ausgegeben):"
           INSTS="${{ inputs.instance }}"
           [ "$INSTS" = "all" ] && INSTS="oc1 oc2 oc3"
           for i in $INSTS; do
-            N=$(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
-              "$VPS_USER@$VPS_TS_IP" \
-              "sudo docker exec openclaw-$i printenv BITWARDEN_CLIENTSECRET 2>/dev/null | wc -c")
-            echo "  openclaw-$i: ${N} Zeichen (0 = nicht gesetzt)"
+            # Pruefskript per stdin in den Container (keine verschachtelten Quotes)
+            R=$(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR \
+              "$VPS_USER@$VPS_TS_IP" "sudo docker exec -i openclaw-$i sh -s" 2>/dev/null <<'EOS'
+          printf 'BW_CLIENTID=%s Zeichen, ' "$(printenv BW_CLIENTID | tr -d '\n' | wc -c)"
+          if [ -x /opt/ia4-bitwarden/ia4-bw ]; then printf 'ia4-bw=ja, '; else printf 'ia4-bw=nein, '; fi
+          printf 'bw=%s, ' "$(/opt/ia4-bitwarden/cli/bin/bw --version 2>/dev/null || echo fehlt)"
+          if [ -f /home/node/.openclaw/skills/ia4-bitwarden/SKILL.md ]; then echo 'skill=ja'; else echo 'skill=nein'; fi
+          EOS
+            )
+            echo "  openclaw-$i: ${R:-nicht erreichbar}"
           done
 
   # ── Temporäre Verifikation (Session 2026-08-06, Owner-Auftrag Gateway-Token-Verifikation) ──

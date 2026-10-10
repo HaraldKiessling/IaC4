@@ -21,7 +21,6 @@
     oc_gateway_token: "{{ lookup('env', oc.gateway_token_env) | default('', true) }}"
     oc_telegram_bot_token: "{{ lookup('env', oc.telegram_bot_token_env) | default('', true) }}"
     oc_gh_token: "{{ lookup('env', oc.gh_token_env) | default('', true) }}"
-    oc_bitwarden_clientscurect: "{{ lookup('env', oc.bitwarden_clientscurect_env) | default('', true) }}"
     # Gate-Doku (Review-Minor a, 2026-10-05): GDRIVE_ACCESS_TOKEN ist operativ REDUNDANT – der
     # Refresh-Token traegt (der MCP erneuert Access-Tokens selbst aus tokens.json). Das Gate
     # verlangt trotzdem alle 4 Werte und bleibt bewusst konsistent mit openclaw.json.j2 /
@@ -202,6 +201,59 @@
     state: absent
   when: not (oc_gdrive_ready | bool)
 
+# Agenten-Zugangsdaten (ADR-027, Issue #192): aktiv nur mit Secret-Datei auf dem Host.
+# Die Datei schreibt ausschliesslich der Job bitwarden-secret in Workflow 04 (geschuetztes GH Environment);
+# dieser Deploy liest sie nie, er bindet sie nur per env_file ein. Fehlt sie: Bitwarden aus,
+# der Deploy laeuft normal weiter (kein Abbruch).
+- name: "{{ oc.name }}: Bitwarden – Secret-Datei auf dem Host pruefen"
+  ansible.builtin.stat:
+    path: "{{ openclaw_bitwarden_env_file }}"
+  register: _oc_bw_envfile
+
+- name: "{{ oc.name }}: Bitwarden – aktiv? (Flag + Secret-Datei)"
+  ansible.builtin.set_fact:
+    oc_bitwarden_active: "{{ (openclaw_bitwarden_enabled | default(false) | bool) and _oc_bw_envfile.stat.exists }}"
+
+- name: "{{ oc.name }}: Bitwarden – Verzeichnisse fuer Skill und Wrapper (root, read-only gemountet)"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  loop:
+    - "{{ openclaw_data_root }}/{{ oc.name }}/bitwarden"
+    - "{{ openclaw_data_root }}/{{ oc.name }}/bitwarden/skills/ia4-bitwarden"
+  when: oc_bitwarden_active | bool
+
+- name: "{{ oc.name }}: Bitwarden – Skill ia4-bitwarden ablegen (geprueft, versioniert, ADR-027)"
+  ansible.builtin.copy:
+    src: "skills/ia4-bitwarden/{{ item }}"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/bitwarden/skills/ia4-bitwarden/{{ item }}"
+    mode: '0644'
+    owner: root
+    group: root
+  loop:
+    - SKILL.md
+    - LICENSE
+    - NOTICE.md
+  when: oc_bitwarden_active | bool
+
+- name: "{{ oc.name }}: Bitwarden – Wrapper ia4-bw rendern (eine Freigabe pro Aufruf)"
+  ansible.builtin.template:
+    src: ia4-bw.sh.j2
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/bitwarden/ia4-bw"
+    mode: '0755'
+    owner: root
+    group: root
+  when: oc_bitwarden_active | bool
+
+- name: "{{ oc.name }}: Bitwarden – Skill und Wrapper entfernen (nicht aktiv)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/bitwarden"
+    state: absent
+  when: not (oc_bitwarden_active | bool)
+
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
 
   ansible.builtin.template:
@@ -268,6 +320,32 @@
   changed_when: false
   failed_when: _oc_qmd_ver.rc != 0
 
+# Bitwarden CLI (ADR-027): als root in einen eigenen Prefix ausserhalb des PATH und der
+# Exec-Allowlist installiert; der Agent (node) kann sie nicht aendern. Liegt in der
+# Container-Schicht -> nach Recreate installiert dieser Schritt neu. Idempotent ueber den
+# Versionsvergleich (2. Lauf = 1. Lauf).
+- name: "{{ oc.name }}: Bitwarden CLI im Container installieren (root, Version gepinnt ADR-017)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "root"
+    command: >-
+      /bin/sh -c "[ \"$({{ openclaw_bitwarden_prefix }}/bin/bw --version 2>/dev/null)\" = '{{ openclaw_bitwarden_cli_version }}' ]
+      || (npm install -g --prefix {{ openclaw_bitwarden_prefix }} @bitwarden/cli@{{ openclaw_bitwarden_cli_version }} >/dev/null && echo installed)"
+  register: _oc_bw_install
+  changed_when: "'installed' in (_oc_bw_install.stdout | default(''))"
+  failed_when: _oc_bw_install.rc != 0
+  when: oc_bitwarden_active | bool
+
+- name: "{{ oc.name }}: Bitwarden CLI verifizieren (als node, erwartet {{ openclaw_bitwarden_cli_version }})"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: /bin/sh -c "{{ openclaw_bitwarden_prefix }}/bin/bw --version | grep -qx '{{ openclaw_bitwarden_cli_version }}'"
+  register: _oc_bw_ver
+  changed_when: false
+  failed_when: _oc_bw_ver.rc != 0
+  when: oc_bitwarden_active | bool
+
 - name: "{{ oc.name }}: Google-Drive-MCP im Container installieren (User-npm, Version gepinnt Issue #171)"
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
@@ -321,6 +399,68 @@
     - name: "{{ oc.name }}: Health fehlgeschlagen (Diagnose oben)"
       ansible.builtin.fail:
         msg: "Health-Check {{ oc.name }} (Port {{ oc.port }}) fehlgeschlagen - Diagnose (docker ps / docker logs) siehe oben."
+
+# Exec-Freigaben (ADR-027): Das Host-Freigabe-Dokument liegt in der State-DB
+# (config/state/openclaw.sqlite). `approvals set` ersetzt es vollstaendig – damit setzt jeder
+# Deploy Allowlist und Vorgaben neu und entfernt agentenseitige allow-always-Eintraege.
+# Bewusst ohne Changed-Erkennung (Ergebnis ist bei jedem Lauf gleich).
+- name: "{{ oc.name }}: Marker – Exec-Freigaben von IaC4 (vor dem Setzen, damit ein Abbruch den Rueckbau nicht verhindert)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/exec-policy-ia4"
+    state: touch
+    mode: '0644'
+    access_time: preserve
+    modification_time: preserve
+  when: oc_bitwarden_active | bool
+
+- name: "{{ oc.name }}: Exec-Freigaben setzen (Allowlist + Nachfrage, ADR-027)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: openclaw approvals set --gateway --stdin
+    stdin: "{{ _oc_exec_approvals_doc | to_json }}"
+  vars:
+    _oc_exec_approvals_doc:
+      version: 1
+      defaults:
+        security: allowlist
+        ask: on-miss
+        askFallback: deny
+        autoAllowSkills: false
+      agents:
+        "*":
+          security: allowlist
+          ask: on-miss
+          askFallback: deny
+          autoAllowSkills: false
+          allowlist: "{{ openclaw_exec_allowlist }}"
+  register: _oc_approvals
+  changed_when: false
+  when: oc_bitwarden_active | bool
+
+- name: "{{ oc.name }}: Marker pruefen (Rueckbau der Exec-Freigaben noetig?)"
+  ansible.builtin.stat:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/exec-policy-ia4"
+  register: _oc_exec_marker
+  when: not (oc_bitwarden_active | bool)
+
+# Rueckbau (ADR-027 Rollback): Bitwarden aus -> vorheriges Verhalten ohne Nachfrage
+# wiederherstellen (Vorgaben laut docs/cli/approvals.md "never stop on exec approvals").
+- name: "{{ oc.name }}: Exec-Freigaben zuruecksetzen (Bitwarden nicht aktiv, Marker vorhanden)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: openclaw approvals set --gateway --stdin
+    stdin: '{"version": 1, "defaults": {"security": "full", "ask": "off", "askFallback": "full"}}'
+  when:
+    - not (oc_bitwarden_active | bool)
+    - _oc_exec_marker.stat.exists | default(false)
+
+- name: "{{ oc.name }}: Marker entfernen (Rueckbau erledigt)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/exec-policy-ia4"
+    state: absent
+  when: not (oc_bitwarden_active | bool)
 
 - name: "{{ oc.name }}: Tailscale Serve-Status (Idempotenz)"
   ansible.builtin.shell: tailscale serve status

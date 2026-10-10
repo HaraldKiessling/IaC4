@@ -28,9 +28,6 @@ services:
 {% if oc_gh_token | default('') | length > 0 %}
       GH_TOKEN: "{{ oc_gh_token }}"
 {% endif %}
-{% if oc_bitwarden_clientscurect | default('') | length > 0 %}
-      BITWARDEN_CLIENTSECRET: "{{ oc_bitwarden_clientscurect }}"
-{% endif %}
 {# Google-Drive-MCP: Credentials werden NICHT als Container-Env ausgerollt (Token-Hygiene);
    die Dateien werden unten read-only gemountet und ueber GOOGLE_DRIVE_MCP_TOKEN_PATH gelesen. #}
       OPENCLAW_WORKSPACE_DIR: "/home/node/.openclaw/workspace"
@@ -38,9 +35,20 @@ services:
 {% if oc_telegram_bot_token | default('') | length > 0 %}
       TELEGRAM_BOT_TOKEN: "{{ oc_telegram_bot_token }}"
 {% endif %}
+{% if oc_bitwarden_active | default(false) | bool %}
+    # Agenten-Zugangsdaten (ADR-027): BW_CLIENTID/BW_CLIENTSECRET/BW_PASSWORD aus der Host-Datei
+    # (root, 0600, geschrieben nur vom Job bitwarden-secret, Workflow 04). Compose liest sie beim Start; nicht im Repo.
+    env_file:
+      - {{ openclaw_bitwarden_env_file }}
+{% endif %}
     volumes:
       - ./config:/home/node/.openclaw
       - ./workspace:/home/node/.openclaw/workspace
+{% if oc_bitwarden_active | default(false) | bool %}
+      # ADR-027: Skill und Wrapper read-only ueber dem beschreibbaren ./config (Agent kann sie nicht aendern).
+      - ./bitwarden/skills/ia4-bitwarden:/home/node/.openclaw/skills/ia4-bitwarden:ro
+      - ./bitwarden/ia4-bw:/opt/ia4-bitwarden/ia4-bw:ro
+{% endif %}
 {% if _gdrive_ready %}
       # Google-Drive-MCP: read-only Credential-Mounts (ein gemeinsames Konto nur fuer OCs).
       - ./gdrive/tokens.json:/home/node/.config/google-drive-mcp/tokens.json:ro

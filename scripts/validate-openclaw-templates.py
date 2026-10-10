@@ -102,6 +102,7 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                 assert d['tools']['subagents']['tools']['deny'] == oc['subagents_tools_deny'], \
                     f"{oc['name']}: tools.subagents.deny falsch"
             e2 = jinja2.Environment()
+            e2.filters['bool'] = _bool_filter
             e2.globals['lookup'] = fake_lookup
             yaml.safe_load(e2.from_string(COMPOSE).render(
                 oc=oc, openclaw_image=gv_all['openclaw_image'],
@@ -180,6 +181,34 @@ try:
     assert 'GDRIVE_' not in comp_off, "GDRIVE-Env trotz fehlender Secrets"
 except Exception as ex:
     failures.append(f"gdrive-file-based: {ex}")
+
+# Agenten-Zugangsdaten (ADR-027): aktiv -> Exec-Freigaben + Telegram-Approver in openclaw.json,
+# env_file + read-only Mounts (Skill, Wrapper) im Compose, KEINE Werte im Render. Inaktiv
+# (Default, keine Secret-Datei) -> nichts davon, auch kein altes BITWARDEN_CLIENTSECRET.
+try:
+    _bw = dict(oc_bitwarden_active=True, openclaw_exec_approvers=gv_all['openclaw_exec_approvers'],
+               openclaw_bitwarden_env_file=gv_all['openclaw_bitwarden_env_file'])
+    db = json.loads(_env().from_string(SRC).render(**_base, **_bw))
+    assert db['tools']['exec'] == {'mode': 'ask', 'strictInlineEval': True}, f"tools.exec falsch: {db['tools'].get('exec')}"
+    _base_tg = dict(_base, oc_telegram_bot_token='tg-dummy')
+    dbt = json.loads(_env().from_string(SRC).render(**_base_tg, **_bw))
+    ea = dbt['channels']['telegram']['execApprovals']
+    assert ea == {'enabled': True, 'approvers': gv_all['openclaw_exec_approvers'], 'target': 'dm'}, f"execApprovals falsch: {ea}"
+    comp_bw = yaml.safe_load(_env().from_string(COMPOSE).render(**_compose_base, **_bw))
+    svc = comp_bw['services']['openclaw']
+    assert svc.get('env_file') == [gv_all['openclaw_bitwarden_env_file']], "env_file fehlt"
+    for m in ('./bitwarden/skills/ia4-bitwarden:/home/node/.openclaw/skills/ia4-bitwarden:ro',
+              './bitwarden/ia4-bw:/opt/ia4-bitwarden/ia4-bw:ro'):
+        assert m in svc['volumes'], f"Mount fehlt: {m}"
+    assert not any(k.startswith('BW_') or k == 'BITWARDEN_CLIENTSECRET' for k in svc.get('environment', {})), \
+        "Bitwarden-Werte im Compose-environment (gehoeren nur in die Host-Datei)"
+    dn = json.loads(_env().from_string(SRC).render(**_base_tg))
+    assert 'exec' not in dn['tools'] and 'execApprovals' not in dn['channels']['telegram'], "Freigaben trotz inaktiv"
+    comp_nb = yaml.safe_load(_env().from_string(COMPOSE).render(**_compose_base))['services']['openclaw']
+    assert 'env_file' not in comp_nb and not any('bitwarden' in v for v in comp_nb['volumes']), "Bitwarden trotz inaktiv"
+    assert 'BITWARDEN_CLIENTSECRET' not in _env().from_string(COMPOSE).render(**_compose_base), "alte Kette noch im Template"
+except Exception as ex:
+    failures.append(f"bitwarden-adr027: {ex}")
 
 # Golden-File-Renderdiff (Design 01 Kap. 4.4 Worst-Case 3, DoD Issue #63): OC1-Render
 # (kanonische JSON-Form) muss identisch zum committeten Referenz-Render bleiben – fängt
