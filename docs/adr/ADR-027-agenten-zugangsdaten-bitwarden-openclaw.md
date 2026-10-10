@@ -1,6 +1,7 @@
 # ADR-027: Agenten-Zugangsdaten über Bitwarden-Skill und OpenClaw-Freigaben (Konfigurieren statt Eigenbau)
 
-- **Status:** Vorgeschlagen (Proposed)
+- **Status:** Vorgeschlagen (Proposed); Owner-Richtung 2026-10-10, angenommen
+  mit dem Merge
 - **Datum:** 2026-10-10
 - **Kontext:** Issue #192. Die OC-Instanzen (oc1–oc3 auf DEV und PROD) sollen
   sich zur Laufzeit selbst bei Portalen anmelden können (Agenten-Zugangsdaten,
@@ -52,26 +53,35 @@ am Handy, ohne eigene Software zu entwickeln?
   ergänzt. Nie live von ClawHub geladen, wegen bekannter bösartiger Skills
   dort [V]
   (<https://esecurityplanet.com/threats/hundreds-of-malicious-skills-found-in-openclaws-clawhub>).
-- **Ausrollen:** Die OpenClaw-Rolle kopiert den Skill bei jedem Deploy in den
-  Skill-Ordner der Instanz (`<state-dir>/skills`, im Container
-  `/home/node/.openclaw/skills`, auf dem Host `./config/skills`). OpenClaw lädt
-  diesen Ordner in jeder Session der Instanz (Ladereihenfolge Stufe 4
-  „Managed / local skills“) [V]
-  (<https://docs.openclaw.ai/tools/skills>).
+- **Ausrollen:** Die OpenClaw-Rolle legt den Skill bei jedem Deploy vollständig
+  neu ab (gleiches Ergebnis bei jedem Lauf) und bindet ihn schreibgeschützt in
+  den Skill-Ordner der Instanz ein (`<state-dir>/skills`, im Container
+  `/home/node/.openclaw/skills`, eigener `:ro`-Mount über dem sonst
+  beschreibbaren `./config`). OpenClaw lädt diesen Ordner in jeder Session der
+  Instanz (Ladereihenfolge Stufe 4 „Managed / local skills“) [V]
+  (<https://docs.openclaw.ai/tools/skills>). Workspace-Skills haben Vorrang
+  („the highest source wins“) [V]; der Skill bekommt deshalb einen eindeutigen
+  Namen (`ia4-bitwarden`), damit ihn kein Repo zufällig überdeckt.
 - **Freigabe:** OpenClaw-Exec-Freigaben, als Knopf in Haralds Telegram
   (`channels.telegram.execApprovals`, Ziel DM). Bestätigen dürfen nur die
   eingetragenen Telegram-User-IDs („only resolved approvers can approve or
   deny“), Entscheidungen sind `allow-once`, `allow-always` oder `deny` [V]
-  (<https://docs.openclaw.ai/tools/exec-approvals-advanced>). Ohne Antwort
-  greift `askFallback: deny` [V]
-  (<https://docs.openclaw.ai/tools/exec-approvals>).
+  (<https://docs.openclaw.ai/tools/exec-approvals-advanced>). Ohne
+  erreichbare Oberfläche oder bei Zeitablauf greift `askFallback: deny`
+  („no UI is reachable (or the prompt times out)“) [V]
+  (<https://docs.openclaw.ai/tools/exec-approvals>); offene Anfragen verfallen
+  standardmäßig nach 30 Minuten [V].
 - **Nur `bw` fragt nach:** OpenClaw kennt keine Nachfrage pro einzelnem Befehl
   bei sonst freier Ausführung (`ask` ist `off`, `on-miss` oder `always`) [V].
-  Geplante Umsetzung: `security: allowlist`, `ask: on-miss`; die
-  Allowlist erlaubt die üblichen Programmpfade, `bw` liegt in einem eigenen,
-  nicht freigegebenen Pfad und löst deshalb jedes Mal eine Freigabe aus. Ob
-  sich die heutige Arbeitsweise der Agenten so ohne ständige Nachfragen
-  abbilden lässt, wird zuerst auf DEV nachgewiesen [A].
+  Geplante Umsetzung: `security: allowlist`, `ask: on-miss`,
+  `tools.exec.strictInlineEval: true`; die Allowlist erlaubt die üblichen
+  Programmpfade, `bw` liegt in einem eigenen, nicht freigegebenen Pfad. Bei
+  Ketten muss jedes Segment der Allowlist genügen [V]; `sh -c`-Wrapper und
+  Inline-Code (`node -e`, `python -c`) gehen den Weg der menschlichen Freigabe
+  [V] (<https://docs.openclaw.ai/tools/exec-approvals-advanced>). Dass damit
+  **jeder** `bw`-Aufruf nachfragt und die heutige Arbeitsweise der Agenten
+  ohne ständige Nachfragen läuft, ist nicht belegt [A] und wird zuerst auf DEV
+  nachgewiesen (Testfälle unter Konsequenzen).
 - Aufwand: etwa 1 bis 2 Tage Konfiguration und Tests [A].
 
 ### B: Eigener Freigabe-Dienst (Eigenbau)
@@ -110,8 +120,11 @@ Ausrollen in jede Instanz ab.
 ## Konsequenzen
 
 - OpenClaw-Rolle: Bitwarden CLI einbinden, Skill nach `./config/skills/`
-  ausrollen, Exec-Freigaben und Telegram-Approver in `openclaw.json.j2`
-  konfigurieren.
+  schreibgeschützt ausrollen, Exec-Freigaben und Telegram-Approver
+  konfigurieren. OpenClaw speichert Freigaben und Allowlist in der
+  State-Datenbank (`$OPENCLAW_STATE_DIR/state/openclaw.sqlite`) [V]
+  (<https://docs.openclaw.ai/tools/exec-approvals>); die Rolle setzt die
+  Vorgaben bei jedem Deploy neu.
 - Zugangsdaten: drei gemeinsame GH Secrets für alle Instanzen
   (`OC_BITWARDEN_CLIENTID`, `OC_BITWARDEN_CLIENTSECRET`,
   `OC_BITWARDEN_PASSWORD`) als Umgebungsvariablen `BW_CLIENTID`,
@@ -125,21 +138,44 @@ Ausrollen in jede Instanz ab.
   (<https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments>).
   Damit nicht jeder OC-Deploy auf Harald wartet, schreibt ein eigener,
   geschützter Job die Secret-Datei auf den Host (nur bei Ersteinrichtung oder
-  Rotation); normale Deploys binden die vorhandene Datei nur ein. Die
-  Regel-Änderung (Owner-only) folgt als eigener Regel-PR (AGENTS.md + `.roo`).
+  Rotation); normale Deploys binden die vorhandene Datei nur ein. Die Datei
+  liegt außerhalb von `./config` und `./workspace`, gehört root, Rechte
+  `0600`, und wird von Docker Compose beim Start als Umgebung gelesen. Fehlt
+  sie, läuft der Deploy ohne Bitwarden weiter und bricht nicht ab.
+- **Reihenfolge der Umsetzung:** Weil ein Environment „nur `main`“ keine
+  Secrets an Branch-Läufe gibt, die Tests auf DEV aber vor dem Merge vom Branch
+  laufen (P7), kommt zuerst ein eigener PR mit dem Secret-Datei-Job (eigener
+  Review, Vorstellung, Freigabe, Merge; danach startet Harald den Job für DEV
+  und PROD). Erst dann folgt der PR mit CLI, Skill und Freigaben, der die
+  vorhandene Datei vom Branch aus nutzt. Die Regel-Änderung (Owner-only)
+  folgt als eigener Regel-PR (AGENTS.md + `.roo`).
 - Tests auf DEV: Lesen, Anlegen, Ändern, Löschen je mit Telegram-Freigabe;
-  Ablehnung und Zeitablauf führen zu keiner Ausführung; der Skill ist in einer
-  Session außerhalb des IaC4-Workspace verfügbar; nach Recreate ist alles
-  wieder da.
+  Ablehnung und Zeitablauf führen zu keiner Ausführung; `bw` über `sh -c`,
+  über `node` und ein direkter Aufruf der Bitwarden-API mit den
+  Umgebungsvariablen (z. B. `curl`) lösen eine Nachfrage aus oder sind
+  gesperrt (Ergebnis wird dokumentiert); der Skill ist in einer Session
+  außerhalb des IaC4-Workspace verfügbar und lässt sich vom Agenten nicht
+  ändern; nach Recreate und zweitem Deploy ist alles unverändert da.
 - arc42 K5/K7/K11 werden mit der Umsetzung aktualisiert.
 
 ## Bewusst getragene Rest-Risiken (Owner akzeptiert)
 
 - **Keine harte Grenze:** Tresor-Zugangsdaten liegen im Agenten-Container.
   OpenClaw: Freigaben sind „not a per-user auth boundary“ [V]
-  (<https://docs.openclaw.ai/tools/exec-approvals>). Ein durch Prompt-Injection
-  gesteuerter Agent kann die Freigabe umgehen, z. B. über einen freigegebenen
-  Befehl, der die Umgebungsvariablen ausliest.
+  (<https://docs.openclaw.ai/tools/exec-approvals>). Die Zugangsdaten stehen
+  als Umgebungsvariablen im Container, und der Exec-Snapshot schließt sie
+  bewusst nicht aus (`OPENCLAW_EXEC_SHELL_SNAPSHOT=0`,
+  `docker-compose.yml.j2:21-23`) [I]. Jedes freigegebene Programm, das die
+  Umgebung liest oder die Bitwarden-API direkt anspricht, kommt ohne Nachfrage
+  an den Tresor. Das kann auch ohne böse Absicht bei normaler Arbeit passieren
+  (z. B. `npx @bitwarden/cli` statt des eingebundenen `bw`), nicht nur durch
+  Prompt-Injection.
+- **Agent kann eigene Freigaben ändern:** `./config` ist beschreibbar
+  eingebunden [I], dort liegt die State-Datenbank mit Allowlist und
+  `allow-always`-Einträgen [V]. Ein Agent könnte sie verändern oder eigene
+  Skills neben den geprüften legen. Gegenmaßnahme: der Skill-Ordner ist
+  schreibgeschützt, die Rolle setzt die Freigabe-Vorgaben bei jedem Deploy neu;
+  zwischen zwei Deploys bleibt das Risiko.
 - **Passwörter beim KI-Anbieter:** Gelesene Passwörter stehen im Verlauf des
   Agenten und gehen an den Modell-Anbieter.
 - **Weniger Steuerung als im Grill zunächst festgelegt:** keine Ordner-Regel
@@ -148,13 +184,15 @@ Ausrollen in jede Instanz ab.
   Telegram-Freigaben sind das Protokoll. `allow-always` sollte für `bw` nicht
   genutzt werden, sonst entfällt die Nachfrage für diesen Befehl.
 - **Löschen erlaubt:** Ein freigegebenes Löschen entfernt den Eintrag;
-  gelöschte Einträge liegen 30 Tage im Papierkorb [A]. Überschriebene
+  gelöschte Einträge liegen 30 Tage im Papierkorb [A, Primärquelle
+  nicht abrufbar]. Überschriebene
   Passwörter: Bitwarden speichert „the last five saved passwords for each
   login item“ [V]
   (<https://bitwarden.com/help/password-and-generator-history/>).
 - **DEV = PROD:** Ein Fehler auf DEV trifft dieselben Daten wie PROD.
 - **Fremder Skill:** Inhalt eines Community-Skills; Gegenmaßnahme: geprüfte
-  Kopie in IaC4, keine automatische Aktualisierung von ClawHub.
+  Kopie in IaC4, schreibgeschützt ausgerollt, keine automatische
+  Aktualisierung von ClawHub.
 
 ## Worst-Case / Rollback
 
