@@ -40,13 +40,18 @@ am Handy, ohne eigene Software zu entwickeln?
 
 ### A: Konfigurieren — Bitwarden CLI + Bitwarden-Skill + OpenClaw-Exec-Freigaben — ENTSCHEIDUNG
 - **Bitwarden CLI** (`bw`, offiziell von Bitwarden) als gepinnte Version
-  (ADR-017) außerhalb der Volumes: Ansible legt sie auf dem Host ab und bindet
-  sie schreibgeschützt in jeden OC-Container ein. Anmeldung ohne Bediener mit
+  (ADR-017, npm-Paket `@bitwarden/cli`): Ansible installiert sie bei jedem
+  Deploy als root in einen eigenen Pfad im Container (`/opt/ia4-bitwarden/cli`,
+  nicht auf dem PATH, vom Agenten nicht änderbar). Anmeldung ohne Bediener mit
   `bw login --apikey` (`BW_CLIENTID`/`BW_CLIENTSECRET`) und
   `bw unlock --passwordenv BW_PASSWORD` [V]
-  (<https://bitwarden.com/help/cli/>). Ob Bitwarden ein eigenständiges
-  Linux-Binary liefert oder Node nötig ist, wird beim Bau geprüft [A].
-- **Skill:** ein fertiger Community-Skill, Kandidat `bitclawden` (MIT-0, `bw`,
+  (<https://bitwarden.com/help/cli/>).
+- **Aufruf-Hülle `ia4-bw`** (einziger eigener Code, rund 50 Zeilen Shell): meldet
+  sich an, entsperrt, synchronisiert und reicht alle Argumente an `bw` weiter.
+  So kostet jeder Vorgang genau eine Freigabe statt drei (Login, Unlock,
+  Befehl), und die Freigabe zeigt den eigentlichen Befehl. Read-only
+  eingebunden unter `/opt/ia4-bitwarden/ia4-bw`.
+- **Skill:** ein fertiger Community-Skill, Kandidat `bitclawden` (MIT, `bw`,
   Lesen/Anlegen/Ändern/Erzeugen) [V]
   (<https://clawhub.ai/typhonius/bitclawden>). Er wird geprüft, als Vorlage
   in IaC4 versioniert und um das Löschen und den Hinweis auf Freigaben
@@ -134,22 +139,23 @@ Ausrollen in jede Instanz ab.
   `bitwarden_clientscurect_env` wird ersetzt; `.env.example` wird
   aktualisiert. Danach rotiert Harald den bisherigen API-Key.
 - **Schutz der Zugangsdaten (Owner-Entscheid 2026-10-10 „Ja, schützen“):** Die
-  drei Secrets liegen in einem GH Environment mit Harald als Required Reviewer,
-  nur von `main` [V]
+  drei Secrets liegen in GH Environments mit Harald als Required Reviewer
+  (`oc-bitwarden-dev`, `oc-bitwarden-prod`; PROD nur von `main`) [V]
   (<https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments>).
   Damit nicht jeder OC-Deploy auf Harald wartet, schreibt ein eigener,
-  geschützter Job die Secret-Datei auf den Host (nur bei Ersteinrichtung oder
-  Rotation); normale Deploys binden die vorhandene Datei nur ein. Die Datei
-  liegt außerhalb von `./config` und `./workspace`, gehört root, Rechte
+  geschützter Workflow (`06-oc-bitwarden-secret`, Owner-only) die Secret-Datei
+  auf den Host (nur bei Ersteinrichtung, Rotation oder Rückbau); normale
+  Deploys binden die vorhandene Datei nur ein. Die Datei
+  (`/etc/ia4/oc-bitwarden.env`) liegt außerhalb von `./config` und
+  `./workspace`, gehört root, Rechte
   `0600`, und wird von Docker Compose beim Start als Umgebung gelesen. Fehlt
   sie, läuft der Deploy ohne Bitwarden weiter und bricht nicht ab.
-- **Reihenfolge der Umsetzung:** Weil ein Environment „nur `main`“ keine
-  Secrets an Branch-Läufe gibt, die Tests auf DEV aber vor dem Merge vom Branch
-  laufen (P7), kommt zuerst ein eigener PR mit dem Secret-Datei-Job (eigener
-  Review, Vorstellung, Freigabe, Merge; danach startet Harald den Job für DEV
-  und PROD). Erst dann folgt der PR mit CLI, Skill und Freigaben, der die
-  vorhandene Datei vom Branch aus nutzt. Die Regel-Änderung (Owner-only)
-  folgt als eigener Regel-PR (AGENTS.md + `.roo`).
+- **Reihenfolge der Umsetzung (Owner 2026-10-10: erst DEV, dann Merge):**
+  Ein Environment „nur `main`“ gibt Branch-Läufen keine Secrets, die Tests auf
+  DEV laufen aber vor dem Merge vom Branch (P7). Deshalb erlaubt
+  `oc-bitwarden-dev` den Branch, jeder Lauf wartet weiter auf Haralds Klick;
+  `oc-bitwarden-prod` bleibt auf `main` beschränkt. Umsetzung, Regel-Zeile
+  (Owner-only für Workflow 06) und Doku liegen im selben PR wie dieses ADR.
 - Tests auf DEV: Lesen, Anlegen, Ändern, Löschen je mit Telegram-Freigabe;
   Ablehnung und Zeitablauf führen zu keiner Ausführung; `bw` über `sh -c`,
   über `node` und ein direkter Aufruf der Bitwarden-API mit den

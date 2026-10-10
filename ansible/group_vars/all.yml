@@ -72,6 +72,27 @@ openclaw_gdrive_client_id: "{{ lookup('env', 'GDRIVE_CLIENT_ID') | default('', t
 openclaw_gdrive_client_secret: "{{ lookup('env', 'GDRIVE_CLIENT_SECRET') | default('', true) }}"
 openclaw_gdrive_refresh_token: "{{ lookup('env', 'GDRIVE_REFRESH_TOKEN') | default('', true) }}"
 openclaw_gdrive_access_token: "{{ lookup('env', 'GDRIVE_ACCESS_TOKEN') | default('', true) }}"
+# Agenten-Zugangsdaten (ADR-027, Issue #192): Bitwarden CLI + Skill ia4-bitwarden + OpenClaw-Exec-
+# Freigaben per Telegram. Aktiv nur, wenn die Secret-Datei auf dem Host liegt (Workflow
+# 06-oc-bitwarden-secret, geschuetztes GH Environment). Ohne Datei: kein Skill, keine CLI,
+# keine Exec-Freigaben, Deploy laeuft normal weiter.
+openclaw_bitwarden_enabled: true
+openclaw_bitwarden_env_file: /etc/ia4/oc-bitwarden.env   # root, 0600; Compose liest sie als env_file
+openclaw_bitwarden_cli_version: "2026.9.0"               # Pin (ADR-017), npm @bitwarden/cli, 2026-09-17
+openclaw_bitwarden_prefix: /opt/ia4-bitwarden/cli        # im Container, root-eigen, nicht auf dem PATH
+openclaw_bitwarden_server: "https://vault.bitwarden.eu"  # Agenten-Tresor liegt in der EU-Cloud
+# Telegram-User-IDs, die Exec-Freigaben bestaetigen duerfen (Harald, vgl. tools/telegram-approve-bot/README.md)
+openclaw_exec_approvers: ["7145674995"]
+# Exec-Allowlist (laeuft ohne Nachfrage; Format wie im OpenClaw-Freigabe-Dokument). /opt/ia4-bitwarden liegt bewusst NICHT darin -> Nachfrage.
+openclaw_exec_allowlist:
+  - pattern: "/usr/bin/*"
+  - pattern: "/bin/*"
+  - pattern: "/usr/sbin/*"
+  - pattern: "/sbin/*"
+  - pattern: "/usr/local/bin/*"
+  - pattern: "/usr/local/sbin/*"
+  - pattern: "/home/node/.local/bin/*"
+  - pattern: "/home/node/.npm-global/bin/*"
 # Memory-Seed-Gate (Design 06 K4-2, PR #83-Fix): DEV-Benchmark-Wissen (MEMORY.md + memory/)
 # NUR in DEV-Instanz-Arme deployen. prod bleibt vanilla (Design 01 Z.65) – der Seed wuerde
 # sonst von qmd-Backend + local memorySearch indexiert und DEV-Wissen auf prod liefern.

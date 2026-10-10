@@ -111,6 +111,12 @@
 {% else %}        "provider": "none"
 {% endif %}      }
     }
+{% if oc_bitwarden_active | default(false) | bool %},
+    "exec": {
+      "mode": "ask",
+      "strictInlineEval": true
+    }
+{% endif %}
 {% if subagents_deny %},
     "subagents": {
       "tools": {
@@ -153,6 +159,13 @@
 {% if oc_telegram_bot_token | default('') | length > 0 %}
       "enabled": true,
       "botToken": "{{ oc_telegram_bot_token }}"
+{% if oc_bitwarden_active | default(false) | bool %},
+      "execApprovals": {
+        "enabled": true,
+        "approvers": {{ openclaw_exec_approvers | tojson }},
+        "target": "dm"
+      }
+{% endif %}
 {% else %}
       "enabled": false
 {% endif %}

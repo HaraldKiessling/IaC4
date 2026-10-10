@@ -27,6 +27,7 @@
 | Code-Server | Tailscale (Traefik-Route) | Traefik-ForwardAuth |
 | OpenClaw OC1/OC2 | Tailscale via Serve-TLS (18789/18790) | Gateway-Token + Tailscale ACL |
 | OpenClaw OC3 | DEV: aktiv (Best-Practice-Referenz, Benchmark – Design 01-oc2-oc3-benchmark); PROD: aktiv (Best-Practice-Referenz, seit 2026-08-12) | Port 18791 |
+| Agenten-Tresor (Bitwarden) | Ausgehend aus den OC-Containern zur Bitwarden EU-Cloud; Zugangsdaten aus `/etc/ia4/oc-bitwarden.env` (root, 0600, Workflow 06) | Exec-Freigabe per Telegram je Aufruf von `ia4-bw` (keine harte Grenze, ADR-027) |
 
 ## SSH-Transition (zeitlich)
 | Phase | SSH-Zugriff | Via | Dauer |
