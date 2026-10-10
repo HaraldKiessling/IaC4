@@ -281,7 +281,7 @@ jobs:
           GW_TOKEN_PROD_OC1: ${{ secrets.PROD_OC1_GATEWAY_TOKEN }}
           GW_TOKEN_PROD_OC2: ${{ secrets.PROD_OC2_GATEWAY_TOKEN }}
           GW_TOKEN_PROD_OC3: ${{ secrets.PROD_OC3_GATEWAY_TOKEN }}
-          OPENCLAW_IMAGE: "ghcr.io/openclaw/openclaw:2026.7.1"   # Pin (ADR-017)
+          OPENCLAW_IMAGE: "ghcr.io/openclaw/openclaw:2026.9.6"   # Pin (ADR-017)
         run: |
           set -euo pipefail
           case "$APPROVE_INSTANCE" in
