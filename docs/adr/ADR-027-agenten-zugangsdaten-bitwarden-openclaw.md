@@ -124,7 +124,8 @@ Ausrollen in jede Instanz ab.
   konfigurieren. OpenClaw speichert Freigaben und Allowlist in der
   State-Datenbank (`$OPENCLAW_STATE_DIR/state/openclaw.sqlite`) [V]
   (<https://docs.openclaw.ai/tools/exec-approvals>); die Rolle setzt die
-  Vorgaben bei jedem Deploy neu.
+  Vorgaben bei jedem Deploy neu und entfernt dabei `allow-always`-Einträge für
+  `bw` (Weg über Konfiguration oder CLI noch unbelegt [A], DEV-Testfall).
 - Zugangsdaten: drei gemeinsame GH Secrets für alle Instanzen
   (`OC_BITWARDEN_CLIENTID`, `OC_BITWARDEN_CLIENTSECRET`,
   `OC_BITWARDEN_PASSWORD`) als Umgebungsvariablen `BW_CLIENTID`,
@@ -155,7 +156,8 @@ Ausrollen in jede Instanz ab.
   Umgebungsvariablen (z. B. `curl`) lösen eine Nachfrage aus oder sind
   gesperrt (Ergebnis wird dokumentiert); der Skill ist in einer Session
   außerhalb des IaC4-Workspace verfügbar und lässt sich vom Agenten nicht
-  ändern; nach Recreate und zweitem Deploy ist alles unverändert da.
+  ändern; ein `allow-always`-Eintrag für `bw` ist nach erneutem Deploy weg;
+  nach Recreate und zweitem Deploy ist alles unverändert da.
 - arc42 K5/K7/K11 werden mit der Umsetzung aktualisiert.
 
 ## Bewusst getragene Rest-Risiken (Owner akzeptiert)
@@ -198,7 +200,9 @@ Ausrollen in jede Instanz ab.
 
 - **Agent umgeht die Freigabe oder Zugangsdaten gelangen nach außen:**
   Master-Passwort und API-Key rotieren, betroffene Zielpasswörter ändern,
-  Bitwarden-Secrets aus dem Deploy nehmen (Agenten haben dann keinen Zugriff).
+  Secret-Datei auf DEV und PROD löschen (Lösch-Modus des Secret-Datei-Jobs)
+  und die Container neu erstellen; erst dann haben die Agenten keinen Zugriff
+  mehr.
 - **Ständige Nachfragen behindern die Agenten:** Allowlist nachschärfen oder
   `bw`-Einbindung per Flag deaktivieren; OpenClaw läuft ohne Bitwarden weiter.
 - **Master-Passwort verloren:** Konto lässt sich ohne Master-Passwort nicht
