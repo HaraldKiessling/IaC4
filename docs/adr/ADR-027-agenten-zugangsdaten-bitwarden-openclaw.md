@@ -131,10 +131,11 @@ Ausrollen in jede Instanz ab.
   (<https://docs.openclaw.ai/tools/exec-approvals>); die Rolle setzt die
   Vorgaben bei jedem Deploy neu und entfernt dabei `allow-always`-Einträge für
   `bw` (Weg über Konfiguration oder CLI noch unbelegt [A], DEV-Testfall).
-- Zugangsdaten: drei gemeinsame GH Secrets für alle Instanzen
-  (`OC_BITWARDEN_CLIENTID`, `OC_BITWARDEN_CLIENTSECRET`,
-  `OC_BITWARDEN_PASSWORD`) als Umgebungsvariablen `BW_CLIENTID`,
-  `BW_CLIENTSECRET`, `BW_PASSWORD`. Die alte Kette
+- Zugangsdaten: drei gemeinsame Environment-Secrets für alle Instanzen
+  (`BW_CLIENTID`, `BW_CLIENTSECRET`, `BW_PASSWORD`, Namen von Harald
+  gewählt), gleichnamig als Umgebungsvariablen im Container. Repo-Secrets
+  mit diesen Namen darf es nicht geben, weil sie bei fehlendem
+  Environment-Secret greifen würden. Die alte Kette
   `*_OC<n>_BITWARDEN_CLIENTSECRET` inkl. Tippfehler
   `bitwarden_clientscurect_env` wird ersetzt; `.env.example` wird
   aktualisiert. Danach rotiert Harald den bisherigen API-Key.

@@ -104,9 +104,9 @@ jobs:
     steps:
       - name: Vorbedingungen pruefen (Secrets vorhanden, Werte nicht ausgeben)
         env:
-          BW_CLIENTID: ${{ secrets.OC_BITWARDEN_CLIENTID }}
-          BW_CLIENTSECRET: ${{ secrets.OC_BITWARDEN_CLIENTSECRET }}
-          BW_PASSWORD: ${{ secrets.OC_BITWARDEN_PASSWORD }}
+          BW_CLIENTID: ${{ secrets.BW_CLIENTID }}
+          BW_CLIENTSECRET: ${{ secrets.BW_CLIENTSECRET }}
+          BW_PASSWORD: ${{ secrets.BW_PASSWORD }}
           TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
@@ -120,7 +120,7 @@ jobs:
           if [ "${{ inputs.bitwarden_secret }}" = "write" ]; then
             for v in BW_CLIENTID BW_CLIENTSECRET BW_PASSWORD; do
               eval "VAL=\$$v"
-              [ -n "$VAL" ] || { echo "❌ Environment-Secret fuer $v fehlt (OC_BITWARDEN_*)"; FAIL=1; continue; }
+              [ -n "$VAL" ] || { echo "❌ Environment-Secret fuer $v fehlt (Environment oc-bitwarden-${{ inputs.target }})"; FAIL=1; continue; }
               # env_file-Format: Wert in einfachen Anfuehrungszeichen (literal, keine Interpolation)
               case "$VAL" in
                 *"'"*) echo "❌ $v enthaelt ein einfaches Anfuehrungszeichen – im env_file nicht darstellbar"; FAIL=1 ;;
@@ -172,9 +172,9 @@ jobs:
       - name: Secret-Datei schreiben (root, 0600; Werte nur ueber stdin, nie als Argument)
         if: inputs.bitwarden_secret == 'write'
         env:
-          BW_CLIENTID: ${{ secrets.OC_BITWARDEN_CLIENTID }}
-          BW_CLIENTSECRET: ${{ secrets.OC_BITWARDEN_CLIENTSECRET }}
-          BW_PASSWORD: ${{ secrets.OC_BITWARDEN_PASSWORD }}
+          BW_CLIENTID: ${{ secrets.BW_CLIENTID }}
+          BW_CLIENTSECRET: ${{ secrets.BW_CLIENTSECRET }}
+          BW_PASSWORD: ${{ secrets.BW_PASSWORD }}
         run: |
           set -euo pipefail
           printf "BW_CLIENTID='%s'\nBW_CLIENTSECRET='%s'\nBW_PASSWORD='%s'\n" \
