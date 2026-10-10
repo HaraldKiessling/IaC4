@@ -160,8 +160,8 @@ vollständig testbar.
   und Deploys der Broker-Rolle als Owner-only einstufen. Die Regel-Änderung
   folgt als eigener Regel-PR (AGENTS.md + `.roo`). Zusätzlich lässt das
   Environment Deployments nur von `main` zu, damit ein Branch-Workflow es nicht
-  anfordern kann. **Owner-Entscheid offen;** bei Ablehnung wird das Risiko unter
-  „Bewusst getragene Rest-Risiken“ aufgenommen.
+  anfordern kann. **Owner-Entscheid 2026-10-10: so umsetzen**
+  (Schlüssel nur mit Haralds Freigabe in GitHub, nur von `main`).
 - Abbau der `BITWARDEN_CLIENTSECRET`-Kette (Template, `instance-body.yml`,
   group_vars, Workflow-Env, Verify-Step) inkl. Tippfehler
   `bitwarden_clientscurect_env` als erster Umsetzungsschritt; danach rotiert
