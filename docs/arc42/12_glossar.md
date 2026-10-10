@@ -23,10 +23,7 @@
 | **OC-Instanz** | Eine von drei OpenClaw-Gateway-Instanzen (oc1–oc3) je VPS, also sechs über DEV und PROD |
 | **Betriebs-Secret** | Geheimnis, das IaC4 beim Deploy einer Instanz mitgibt (API-Key, Token); Quelle sind GH Secrets |
 | **Agenten-Zugangsdaten** | Logins, mit denen sich ein Agent zur Laufzeit selbst bei einem Dienst anmeldet (z. B. ein Bankportal); liegen im Agenten-Tresor, nie in GH Secrets |
-| **Agenten-Tresor** | Eigenes Bitwarden-Konto nur für die OC-Instanzen; alle Instanzen sehen dieselben Einträge, gegliedert in die Ordner `Bestätigung` und `Frei` |
-| **Freigabe-Dienst** | Dienst, der als Einziger den Agenten-Tresor öffnen kann und Agenten-Zugangsdaten nur nach den Freigabe-Regeln herausgibt |
-| **Freigabe** | Haralds Bestätigung per Telegram-Knopf für einen Eintrag und eine OC-Instanz; gilt beim Lesen 30 Minuten, beim Anlegen oder Ändern für genau diesen einen Vorgang |
-| **Notfall-Stopp** | `/sperren` im Freigabe-Bot: blockiert jeden Zugriff auf den Agenten-Tresor, bis Harald `/entsperren` sendet |
-| **Platzhalter-Einsetzung** | Der Agent nennt nur den Namen eines Eintrags; der Freigabe-Dienst setzt den Wert direkt ein, mit dem Ziel, dass das Passwort nie das KI-Modell erreicht |
+| **Agenten-Tresor** | Eigenes Bitwarden-Konto nur für die OC-Instanzen; alle Instanzen (DEV und PROD) sehen dieselben Einträge |
+| **Freigabe** | Haralds Bestätigung per Telegram-Knopf, bevor ein Agent auf den Agenten-Tresor zugreift (einmalig oder dauerhaft, OpenClaw-Exec-Freigabe) |
 | **P1–P7** | Leitprinzipien (Evidenz, Living Docs, etc.) |
 | **GitOps** | Deployment-Status = Repository-Status |
