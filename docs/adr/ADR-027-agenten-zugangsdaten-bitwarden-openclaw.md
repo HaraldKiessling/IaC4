@@ -143,7 +143,8 @@ Ausrollen in jede Instanz ab.
   (`oc-bitwarden-dev`, `oc-bitwarden-prod`; PROD nur von `main`) [V]
   (<https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments>).
   Damit nicht jeder OC-Deploy auf Harald wartet, schreibt ein eigener,
-  geschützter Workflow (`06-oc-bitwarden-secret`, Owner-only) die Secret-Datei
+  geschützter Job (`bitwarden-secret` in Workflow 04, nur mit
+  `bitwarden_secret=write`/`delete`, Owner-only) die Secret-Datei
   auf den Host (nur bei Ersteinrichtung, Rotation oder Rückbau); normale
   Deploys binden die vorhandene Datei nur ein. Die Datei
   (`/etc/ia4/oc-bitwarden.env`) liegt außerhalb von `./config` und
@@ -154,8 +155,13 @@ Ausrollen in jede Instanz ab.
   Ein Environment „nur `main`“ gibt Branch-Läufen keine Secrets, die Tests auf
   DEV laufen aber vor dem Merge vom Branch (P7). Deshalb erlaubt
   `oc-bitwarden-dev` den Branch, jeder Lauf wartet weiter auf Haralds Klick;
-  `oc-bitwarden-prod` bleibt auf `main` beschränkt. Umsetzung, Regel-Zeile
-  (Owner-only für Workflow 06) und Doku liegen im selben PR wie dieses ADR.
+  `oc-bitwarden-prod` bleibt auf `main` beschränkt. Der Job liegt in Workflow
+  04, weil der Knopf „Run workflow“ nur für Workflows erscheint, die auf
+  `main` existieren („present if the workflow file exists on the default
+  branch“) [V]
+  (<https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch>);
+  ein neuer Workflow wäre vom Branch aus nicht startbar. Umsetzung, Regel-Zeile
+  (Owner-only für `bitwarden_secret`) und Doku liegen im selben PR wie dieses ADR.
 - Tests auf DEV: Lesen, Anlegen, Ändern, Löschen je mit Telegram-Freigabe;
   Ablehnung und Zeitablauf führen zu keiner Ausführung; `bw` über `sh -c`,
   über `node` und ein direkter Aufruf der Bitwarden-API mit den
@@ -206,16 +212,18 @@ Ausrollen in jede Instanz ab.
 
 - **Agent umgeht die Freigabe oder Zugangsdaten gelangen nach außen:**
   Master-Passwort und API-Key rotieren, betroffene Zielpasswörter ändern,
-  Secret-Datei auf DEV und PROD löschen (Lösch-Modus des Secret-Datei-Jobs)
-  und die Container neu erstellen; erst dann haben die Agenten keinen Zugriff
-  mehr.
+  Workflow 04 mit `bitwarden_secret=delete` und `playbook=openclaw` auf DEV und
+  PROD: löscht die Secret-Datei und erstellt die Container ohne Zugangsdaten
+  neu; erst dann haben die Agenten keinen Zugriff mehr.
 - **Ständige Nachfragen behindern die Agenten:** Allowlist nachschärfen oder
-  `bw`-Einbindung per Flag deaktivieren; OpenClaw läuft ohne Bitwarden weiter.
+  Bitwarden per Rollback abschalten; OpenClaw läuft ohne Bitwarden weiter.
 - **Master-Passwort verloren:** Konto lässt sich ohne Master-Passwort nicht
   entschlüsseln [A]; Harald verwahrt ein Emergency Kit offline.
 - **Lockout-Risiko:** keines (keine Ports, keine ACL-/UFW-Änderung).
-- **Rollback:** Skill, Bitwarden CLI und Exec-Freigabe-Konfiguration per Flag
-  in der Rolle abschalten und neu deployen. Die alte
+- **Rollback:** Secret-Datei löschen (siehe oben) oder
+  `openclaw_bitwarden_enabled: false` setzen und neu deployen. Die Rolle
+  entfernt dann Skill und Hülle aus dem Container und setzt die
+  Exec-Freigaben auf das vorherige Verhalten ohne Nachfrage zurück. Die alte
   `BITWARDEN_CLIENTSECRET`-Kette wird nicht zurückgeholt.
 
 ## Referenzen

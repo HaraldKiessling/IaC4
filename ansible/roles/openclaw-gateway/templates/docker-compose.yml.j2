@@ -37,7 +37,7 @@ services:
 {% endif %}
 {% if oc_bitwarden_active | default(false) | bool %}
     # Agenten-Zugangsdaten (ADR-027): BW_CLIENTID/BW_CLIENTSECRET/BW_PASSWORD aus der Host-Datei
-    # (root, 0600, geschrieben nur von Workflow 06). Compose liest sie beim Start; nicht im Repo.
+    # (root, 0600, geschrieben nur vom Job bitwarden-secret, Workflow 04). Compose liest sie beim Start; nicht im Repo.
     env_file:
       - {{ openclaw_bitwarden_env_file }}
 {% endif %}

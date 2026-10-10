@@ -202,7 +202,7 @@
   when: not (oc_gdrive_ready | bool)
 
 # Agenten-Zugangsdaten (ADR-027, Issue #192): aktiv nur mit Secret-Datei auf dem Host.
-# Die Datei schreibt ausschliesslich Workflow 06-oc-bitwarden-secret (geschuetztes GH Environment);
+# Die Datei schreibt ausschliesslich der Job bitwarden-secret in Workflow 04 (geschuetztes GH Environment);
 # dieser Deploy liest sie nie, er bindet sie nur per env_file ein. Fehlt sie: Bitwarden aus,
 # der Deploy laeuft normal weiter (kein Abbruch).
 - name: "{{ oc.name }}: Bitwarden – Secret-Datei auf dem Host pruefen"

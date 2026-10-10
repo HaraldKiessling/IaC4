@@ -73,8 +73,8 @@ openclaw_gdrive_client_secret: "{{ lookup('env', 'GDRIVE_CLIENT_SECRET') | defau
 openclaw_gdrive_refresh_token: "{{ lookup('env', 'GDRIVE_REFRESH_TOKEN') | default('', true) }}"
 openclaw_gdrive_access_token: "{{ lookup('env', 'GDRIVE_ACCESS_TOKEN') | default('', true) }}"
 # Agenten-Zugangsdaten (ADR-027, Issue #192): Bitwarden CLI + Skill ia4-bitwarden + OpenClaw-Exec-
-# Freigaben per Telegram. Aktiv nur, wenn die Secret-Datei auf dem Host liegt (Workflow
-# 06-oc-bitwarden-secret, geschuetztes GH Environment). Ohne Datei: kein Skill, keine CLI,
+# Freigaben per Telegram. Aktiv nur, wenn die Secret-Datei auf dem Host liegt (Workflow 04,
+# Job bitwarden-secret, geschuetztes GH Environment). Ohne Datei: kein Skill, keine CLI,
 # keine Exec-Freigaben, Deploy laeuft normal weiter.
 openclaw_bitwarden_enabled: true
 openclaw_bitwarden_env_file: /etc/ia4/oc-bitwarden.env   # root, 0600; Compose liest sie als env_file
