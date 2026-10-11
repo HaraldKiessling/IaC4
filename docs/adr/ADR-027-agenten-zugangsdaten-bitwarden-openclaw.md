@@ -15,6 +15,58 @@
   lesen. Ein Skill wird heute nicht ausgerollt (kein Treffer für `skill` in
   `ansible/roles/openclaw-gateway/`) [I].
 
+## Änderung 2026-10-11: Nachfrage nur beim Tresor (Plugin statt Exec-Allowlist)
+
+- **Befund [I]:** Mit `tools.exec.mode: "ask"` und Allowlist fragte PROD oc3
+  fast jeden Befehl ab (`cd … && git …`, `python3 <Skript>`,
+  `bash <Skript>`), und Cron-Läufe (`sync-anlagen.sh`) wurden mit
+  `approval-scope-closed` abgebrochen, weil dort niemand bestätigen kann
+  (Freigabe-Protokoll von Harald, 2026-10-11).
+- **Owner-Vorgabe:** „nur Tresor-Befehle fragen, alles andere läuft wie
+  vorher“.
+- **Umsetzung:** Kein Exec-Modus und kein Freigabe-Dokument mehr von IaC4
+  (Standard `full`, wie vor ADR-027). Ein eigenes Plugin
+  `ia4-vault-approval` (rund 60 Zeilen,
+  `ansible/roles/openclaw-gateway/files/plugins/`, root-eigen und
+  schreibgeschützt eingebunden, geladen über `plugins.load.paths`) prüft per
+  `before_tool_call` jeden Tool-Aufruf. Enthalten die Parameter einen
+  Tresor-Bezug (`ia4-bw`, `@bitwarden/cli`, `bw`, `BW_*`-Variablen,
+  `/proc/*/environ`, `printenv`, ein bloßes `env`, `export -p`), verlangt es
+  eine Freigabe mit nur
+  `allow-once` oder `deny`, Zeitlimit 10 Minuten; Zeitablauf, fehlende
+  Oberfläche und Abbruch blockieren [V]
+  (<https://docs.openclaw.ai/plugins/hooks/tool-policy>,
+  <https://docs.openclaw.ai/plugins/plugin-permission-requests>). Die
+  Anfrage geht per `approvals.plugin` (Ziel Telegram, Haralds User-ID) an
+  Haralds Telegram [V]
+  (<https://docs.openclaw.ai/tools/exec-approvals-advanced>). Passwort-Felder
+  im Befehl werden in der Anfrage durch `***` ersetzt.
+- **Warum Eigenentwicklung trotz Vorgabe 1:** OpenClaw fragt Exec-Befehle nur
+  über die Allowlist ab (Treffer läuft, alles andere fragt) [V]
+  (<https://docs.openclaw.ai/tools/exec-approvals>); ein Bordmittel „nur
+  bei Befehl X fragen“ gibt es nicht. Allowlist und Owner-Vorgabe „alles
+  andere läuft wie vorher“ schließen sich deshalb aus. Der dokumentierte Weg
+  für eigene Regeln ist ein Plugin mit `before_tool_call` [V]; das kleinste
+  davon ist dieses.
+- **Absicherung gegen stilles Fehlen:** Lädt das Plugin nicht, gäbe es keine
+  Nachfrage. Die Rolle prüft deshalb nach dem Start mit
+  `openclaw plugins inspect ia4-vault-approval --runtime --json`, dass der
+  Hook registriert ist, und bricht sonst ab; der Verify-Schritt in Workflow 04
+  macht den Run ebenfalls rot.
+- **Folge:** Cron-Jobs und normale Befehle laufen ohne Nachfrage; nur
+  Tresor-Zugriffe fragen. Ein Tresor-Zugriff aus einem Cron-Lauf wird
+  blockiert (niemand kann bestätigen).
+- **Restrisiko unverändert (keine harte Grenze), Erkennung jetzt über Text:**
+  Ein Skript, das die Tresor-Wörter nicht im Aufruf trägt, fällt nicht auf
+  (z. B. eigenes Skript, das die Umgebung liest, oder ein bloßes `set`, das
+  bewusst nicht erkannt wird, weil das Wort in fast jedem Tool-Aufruf vorkommt).
+  Das entspricht dem schon
+  akzeptierten Risiko „Zugangsdaten als Umgebungsvariablen im Container“.
+- **Rückbau der früheren Allowlist:** Wo der Marker `exec-policy-ia4` liegt,
+  setzt die Rolle das Freigabe-Dokument auf `full`/`off` zurück.
+- Die Abschnitte unten zu Allowlist und `ask: on-miss` beschreiben den Stand
+  vom 2026-10-10 und gelten nicht mehr.
+
 ## Fachliche Vorgaben (Owner, 2026-10-10)
 
 1. **So wenig Eigenentwicklung wie möglich:** vorhandene OpenClaw-Skills,

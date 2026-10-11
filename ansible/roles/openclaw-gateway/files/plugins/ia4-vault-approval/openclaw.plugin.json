@@ -1,0 +1,13 @@
+{
+  "id": "ia4-vault-approval",
+  "name": "IaC4 Tresor-Freigabe",
+  "description": "Fragt vor jedem Zugriff auf den Agenten-Tresor (Bitwarden) per Telegram nach (ADR-027).",
+  "categories": ["other"],
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false
+  }
+}

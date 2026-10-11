@@ -21,5 +21,5 @@
 | SSH-Lockout bei Tailscale-Ausfall | Sehr gering | 🔴 Hoch | UFW-Fallback-Regel oder IPMI |
 | GitHub-Ausfall | Gering | Mittel | Lokales Backup des Repos |
 | ADR-010: ACL-Fragmentierung | Mittel | Mittel | Koordinierter ACL-Prozess nötig |
-| ADR-027: Agent umgeht Telegram-Freigabe (Zugangsdaten als Umgebungsvariablen im Container, `npx`/API-Zugriff, Agent ändert Freigabe-State zwischen Deploys) | Mittel | 🔴 Hoch | Owner-akzeptiert; Allowlist + `strictInlineEval`, Skill/Wrapper read-only, Freigaben bei jedem Deploy neu gesetzt; Rückfall: Eigenbau-Broker (ADR-027 Option B) |
-| ADR-027: Exec-Allowlist bremst Agenten (Nachfragen bei nicht freigegebenen Programmen) | Mittel | Mittel | Auf DEV messen, Allowlist nachschärfen; Rückbau per Workflow 04 mit `bitwarden_secret=delete` |
+| ADR-027: Agent umgeht Telegram-Freigabe (Zugangsdaten als Umgebungsvariablen im Container, `npx`/API-Zugriff, Agent ändert Freigabe-State zwischen Deploys) | Mittel | 🔴 Hoch | Owner-akzeptiert; Plugin `ia4-vault-approval` erkennt Tresor-Zugriffe am Aufruftext (nur einmal oder ablehnen), Skill/Wrapper/Plugin read-only; Rückfall: Eigenbau-Broker (ADR-027 Option B) |
+| ADR-027: Tresor-Zugriff aus Cron-Läufen wird blockiert (niemand kann bestätigen); Fehlalarm bei Befehlen mit dem Wort `bw` | Gering | Gering | Tresor nur in Dialogen nutzen; Erkennungsmuster im Plugin anpassen; Rückbau per Workflow 04 mit `bitwarden_secret=delete` |

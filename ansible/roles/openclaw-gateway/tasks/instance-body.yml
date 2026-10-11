@@ -224,6 +224,21 @@
   loop:
     - "{{ openclaw_data_root }}/{{ oc.name }}/bitwarden"
     - "{{ openclaw_data_root }}/{{ oc.name }}/bitwarden/skills/ia4-bitwarden"
+    - "{{ openclaw_data_root }}/{{ oc.name }}/bitwarden/plugin"
+  when: oc_bitwarden_active | bool
+
+- name: "{{ oc.name }}: Bitwarden – Freigabe-Plugin ia4-vault-approval ablegen (nur Tresor fragt nach)"
+  ansible.builtin.copy:
+    src: "plugins/ia4-vault-approval/{{ item }}"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/bitwarden/plugin/{{ item }}"
+    mode: '0644'
+    owner: root
+    group: root
+  loop:
+    - index.ts
+    - openclaw.plugin.json
+    - package.json
+  register: _oc_plugin
   when: oc_bitwarden_active | bool
 
 - name: "{{ oc.name }}: Bitwarden – Skill ia4-bitwarden ablegen (geprueft, versioniert, ADR-027)"
@@ -282,7 +297,7 @@
 - name: "{{ oc.name }}: Container neu starten (Config geaendert oder CLEAN – frischer Prozess)"
   ansible.builtin.command:
     cmd: "docker compose -f {{ openclaw_data_root }}/{{ oc.name }}/docker-compose.yml restart openclaw"
-  when: _oc_cfg.changed or (_oc_clean_agents.changed | default(false)) or (_oc_clean_ws.changed | default(false)) or (_oc_clean_state.changed | default(false))
+  when: _oc_cfg.changed or (_oc_plugin.changed | default(false)) or (_oc_clean_agents.changed | default(false)) or (_oc_clean_ws.changed | default(false)) or (_oc_clean_state.changed | default(false))
   changed_when: true
 
 # Stabilisierungs-Wartezeit VOR Install/Health (Härtung 2026-10-05): Beim Recreate startete der
@@ -400,67 +415,47 @@
       ansible.builtin.fail:
         msg: "Health-Check {{ oc.name }} (Port {{ oc.port }}) fehlgeschlagen - Diagnose (docker ps / docker logs) siehe oben."
 
-# Exec-Freigaben (ADR-027): Das Host-Freigabe-Dokument liegt in der State-DB
-# (config/state/openclaw.sqlite). `approvals set` ersetzt es vollstaendig – damit setzt jeder
-# Deploy Allowlist und Vorgaben neu und entfernt agentenseitige allow-always-Eintraege.
-# Bewusst ohne Changed-Erkennung (Ergebnis ist bei jedem Lauf gleich).
-- name: "{{ oc.name }}: Marker – Exec-Freigaben von IaC4 (vor dem Setzen, damit ein Abbruch den Rueckbau nicht verhindert)"
-  ansible.builtin.file:
-    path: "{{ openclaw_data_root }}/{{ oc.name }}/exec-policy-ia4"
-    state: touch
-    mode: '0644'
-    access_time: preserve
-    modification_time: preserve
-  when: oc_bitwarden_active | bool
-
-- name: "{{ oc.name }}: Exec-Freigaben setzen (Allowlist + Nachfrage, ADR-027)"
-  community.docker.docker_container_exec:
-    container: "openclaw-{{ oc.name }}"
-    user: "node"
-    command: openclaw approvals set --gateway --stdin
-    stdin: "{{ _oc_exec_approvals_doc | to_json }}"
-  vars:
-    _oc_exec_approvals_doc:
-      version: 1
-      defaults:
-        security: allowlist
-        ask: on-miss
-        askFallback: deny
-        autoAllowSkills: false
-      agents:
-        "*":
-          security: allowlist
-          ask: on-miss
-          askFallback: deny
-          autoAllowSkills: false
-          allowlist: "{{ openclaw_exec_allowlist }}"
-  register: _oc_approvals
-  changed_when: false
-  when: oc_bitwarden_active | bool
-
-- name: "{{ oc.name }}: Marker pruefen (Rueckbau der Exec-Freigaben noetig?)"
+# Exec-Freigaben (ADR-027, Fix 2026-10-11): IaC4 setzt kein Exec-Freigabe-Dokument mehr; die
+# Tresor-Nachfrage macht das Plugin ia4-vault-approval. Instanzen, auf denen das fruehere
+# Allowlist-Dokument liegt (Marker exec-policy-ia4), bekommen das vorherige Verhalten ohne
+# Nachfrage zurueck (Vorgaben laut docs/cli/approvals.md "never stop on exec approvals").
+- name: "{{ oc.name }}: Marker pruefen (fruehere Exec-Allowlist von IaC4 vorhanden?)"
   ansible.builtin.stat:
     path: "{{ openclaw_data_root }}/{{ oc.name }}/exec-policy-ia4"
   register: _oc_exec_marker
-  when: not (oc_bitwarden_active | bool)
 
-# Rueckbau (ADR-027 Rollback): Bitwarden aus -> vorheriges Verhalten ohne Nachfrage
-# wiederherstellen (Vorgaben laut docs/cli/approvals.md "never stop on exec approvals").
-- name: "{{ oc.name }}: Exec-Freigaben zuruecksetzen (Bitwarden nicht aktiv, Marker vorhanden)"
+- name: "{{ oc.name }}: Exec-Freigaben zuruecksetzen (fruehere Allowlist entfernen)"
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
     command: openclaw approvals set --gateway --stdin
     stdin: '{"version": 1, "defaults": {"security": "full", "ask": "off", "askFallback": "full"}}'
-  when:
-    - not (oc_bitwarden_active | bool)
-    - _oc_exec_marker.stat.exists | default(false)
+  when: _oc_exec_marker.stat.exists | default(false)
 
 - name: "{{ oc.name }}: Marker entfernen (Rueckbau erledigt)"
   ansible.builtin.file:
     path: "{{ openclaw_data_root }}/{{ oc.name }}/exec-policy-ia4"
     state: absent
-  when: not (oc_bitwarden_active | bool)
+
+# Fail-closed-Gate (Review K2, 2026-10-11): Ohne geladenes Plugin gaebe es KEINE Tresor-Nachfrage,
+# der Deploy waere trotzdem gruen. --runtime laedt das Plugin-Modul und listet die registrierten
+# Hooks [V docs/cli/plugins/inspect-and-diagnose.md]; erwartet: rc 0, Hook before_tool_call
+# registriert, Status weder error noch disabled. Fehlschlag faellt in den rescue des Wrappers.
+- name: "{{ oc.name }}: Freigabe-Plugin ia4-vault-approval geladen? (Tresor-Nachfrage aktiv)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: openclaw plugins inspect ia4-vault-approval --runtime --json
+  register: _oc_plugin_inspect
+  changed_when: false
+  retries: 6
+  delay: 10
+  until: _oc_plugin_inspect.rc | default(1) == 0
+  failed_when: >-
+    (_oc_plugin_inspect.rc | default(1)) != 0
+    or 'before_tool_call' not in (_oc_plugin_inspect.stdout | default(''))
+    or (_oc_plugin_inspect.stdout | default('')) is regex('"status": *"(error|disabled)"')
+  when: oc_bitwarden_active | bool
 
 - name: "{{ oc.name }}: Tailscale Serve-Status (Idempotenz)"
   ansible.builtin.shell: tailscale serve status

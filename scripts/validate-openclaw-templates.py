@@ -187,9 +187,17 @@ except Exception as ex:
 # (Default, keine Secret-Datei) -> nichts davon, auch kein altes BITWARDEN_CLIENTSECRET.
 try:
     _bw = dict(oc_bitwarden_active=True, openclaw_exec_approvers=gv_all['openclaw_exec_approvers'],
-               openclaw_bitwarden_env_file=gv_all['openclaw_bitwarden_env_file'])
+               openclaw_bitwarden_env_file=gv_all['openclaw_bitwarden_env_file'],
+               openclaw_vault_plugin_path=gv_all['openclaw_vault_plugin_path'])
     db = json.loads(_env().from_string(SRC).render(**_base, **_bw))
-    assert db['tools']['exec'] == {'mode': 'ask', 'strictInlineEval': True}, f"tools.exec falsch: {db['tools'].get('exec')}"
+    # Fix 2026-10-11: kein Exec-Modus "ask" mehr (fragte fast alles ab); nur das Tresor-Plugin fragt.
+    assert 'exec' not in db['tools'], f"tools.exec darf nicht gesetzt sein: {db['tools'].get('exec')}"
+    assert db['plugins']['load']['paths'] == [gv_all['openclaw_vault_plugin_path']], "Plugin-Pfad fehlt"
+    assert db['plugins']['entries']['ia4-vault-approval'] == {'enabled': True}, "Plugin nicht aktiviert"
+    assert db['approvals']['plugin'] == {
+        'enabled': True, 'mode': 'targets',
+        'targets': [{'channel': 'telegram', 'to': str(a)} for a in gv_all['openclaw_exec_approvers']]}, \
+        f"approvals.plugin falsch: {db.get('approvals')}"
     _base_tg = dict(_base, oc_telegram_bot_token='tg-dummy')
     dbt = json.loads(_env().from_string(SRC).render(**_base_tg, **_bw))
     ea = dbt['channels']['telegram']['execApprovals']
@@ -198,12 +206,15 @@ try:
     svc = comp_bw['services']['openclaw']
     assert svc.get('env_file') == [gv_all['openclaw_bitwarden_env_file']], "env_file fehlt"
     for m in ('./bitwarden/skills/ia4-bitwarden:/home/node/.openclaw/skills/ia4-bitwarden:ro',
-              './bitwarden/ia4-bw:/opt/ia4-bitwarden/ia4-bw:ro'):
+              './bitwarden/ia4-bw:/opt/ia4-bitwarden/ia4-bw:ro',
+              './bitwarden/plugin:/opt/ia4-bitwarden/plugin:ro'):
         assert m in svc['volumes'], f"Mount fehlt: {m}"
     assert not any(k.startswith('BW_') or k == 'BITWARDEN_CLIENTSECRET' for k in svc.get('environment', {})), \
         "Bitwarden-Werte im Compose-environment (gehoeren nur in die Host-Datei)"
     dn = json.loads(_env().from_string(SRC).render(**_base_tg))
     assert 'exec' not in dn['tools'] and 'execApprovals' not in dn['channels']['telegram'], "Freigaben trotz inaktiv"
+    assert 'approvals' not in dn and 'load' not in dn['plugins'] and 'ia4-vault-approval' not in dn['plugins']['entries'], \
+        "Tresor-Plugin trotz inaktiv"
     comp_nb = yaml.safe_load(_env().from_string(COMPOSE).render(**_compose_base))['services']['openclaw']
     assert 'env_file' not in comp_nb and not any('bitwarden' in v for v in comp_nb['volumes']), "Bitwarden trotz inaktiv"
     assert 'BITWARDEN_CLIENTSECRET' not in _env().from_string(COMPOSE).render(**_compose_base), "alte Kette noch im Template"
