@@ -2,12 +2,12 @@
 // Von Ansible abgelegt, root-eigen und read-only in den Container gemountet.
 // Jeder Tool-Aufruf, dessen Parameter den Agenten-Tresor beruehren (ia4-bw, Bitwarden CLI,
 // BW_*-Variablen), wartet auf Haralds Freigabe in Telegram (allow-once/deny).
-// Suche (list items --search) laeuft ohne Freigabe; der Wrapper zeigt dabei nur ID und Name.
+// Suche (list items --search) fragt jedes Mal einmal; der Wrapper zeigt dabei nur ID und Name.
 // Eine Freigabe gilt danach WINDOW_MS lang NUR zum Lesen (get) des freigegebenen Eintrags (ID,
 // Name), fuer alle Agenten dieser Instanz (auch Sub-Agenten).
 // Alles andere (anderer Eintrag, list ohne Suche, create/edit/delete, direkte bw-/BW_*-/
 // Umgebungs-Zugriffe) fragt jedes Mal
-// (Owner-Entscheide 2026-10-11: "10 Minuten", "nur fuer einen Eintrag", "Ja, Suche frei").
+// (Owner-Entscheide 2026-10-11: "10 Minuten", "nur fuer einen Eintrag", "Suche fragt").
 // Alle anderen Befehle laufen ohne Nachfrage wie vor ADR-027.
 // Grundlage [V]: docs/plugins/hooks/tool-policy.md (before_tool_call, requireApproval),
 // docs/plugins/plugin-permission-requests.md (Entscheidungen, Timeout, fail-closed).
@@ -58,7 +58,8 @@ function paramsText(params: unknown): string {
   }
 }
 
-// Fenster nur fuer Befehle, die GENAU dieser Form entsprechen (Allowlist, sonst jedes Mal fragen):
+// Lese-Fenster (get) bzw. Suchkarte (list --search) nur fuer Befehle, die GENAU dieser Form entsprechen
+// (Allowlist, sonst jedes Mal fragen mit allgemeiner Karte):
 //   [/opt/ia4-bitwarden/]ia4-bw list items --search <begriff> [--pretty]
 //   [/opt/ia4-bitwarden/]ia4-bw get item|username|password|uri|totp|notes <name-oder-id> [--raw|--pretty]
 // Woerter: ohne Sonderzeichen oder vollstaendig in '...'/"..." ohne Quotes, $, `, \ darin.
@@ -98,7 +99,7 @@ function entryKey(params: Record<string, unknown>): { key: string; kind: "search
 }
 
 // Genau EIN Bitwarden-Eintrag im Ergebnis (geparstes JSON mit object "item") -> dessen ID und Name.
-// Nur nach "get item" oder "list items --search"; Mehrfachtreffer oder kein JSON: keine Erweiterung.
+// Nur nach "get item"; Mehrfachtreffer oder kein JSON: keine Erweiterung.
 function entriesFromResult(result: unknown): string[] {
   const items = new Map<string, string>();
   const visit = (v: unknown, depth: number) => {
@@ -146,7 +147,7 @@ function purge(t: number) {
 export default definePluginEntry({
   id: "ia4-vault-approval",
   name: "IaC4 Tresor-Freigabe",
-  description: "Fragt vor Zugriffen auf den Agenten-Tresor (Bitwarden) per Telegram nach; Suche frei, eine Freigabe gilt 10 Minuten fuer einen Eintrag.",
+  description: "Fragt vor Zugriffen auf den Agenten-Tresor (Bitwarden) per Telegram nach; jede Suche fragt, eine Lese-Freigabe gilt 10 Minuten fuer einen Eintrag.",
   register(api) {
     api.on(
       "before_tool_call",
@@ -169,11 +170,9 @@ export default definePluginEntry({
         // Fenster nur fuer Shell-Tools (Review Runde 2, Haertung).
         const shellTool = !codeCell && (event.toolName === "exec" || event.toolName === "bash");
         const entry = shellTool ? entryKey((event.params ?? {}) as Record<string, unknown>) : undefined;
-        const key = entry?.key;
-        // Suche ohne Freigabe: der Wrapper gibt dabei nur ID und Name aus (keine Zugangsdaten).
-        if (entry?.kind === "search") {
-          return;
-        }
+        // Suche fragt jedes Mal (Owner-Entscheid "Suche fragt", 2026-10-11), ohne Fenster.
+        const search = entry?.kind === "search";
+        const key = search ? undefined : entry?.key;
         const expands = entry?.kind === "get-item";
         const t = now();
         purge(t);
@@ -195,7 +194,11 @@ export default definePluginEntry({
         }
         const id = nextId++;
         if (key) pending.set(key, { since: t, id });
-        const scope = key ? "Gilt 10 Min. nur fuer diesen Eintrag." : "Gilt nur fuer diesen Aufruf.";
+        const scope = key
+          ? "Gilt 10 Min. nur fuer diesen Eintrag."
+          : search
+            ? "Suche (zeigt nur Namen und IDs), gilt nur fuer diesen Aufruf."
+            : "Gilt nur fuer diesen Aufruf.";
         return {
           requireApproval: {
             title: "Zugriff auf den Agenten-Tresor",

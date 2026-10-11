@@ -1,7 +1,7 @@
 {
   "id": "ia4-vault-approval",
   "name": "IaC4 Tresor-Freigabe",
-  "description": "Fragt vor Zugriffen auf den Agenten-Tresor (Bitwarden) per Telegram nach; Suche nach Namen frei, eine Freigabe gilt 10 Minuten zum Lesen eines Eintrags (ADR-027).",
+  "description": "Fragt vor Zugriffen auf den Agenten-Tresor (Bitwarden) per Telegram nach; jede Suche fragt, eine Lese-Freigabe gilt 10 Minuten fuer einen Eintrag (ADR-027).",
   "categories": ["other"],
   "activation": {
     "onStartup": true

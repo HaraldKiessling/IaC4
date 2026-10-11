@@ -42,13 +42,16 @@
   (<https://docs.openclaw.ai/tools/exec-approvals-advanced>). Passwort-Felder
   im Befehl werden in der Anfrage durch `***` ersetzt.
 - **Freigabe je Eintrag (Owner-Entscheide 2026-10-11, „10 Minuten“, „nur für
-  einen Eintrag“, „Ja, Suche frei“):** Im DEV-Test brauchte eine einzige
+  einen Eintrag“, „Ja, Suche frei“, später „Suche fragt“):** Im DEV-Test brauchte eine einzige
   Tresor-Abfrage fünf bis sieben Freigaben (Orchestrator und Sub-Agent,
   mehrere Suchbegriffe, Lesen der Skill-Anleitung, Auftrag an den
   Sub-Agenten). Deshalb:
-  - **Suche frei:** `ia4-bw list items --search <begriff>` läuft ohne Karte;
+  - **Suche fragt jedes Mal (Owner-Entscheid 2026-10-11 „Suche fragt“,
+    ersetzt „Ja, Suche frei“):** `ia4-bw list items --search <begriff>`
+    zeigt eine Karte „Suche …, gilt nur für diesen Aufruf“, ohne Fenster;
     der Wrapper gibt dabei nur ID und Name der Treffer aus (keine
-    Benutzernamen, URLs oder Passwörter). `list items` ohne Suche fragt.
+    Benutzernamen, URLs oder Passwörter). Eine Abfrage braucht damit zwei
+    Karten (Suche und Lesen).
   - **Lesen eines Eintrags fragt einmal:** Nach `allow-once` darf derselbe
     Eintrag 10 Minuten lang ohne neue Frage gelesen werden, von allen
     Agenten der Instanz (auch Sub-Agenten). „Derselbe Eintrag“ heißt:
@@ -56,7 +59,7 @@
     `get item|username|password|uri|totp|notes`; liefert `get item` genau
     einen Eintrag (als JSON), gelten auch dessen ID und Name, mit demselben
     Ablaufzeitpunkt (kein Verlängern durch Folgezugriffe).
-  - **Strikte Form:** Suche und Fenster gelten nur für Befehle genau dieser
+  - **Strikte Form:** Suchkarte und Fenster gelten nur für Befehle genau dieser
     Form (Allowlist: nur `ia4-bw` mit diesen Argumenten, ohne Pipe,
     Umleitung, Variablen-Präfix, Subshell oder zweiten Befehl, ohne weitere
     Tool-Parameter wie `env`, nur Shell-Tools). Jedes Mal fragen weiterhin:
@@ -98,10 +101,9 @@
     <https://docs.openclaw.ai/plugins/hooks/tool-policy>); nur Zeitablauf
     und Neustart des Gateways beenden ein offenes Fenster (kein Widerruf per
     Telegram, weil im Fenster keine Karte erscheint).
-  - Folge: Ohne Freigabe sehen Agenten, welche Eintragsnamen es gibt, und
-    können über die Suche prüfen, welche Einträge zu einem Benutzernamen oder
-    einer Adresse passen (Bitwarden sucht auch darin), ohne die Werte selbst
-    zu sehen.
+  - Folge: Nach einer freigegebenen Suche sehen Agenten die passenden
+    Eintragsnamen; Bitwarden sucht auch in Benutzernamen und Adressen, die
+    Werte selbst zeigt die Suche nicht.
     Innerhalb der 10 Minuten kann jeder Agent der Instanz, auch ein
     Cron-Lauf, den freigegebenen Eintrag ohne Rückfrage lesen.
 - **Warum Eigenentwicklung trotz Vorgabe 1:** OpenClaw fragt Exec-Befehle nur

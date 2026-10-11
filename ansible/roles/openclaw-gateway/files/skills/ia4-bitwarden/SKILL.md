@@ -22,8 +22,9 @@ don't guess commands.
 
 ## Approval
 
-Searching (`list items --search "query"`) runs without approval and returns
-only the ID and name of each match. Reading an entry (`get …`) asks Harald for
+Searching (`list items --search "query"`) asks Harald once per search and returns
+only the ID and name of each match, so search once with a good term instead of
+trying several. Reading an entry (`get …`) asks Harald for
 approval on Telegram; after he approves, the same entry (same name or ID) can
 be read again for 10 minutes without a new question, and if `get item`
 returns one item its ID and name both count. Any other entry, `list items`
