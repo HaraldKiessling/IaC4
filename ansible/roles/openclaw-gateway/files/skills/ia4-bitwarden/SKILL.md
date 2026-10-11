@@ -22,10 +22,17 @@ don't guess commands.
 
 ## Approval
 
-Every call of `ia4-bw` asks Harald for approval on Telegram. Before the call,
-say in one sentence which entry you need and why. If the call is denied or
-times out, do not retry with another route. Never choose "allow always" for
-yourself or ask for it.
+Vault access asks Harald for approval on Telegram. After he approves, the
+same entry (same search term, name or ID) can be read again for 10 minutes
+without a new question; if an approved search returns exactly one item, its
+ID and name count as the same entry. Any other entry, `list items` without
+`--search`, create, edit and delete always ask. Before the first call, say in
+one sentence which entry you need and why. Use the item ID from the search
+result for follow-up `get` calls. If a call is rejected because an approval
+for that entry is already pending, wait until the pending call has returned,
+then call again. If the call is denied or times out, do
+not retry with another route. Never choose "allow always" for yourself or ask
+for it.
 
 ## Lookup
 
@@ -38,8 +45,8 @@ yourself or ask for it.
 /opt/ia4-bitwarden/ia4-bw list folders
 ```
 
-Prefer one `get item` call over several single calls: every call is one
-approval for Harald.
+Prefer one `get item` call over several single calls, and don't run vault
+calls in parallel: a second call while an approval is pending is rejected.
 
 ## Create
 

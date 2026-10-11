@@ -41,6 +41,25 @@
   Haralds Telegram [V]
   (<https://docs.openclaw.ai/tools/exec-approvals-advanced>). Passwort-Felder
   im Befehl werden in der Anfrage durch `***` ersetzt.
+- **Freigabe je Eintrag (Owner-Entscheide 2026-10-11, „10 Minuten“, „nur für
+  einen Eintrag“):** Im DEV-Test brauchte eine einzige Tresor-Abfrage fünf
+  Freigaben (Orchestrator und Sub-Agent, je Suche/Lesen ein Aufruf). Nach
+  einem `allow-once` darf deshalb 10 Minuten lang derselbe Eintrag ohne neue
+  Frage gelesen werden, von allen Agenten der Instanz (auch Sub-Agenten).
+  „Derselbe Eintrag“ heißt: derselbe Suchbegriff (`list items --search`),
+  derselbe Name oder dieselbe ID (`get …`); liefert eine freigegebene Suche
+  genau einen Treffer, gelten auch dessen ID und Name. Jedes Mal fragen
+  weiterhin: andere Einträge, Suchen mit mehreren Treffern beim Folgezugriff,
+  `list items` ohne Suche, `create`/`edit`/`delete`, direkte `bw`-, `BW_*`-
+  und Umgebungs-Zugriffe, Befehle mit mehreren Tresor-Aufrufen oder `$(…)`.
+  Läuft für denselben Eintrag schon eine Anfrage, wird ein weiterer Zugriff
+  ohne neue Frage abgewiesen (Hinweis an den Agenten, nach dem Ergebnis
+  erneut aufzurufen). Die Karte in Telegram nennt den Umfang. Die Freigaben
+  liegen nur im Speicher des Plugins (`onResolution`, `after_tool_call`, [V]
+  <https://docs.openclaw.ai/plugins/hooks/tool-policy>); Neustart, `deny`
+  und Zeitablauf beenden sie. Folge: Innerhalb der 10 Minuten kann jeder
+  Agent der Instanz, auch ein Cron-Lauf, diesen einen Eintrag ohne Rückfrage
+  lesen.
 - **Warum Eigenentwicklung trotz Vorgabe 1:** OpenClaw fragt Exec-Befehle nur
   über die Allowlist ab (Treffer läuft, alles andere fragt) [V]
   (<https://docs.openclaw.ai/tools/exec-approvals>); ein Bordmittel „nur
@@ -60,7 +79,8 @@
   fragt nach“ auf DEV.
 - **Folge:** Cron-Jobs und normale Befehle laufen ohne Nachfrage; nur
   Tresor-Zugriffe fragen. Ein Tresor-Zugriff aus einem Cron-Lauf wird
-  blockiert (niemand kann bestätigen).
+  blockiert (niemand kann bestätigen), außer er liest einen Eintrag, der
+  gerade freigegeben ist (siehe Freigabe je Eintrag).
 - **Restrisiko unverändert (keine harte Grenze), Erkennung jetzt über Text:**
   Ein Skript, das die Tresor-Wörter nicht im Aufruf trägt, fällt nicht auf
   (z. B. eigenes Skript, das die Umgebung liest, oder ein bloßes `set`, das

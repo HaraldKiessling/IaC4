@@ -24,6 +24,6 @@
 | **Betriebs-Secret** | Geheimnis, das IaC4 beim Deploy einer Instanz mitgibt (API-Key, Token); Quelle sind GH Secrets |
 | **Agenten-Zugangsdaten** | Logins, mit denen sich ein Agent zur Laufzeit selbst bei einem Dienst anmeldet (z. B. ein Bankportal); liegen im Agenten-Tresor, nie in GH Secrets |
 | **Agenten-Tresor** | Eigenes Bitwarden-Konto nur für die OC-Instanzen; alle Instanzen (DEV und PROD) sehen dieselben Einträge |
-| **Freigabe** | Haralds Bestätigung per Telegram-Knopf, bevor ein Agent auf den Agenten-Tresor zugreift (nur einmalig, OpenClaw-Plugin-Freigabe `ia4-vault-approval`; keine harte Grenze, siehe ADR-027) |
+| **Freigabe** | Haralds Bestätigung per Telegram-Knopf, bevor ein Agent auf den Agenten-Tresor zugreift (einmal erlauben, gilt danach 10 Minuten zum Lesen genau dieses Eintrags, OpenClaw-Plugin-Freigabe `ia4-vault-approval`; keine harte Grenze, siehe ADR-027) |
 | **P1–P7** | Leitprinzipien (Evidenz, Living Docs, etc.) |
 | **GitOps** | Deployment-Status = Repository-Status |

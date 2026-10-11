@@ -254,7 +254,7 @@
     - NOTICE.md
   when: oc_bitwarden_active | bool
 
-- name: "{{ oc.name }}: Bitwarden – Wrapper ia4-bw rendern (eine Freigabe pro Aufruf)"
+- name: "{{ oc.name }}: Bitwarden – Wrapper ia4-bw rendern (Freigabe ueber Plugin ia4-vault-approval)"
   ansible.builtin.template:
     src: ia4-bw.sh.j2
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/bitwarden/ia4-bw"
