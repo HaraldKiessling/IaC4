@@ -22,11 +22,17 @@ const VAULT =
   /ia4-bw|\/opt\/ia4-bitwarden\/cli|@bitwarden\/cli|\bbw\b|BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
 // Auftrag an einen Sub-Agenten (sessions_spawn): nur echte Zugriffe auf Zugangsdaten oder
 // Prozess-Umgebung. Erwaehnt der Auftrag nur ia4-bw, fragt erst der Sub-Agent beim Ausfuehren.
-// Alle anderen Tools (write/edit/process/Code-Modus ...) behalten die volle Pruefung, sonst liesse
+// Alle anderen Tools (write/edit/process ...) behalten die volle Pruefung, sonst liesse
 // sich ia4-bw ueber ein geschriebenes Skript oder eine laufende Shell ohne Karte starten (Review).
 const VAULT_TEXT = /BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
 // Ausgabe der ganzen Prozess-Umgebung (enthaelt die BW_*-Zugangsdaten): nur am Shell-Befehl selbst
 // geprueft, weil "env" als JSON-Feldname vorkommt. "env FOO=1 cmd" bleibt frei.
+// Code-Modus-Zelle (exec mit JavaScript in "code", ohne "command"): jeder verschachtelte Tool-Aufruf
+// laeuft erneut durch before_tool_call [V] (docs/tools/code-mode/internals.md, "Nested tool execution").
+// Die Zelle selbst fragt deshalb nur bei Zugangsdaten-/Umgebungs-Text oder wenn sie Tresor-Text mit
+// Wegen aus dem Gast heraus (process., require, import, constructor ...) kombiniert (Node-Executor ist
+// keine Sicherheitsgrenze [V], docs/tools/code-mode/executors.md).
+const CELL_ESCAPE = /\bprocess\s*[.\[]|\brequire\b|\bimport\b|constructor|child_process|globalThis|\bFunction\b|\beval\b/;
 const ENV_DUMP = /(^|[;&|(]|\s)(env|export\s+-p|declare\s+-[a-z]*x[a-z]*)\s*($|[;&|>)])/m;
 // Geheime Werte (JSON, auch escaped, oder NAME=wert) vor der Anzeige im Chat unkenntlich machen.
 const SECRET =
@@ -57,7 +63,11 @@ function paramsText(params: unknown): string {
 // Keine Pipes, Umleitungen, Variablen-Praefixe, Subshells, zweiten Befehle (Review 2026-10-11).
 const WORD = /^(?:[A-Za-z0-9._@:\/+,%=-]+|"[^"'$`\\]*"|'[^"'$`\\]*')$/;
 const GET_OBJECTS = new Set(["item", "username", "password", "uri", "totp", "notes"]);
-const EXEC_KEYS = new Set(["command", "workdir", "cwd", "timeout", "timeoutMs", "yieldMs", "background", "description"]);
+// "title"/"timeoutSeconds": Anzeige-Titel und Laufzeit des exec-Tools [V] (bash-tools.schemas, 2026.9.8);
+// Code-Modus setzte "title" bei jedem Shell-Aufruf [I] (DEV-Test 2026-10-11).
+const EXEC_KEYS = new Set([
+  "command", "workdir", "cwd", "timeout", "timeoutMs", "timeoutSeconds", "yieldMs", "background", "description", "title",
+]);
 
 function strictWords(command: string): string[] | undefined {
   const parts = command.trim().split(/\s+/);
@@ -143,10 +153,14 @@ export default definePluginEntry({
         const raw = (event.params as Record<string, unknown> | undefined)?.command;
         const command = typeof raw === "string" ? raw : text;
         // Shell: Rohbefehl und JSON pruefen (im JSON wird ein Zeilenumbruch zu "\n", kein Wortrand vor "bw").
+        const p = (event.params ?? {}) as Record<string, unknown>;
+        const codeCell = event.toolName === "exec" && typeof p.code === "string" && !("command" in p);
         const hit =
           event.toolName === "sessions_spawn"
             ? VAULT_TEXT.test(text)
-            : VAULT.test(text) || (typeof raw === "string" && (VAULT.test(raw) || ENV_DUMP.test(raw)));
+            : codeCell
+              ? VAULT_TEXT.test(text) || (VAULT.test(text) && CELL_ESCAPE.test(text))
+              : VAULT.test(text) || (typeof raw === "string" && (VAULT.test(raw) || ENV_DUMP.test(raw)));
         if (!hit) {
           return;
         }

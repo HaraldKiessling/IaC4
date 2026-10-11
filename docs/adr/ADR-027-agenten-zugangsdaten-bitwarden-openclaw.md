@@ -67,10 +67,21 @@
     (`sessions_spawn`) fragen nur echte Zugriffe auf Zugangsdaten oder
     Prozess-Umgebung (`BW_*`, `/proc/*/environ`, `printenv`,
     `process.env`); führt der Sub-Agent `ia4-bw` aus, fragt dessen Aufruf.
-    Alle anderen Tools (Datei schreiben, laufende Shell, Code-Modus) behalten
+    Alle anderen Tools (Datei schreiben, laufende Shell) behalten
     die volle Prüfung, damit `ia4-bw` nicht über ein geschriebenes Skript
-    ohne Karte startet. Ein Code-Modus-Block, der `ia4-bw` nur im Auftragstext
-    erwähnt, kann deshalb noch eine Karte auslösen.
+    ohne Karte startet.
+  - **Code-Modus (Nachtrag 2026-10-11, DEV-Test mit fünf Karten):** Im
+    Code-Modus schreibt der Agent JavaScript (`exec` mit `{ title, code }`),
+    und jeder darin aufgerufene Tool-Aufruf läuft erneut durch die
+    Plugin-Prüfung ([V] OpenClaw 2026.9.8, `docs/tools/code-mode/internals.md`,
+    „Nested tool execution“). Der äußere Block fragt deshalb nur noch bei
+    Zugangsdaten-/Umgebungs-Text oder wenn er Tresor-Text mit Wegen aus der
+    JavaScript-Umgebung heraus kombiniert (`process.`, `require`, `import`,
+    `constructor` …, weil der Node-Executor keine Sicherheitsgrenze ist [V]
+    `docs/tools/code-mode/executors.md`). Der Shell-Aufruf darin setzte
+    im DEV-Test zusätzlich `title` [I]; dieser Anzeige-Parameter und `timeoutSeconds` ([V]
+    Exec-Schema 2026.9.8) zählen zur festen Form, `env`, `elevated`, `host`
+    und Ähnliches weiterhin nicht.
   - **Wrapper:** führende Optionen, `serve` (lokale REST-API mit entsperrtem
     Tresor) und `export` (ganzer Tresor) lehnt `ia4-bw` ab.
   - Läuft für denselben Eintrag schon eine Anfrage, wird ein weiterer Zugriff
@@ -115,6 +126,10 @@
   ebenso `env -0`, `env 2>&1` oder `node -e "console.log(process.env)"`).
   Das entspricht dem schon
   akzeptierten Risiko „Zugangsdaten als Umgebungsvariablen im Container“.
+  Gleiches gilt im Code-Modus für einen Block, der aus der JavaScript-Umgebung
+  ausbricht und dabei sowohl die Ausbruch- als auch die Tresor-Wörter
+  verschleiert (Node-Executor, Standard, keine Sicherheitsgrenze [V]); der
+  QuickJS-Executor würde das schließen, ist aber nicht eingestellt.
 - **Rückbau der früheren Allowlist:** Wo der Marker `exec-policy-ia4` liegt,
   setzt die Rolle das Freigabe-Dokument auf `full`/`off` zurück, prüft das
   Ergebnis mit `openclaw approvals get --gateway --json` und entfernt den
