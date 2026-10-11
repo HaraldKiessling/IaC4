@@ -2,12 +2,12 @@
 // Von Ansible abgelegt, root-eigen und read-only in den Container gemountet.
 // Jeder Tool-Aufruf, dessen Parameter den Agenten-Tresor beruehren (ia4-bw, Bitwarden CLI,
 // BW_*-Variablen), wartet auf Haralds Freigabe in Telegram (allow-once/deny).
-// Suche (list items --search) laeuft ohne Freigabe; der Wrapper zeigt dabei nur ID und Name.
+// Suche (list items --search) fragt jedes Mal einmal; der Wrapper zeigt dabei nur ID und Name.
 // Eine Freigabe gilt danach WINDOW_MS lang NUR zum Lesen (get) des freigegebenen Eintrags (ID,
 // Name), fuer alle Agenten dieser Instanz (auch Sub-Agenten).
 // Alles andere (anderer Eintrag, list ohne Suche, create/edit/delete, direkte bw-/BW_*-/
 // Umgebungs-Zugriffe) fragt jedes Mal
-// (Owner-Entscheide 2026-10-11: "10 Minuten", "nur fuer einen Eintrag", "Ja, Suche frei").
+// (Owner-Entscheide 2026-10-11: "10 Minuten", "nur fuer einen Eintrag", "Suche fragt").
 // Alle anderen Befehle laufen ohne Nachfrage wie vor ADR-027.
 // Grundlage [V]: docs/plugins/hooks/tool-policy.md (before_tool_call, requireApproval),
 // docs/plugins/plugin-permission-requests.md (Entscheidungen, Timeout, fail-closed).
@@ -22,12 +22,46 @@ const VAULT =
   /ia4-bw|\/opt\/ia4-bitwarden\/cli|@bitwarden\/cli|\bbw\b|BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
 // Auftrag an einen Sub-Agenten (sessions_spawn): nur echte Zugriffe auf Zugangsdaten oder
 // Prozess-Umgebung. Erwaehnt der Auftrag nur ia4-bw, fragt erst der Sub-Agent beim Ausfuehren.
-// Alle anderen Tools (write/edit/process/Code-Modus ...) behalten die volle Pruefung, sonst liesse
+// Alle anderen Tools (write/edit/process ...) behalten die volle Pruefung, sonst liesse
 // sich ia4-bw ueber ein geschriebenes Skript oder eine laufende Shell ohne Karte starten (Review).
-const VAULT_TEXT = /BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
+// printenv zaehlt hier nicht: den eigentlichen Shell-Aufruf prueft das Plugin beim Sub-Agenten bzw.
+// verschachtelt erneut (Owner-Entscheid "Gefiltert frei", 2026-10-11).
+const VAULT_TEXT = /BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|process\.env/;
 // Ausgabe der ganzen Prozess-Umgebung (enthaelt die BW_*-Zugangsdaten): nur am Shell-Befehl selbst
 // geprueft, weil "env" als JSON-Feldname vorkommt. "env FOO=1 cmd" bleibt frei.
+// Code-Modus-Zelle (aeusseres exec mit JavaScript): der Host kennzeichnet sie verbindlich mit
+// toolKind "code_mode_exec" [V] (docs/plugins/hooks/tool-policy.md); "code" und "command" tragen dort
+// denselben JS-Text. Jeder verschachtelte Tool-Aufruf laeuft erneut durch before_tool_call [V]
+// (docs/tools/code-mode/internals.md, "Nested tool execution").
+// Die Zelle selbst fragt deshalb nur bei Zugangsdaten-/Umgebungs-Text oder wenn sie Tresor-Text mit
+// Wegen aus dem Gast heraus (process., require, import, constructor ...) kombiniert (Node-Executor ist
+// keine Sicherheitsgrenze [V], docs/tools/code-mode/executors.md).
+const CELL_ESCAPE = /\bprocess\s*[.\[]|\brequire\b|\bimport\b|constructor|child_process|globalThis|\bFunction\b|\beval\b/;
 const ENV_DUMP = /(^|[;&|(]|\s)(env|export\s+-p|declare\s+-[a-z]*x[a-z]*)\s*($|[;&|>)])/m;
+// Gefilterte Umgebungs-Abfragen ohne Karte (Owner-Entscheid "Gefiltert frei", 2026-10-11):
+//   printenv|env | grep [-i|-E|-F|-w|-c...] <NAME|NAME...> | sed 's/=.*/<ersatz>/'
+//   printenv NAME [NAME...]
+// Die sed-Maskierung ist Pflicht: grep trifft die ganze Zeile NAME=wert, ein Muster kann also auch in
+// einem geheimen Wert oder einem Teil von BW_* treffen; nach der Maskierung bleiben nur Namen (Review).
+// Ersatztext ohne &, \, Anfuehrungszeichen oder / (sonst kaeme der Wert zurueck). Namen ohne "bw" und
+// kein Teil eines geschuetzten Namens; kein -v, keine Umleitung. Alles andere bleibt bei der Pruefung.
+const DUMP_GREP =
+  /(^|[;&|(])(\s*)(?:printenv|env)\s*\|\s*grep((?:\s+-[iEFwc]+)*)\s+(?:'([A-Za-z0-9_|]+)'|"([A-Za-z0-9_|]+)"|([A-Za-z0-9_]+))\s*\|\s*sed\s+(?:'s\/=\.\*\/[^&\\'"\/]*\/'|"s\/=\.\*\/[^&\\'"\/$`]*\/")(?=\s*($|[;&|)]))/g;
+const PRINTENV_NAMES = /(^|[;&|(])(\s*)printenv((?:\s+[A-Za-z_][A-Za-z0-9_]*)+)(?=\s*($|[;&|>)]))/g;
+const PROTECTED_NAMES = ["BW_CLIENTID", "BW_CLIENTSECRET", "BW_PASSWORD", "BW_SESSION"];
+
+// Befehl ohne die erlaubten gefilterten Umgebungs-Abfragen (ersetzt durch "true"); der Rest wird
+// normal geprueft, ein weiterer Treffer fragt also weiterhin.
+function stripFilteredEnv(command: string): string {
+  let out = command.replace(DUMP_GREP, (m, pre, ws, _flags, q1, q2, q3) => {
+    const alts = String(q1 ?? q2 ?? q3).split("|");
+    const unsafe = (a: string) =>
+      !a || /bw/i.test(a) || PROTECTED_NAMES.some((n) => n.toLowerCase().includes(a.toLowerCase()));
+    return alts.some(unsafe) ? m : `${pre}${ws}true`;
+  });
+  out = out.replace(PRINTENV_NAMES, (m, pre, ws, names: string) => (/bw/i.test(names) ? m : `${pre}${ws}true`));
+  return out;
+}
 // Geheime Werte (JSON, auch escaped, oder NAME=wert) vor der Anzeige im Chat unkenntlich machen.
 const SECRET =
   /((?:password|totp|BW_PASSWORD|BW_CLIENTSECRET|BW_SESSION)\\?"?\s*[:=]\s*)(\\?"(?:[^"\\]|\\(?!")[\s\S])*\\?"|[^\s"\;&|]+)/gi;
@@ -50,14 +84,19 @@ function paramsText(params: unknown): string {
   }
 }
 
-// Fenster nur fuer Befehle, die GENAU dieser Form entsprechen (Allowlist, sonst jedes Mal fragen):
+// Lese-Fenster (get) bzw. Suchkarte (list --search) nur fuer Befehle, die GENAU dieser Form entsprechen
+// (Allowlist, sonst jedes Mal fragen mit allgemeiner Karte):
 //   [/opt/ia4-bitwarden/]ia4-bw list items --search <begriff> [--pretty]
 //   [/opt/ia4-bitwarden/]ia4-bw get item|username|password|uri|totp|notes <name-oder-id> [--raw|--pretty]
 // Woerter: ohne Sonderzeichen oder vollstaendig in '...'/"..." ohne Quotes, $, `, \ darin.
 // Keine Pipes, Umleitungen, Variablen-Praefixe, Subshells, zweiten Befehle (Review 2026-10-11).
 const WORD = /^(?:[A-Za-z0-9._@:\/+,%=-]+|"[^"'$`\\]*"|'[^"'$`\\]*')$/;
 const GET_OBJECTS = new Set(["item", "username", "password", "uri", "totp", "notes"]);
-const EXEC_KEYS = new Set(["command", "workdir", "cwd", "timeout", "timeoutMs", "yieldMs", "background", "description"]);
+// "title"/"timeoutSeconds": Anzeige-Titel und Laufzeit des exec-Tools [V] (bash-tools.schemas, 2026.9.8);
+// Code-Modus setzte "title" bei jedem Shell-Aufruf [I] (DEV-Test 2026-10-11).
+const EXEC_KEYS = new Set([
+  "command", "workdir", "cwd", "timeout", "timeoutMs", "timeoutSeconds", "yieldMs", "background", "description", "title",
+]);
 
 function strictWords(command: string): string[] | undefined {
   const parts = command.trim().split(/\s+/);
@@ -86,7 +125,7 @@ function entryKey(params: Record<string, unknown>): { key: string; kind: "search
 }
 
 // Genau EIN Bitwarden-Eintrag im Ergebnis (geparstes JSON mit object "item") -> dessen ID und Name.
-// Nur nach "get item" oder "list items --search"; Mehrfachtreffer oder kein JSON: keine Erweiterung.
+// Nur nach "get item"; Mehrfachtreffer oder kein JSON: keine Erweiterung.
 function entriesFromResult(result: unknown): string[] {
   const items = new Map<string, string>();
   const visit = (v: unknown, depth: number) => {
@@ -134,7 +173,7 @@ function purge(t: number) {
 export default definePluginEntry({
   id: "ia4-vault-approval",
   name: "IaC4 Tresor-Freigabe",
-  description: "Fragt vor Zugriffen auf den Agenten-Tresor (Bitwarden) per Telegram nach; Suche frei, eine Freigabe gilt 10 Minuten fuer einen Eintrag.",
+  description: "Fragt vor Zugriffen auf den Agenten-Tresor (Bitwarden) per Telegram nach; jede Suche fragt, eine Lese-Freigabe gilt 10 Minuten fuer einen Eintrag.",
   register(api) {
     api.on(
       "before_tool_call",
@@ -142,22 +181,27 @@ export default definePluginEntry({
         const text = paramsText(event.params);
         const raw = (event.params as Record<string, unknown> | undefined)?.command;
         const command = typeof raw === "string" ? raw : text;
+        // Shell-Befehl ohne erlaubte gefilterte Umgebungs-Abfragen; der Treffer-Test laeuft darauf.
+        const shellRaw = typeof raw === "string" ? stripFilteredEnv(raw) : undefined;
+        const shellText = shellRaw === undefined ? text : paramsText({ ...(event.params as object), command: shellRaw });
         // Shell: Rohbefehl und JSON pruefen (im JSON wird ein Zeilenumbruch zu "\n", kein Wortrand vor "bw").
+        const kind = (event as { toolKind?: unknown }).toolKind ?? (ctx as { toolKind?: unknown }).toolKind;
+        const codeCell = kind === "code_mode_exec";
         const hit =
           event.toolName === "sessions_spawn"
             ? VAULT_TEXT.test(text)
-            : VAULT.test(text) || (typeof raw === "string" && (VAULT.test(raw) || ENV_DUMP.test(raw)));
+            : codeCell
+              ? VAULT_TEXT.test(text) || (VAULT.test(text) && CELL_ESCAPE.test(text))
+              : VAULT.test(shellText) || (shellRaw !== undefined && (VAULT.test(shellRaw) || ENV_DUMP.test(shellRaw)));
         if (!hit) {
           return;
         }
         // Fenster nur fuer Shell-Tools (Review Runde 2, Haertung).
-        const shellTool = event.toolName === "exec" || event.toolName === "bash";
+        const shellTool = !codeCell && (event.toolName === "exec" || event.toolName === "bash");
         const entry = shellTool ? entryKey((event.params ?? {}) as Record<string, unknown>) : undefined;
-        const key = entry?.key;
-        // Suche ohne Freigabe: der Wrapper gibt dabei nur ID und Name aus (keine Zugangsdaten).
-        if (entry?.kind === "search") {
-          return;
-        }
+        // Suche fragt jedes Mal (Owner-Entscheid "Suche fragt", 2026-10-11), ohne Fenster.
+        const search = entry?.kind === "search";
+        const key = search ? undefined : entry?.key;
         const expands = entry?.kind === "get-item";
         const t = now();
         purge(t);
@@ -179,7 +223,11 @@ export default definePluginEntry({
         }
         const id = nextId++;
         if (key) pending.set(key, { since: t, id });
-        const scope = key ? "Gilt 10 Min. nur fuer diesen Eintrag." : "Gilt nur fuer diesen Aufruf.";
+        const scope = key
+          ? "Gilt 10 Min. nur fuer diesen Eintrag."
+          : search
+            ? "Suche (zeigt nur Namen und IDs), gilt nur fuer diesen Aufruf."
+            : "Gilt nur fuer diesen Aufruf.";
         return {
           requireApproval: {
             title: "Zugriff auf den Agenten-Tresor",

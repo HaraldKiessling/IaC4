@@ -42,13 +42,16 @@
   (<https://docs.openclaw.ai/tools/exec-approvals-advanced>). Passwort-Felder
   im Befehl werden in der Anfrage durch `***` ersetzt.
 - **Freigabe je Eintrag (Owner-Entscheide 2026-10-11, „10 Minuten“, „nur für
-  einen Eintrag“, „Ja, Suche frei“):** Im DEV-Test brauchte eine einzige
+  einen Eintrag“, „Ja, Suche frei“, später „Suche fragt“):** Im DEV-Test brauchte eine einzige
   Tresor-Abfrage fünf bis sieben Freigaben (Orchestrator und Sub-Agent,
   mehrere Suchbegriffe, Lesen der Skill-Anleitung, Auftrag an den
   Sub-Agenten). Deshalb:
-  - **Suche frei:** `ia4-bw list items --search <begriff>` läuft ohne Karte;
+  - **Suche fragt jedes Mal (Owner-Entscheid 2026-10-11 „Suche fragt“,
+    ersetzt „Ja, Suche frei“):** `ia4-bw list items --search <begriff>`
+    zeigt eine Karte „Suche …, gilt nur für diesen Aufruf“, ohne Fenster;
     der Wrapper gibt dabei nur ID und Name der Treffer aus (keine
-    Benutzernamen, URLs oder Passwörter). `list items` ohne Suche fragt.
+    Benutzernamen, URLs oder Passwörter). Eine Abfrage braucht damit zwei
+    Karten (Suche und Lesen).
   - **Lesen eines Eintrags fragt einmal:** Nach `allow-once` darf derselbe
     Eintrag 10 Minuten lang ohne neue Frage gelesen werden, von allen
     Agenten der Instanz (auch Sub-Agenten). „Derselbe Eintrag“ heißt:
@@ -56,7 +59,7 @@
     `get item|username|password|uri|totp|notes`; liefert `get item` genau
     einen Eintrag (als JSON), gelten auch dessen ID und Name, mit demselben
     Ablaufzeitpunkt (kein Verlängern durch Folgezugriffe).
-  - **Strikte Form:** Suche und Fenster gelten nur für Befehle genau dieser
+  - **Strikte Form:** Suchkarte und Fenster gelten nur für Befehle genau dieser
     Form (Allowlist: nur `ia4-bw` mit diesen Argumenten, ohne Pipe,
     Umleitung, Variablen-Präfix, Subshell oder zweiten Befehl, ohne weitere
     Tool-Parameter wie `env`, nur Shell-Tools). Jedes Mal fragen weiterhin:
@@ -65,12 +68,44 @@
   - **Weniger Fehlalarme durch Erwähnungen:** Das Lesen der
     Skill-Anleitung fragt nicht mehr. Beim Auftrag an einen Sub-Agenten
     (`sessions_spawn`) fragen nur echte Zugriffe auf Zugangsdaten oder
-    Prozess-Umgebung (`BW_*`, `/proc/*/environ`, `printenv`,
-    `process.env`); führt der Sub-Agent `ia4-bw` aus, fragt dessen Aufruf.
-    Alle anderen Tools (Datei schreiben, laufende Shell, Code-Modus) behalten
+    Prozess-Umgebung (`BW_*`, `/proc/*/environ`, `process.env`); führt der Sub-Agent `ia4-bw` aus, fragt dessen Aufruf.
+    Alle anderen Tools (Datei schreiben, laufende Shell) behalten
     die volle Prüfung, damit `ia4-bw` nicht über ein geschriebenes Skript
-    ohne Karte startet. Ein Code-Modus-Block, der `ia4-bw` nur im Auftragstext
-    erwähnt, kann deshalb noch eine Karte auslösen.
+    ohne Karte startet.
+  - **Gefilterte Umgebungs-Abfragen frei (Owner-Entscheid 2026-10-11
+    „Gefiltert frei“, DEV-Test mit drei Karten bei GitHub-Arbeit):**
+    `printenv NAME …` (Namen ohne „bw“) und
+    `printenv`/`env | grep <Namen> | sed 's/=.*/<ersatz>/'` laufen ohne
+    Karte. Die `sed`-Maskierung ist Pflicht, weil `grep` die ganze Zeile
+    `NAME=wert` trifft, ein Muster also auch in einem geheimen Wert oder in
+    einem Teil von `BW_*` treffen kann; danach bleiben nur Namen sichtbar.
+    Der Ersatztext darf kein `&`, `\`, Anführungszeichen oder `/` enthalten;
+    die Namen dürfen kein „bw“ enthalten und kein Teil eines geschützten
+    Namens sein; `grep` filtert nur positiv (kein `-v`), keine Umleitung.
+    Ungefilterte Ausgaben (`env`, `printenv`, `export -p`), eine Filterung
+    ohne Maskierung und alles mit `BW_` fragen weiter; der übrige Befehl wird
+    normal geprüft. Alle drei Befehle aus dem DEV-Test hatten diese Form [I].
+    Restrisiko: Ein mehrzeiliger Variablenwert, dessen Folgezeile das Muster
+    trifft, bliebe unmaskiert; `/usr/bin/env` erkennt die Text-Prüfung
+    generell nicht.
+  - **Code-Modus (Nachtrag 2026-10-11, DEV-Test mit fünf Karten):** Im
+    Code-Modus schreibt der Agent JavaScript (`exec` mit `{ title, code }`),
+    und jeder darin aufgerufene Tool-Aufruf läuft erneut durch die
+    Plugin-Prüfung ([V] OpenClaw 2026.9.8, `docs/tools/code-mode/internals.md`,
+    „Nested tool execution“). Den äußeren Block erkennt das Plugin an der
+    Host-Kennung `toolKind: "code_mode_exec"` ([V]
+    `docs/plugins/hooks/tool-policy.md`), nicht am Parameter-Namen, denn der
+    Host trägt denselben JavaScript-Text in `code` und `command` ein ([V]
+    `dist/code-mode-control-tools`, `normalizeCodeModeExecParams`; DEV-Test
+    2026-10-11: noch zwei Karten, weil der Block als Shell-Befehl galt). Der
+    äußere Block fragt deshalb nur noch bei
+    Zugangsdaten-/Umgebungs-Text oder wenn er Tresor-Text mit Wegen aus der
+    JavaScript-Umgebung heraus kombiniert (`process.`, `require`, `import`,
+    `constructor` …, weil der Node-Executor keine Sicherheitsgrenze ist [V]
+    `docs/tools/code-mode/executors.md`). Der Shell-Aufruf darin setzte
+    im DEV-Test zusätzlich `title` [I]; dieser Anzeige-Parameter und `timeoutSeconds` ([V]
+    Exec-Schema 2026.9.8) zählen zur festen Form, `env`, `elevated`, `host`
+    und Ähnliches weiterhin nicht.
   - **Wrapper:** führende Optionen, `serve` (lokale REST-API mit entsperrtem
     Tresor) und `export` (ganzer Tresor) lehnt `ia4-bw` ab.
   - Läuft für denselben Eintrag schon eine Anfrage, wird ein weiterer Zugriff
@@ -81,10 +116,9 @@
     <https://docs.openclaw.ai/plugins/hooks/tool-policy>); nur Zeitablauf
     und Neustart des Gateways beenden ein offenes Fenster (kein Widerruf per
     Telegram, weil im Fenster keine Karte erscheint).
-  - Folge: Ohne Freigabe sehen Agenten, welche Eintragsnamen es gibt, und
-    können über die Suche prüfen, welche Einträge zu einem Benutzernamen oder
-    einer Adresse passen (Bitwarden sucht auch darin), ohne die Werte selbst
-    zu sehen.
+  - Folge: Nach einer freigegebenen Suche sehen Agenten die passenden
+    Eintragsnamen; Bitwarden sucht auch in Benutzernamen und Adressen, die
+    Werte selbst zeigt die Suche nicht.
     Innerhalb der 10 Minuten kann jeder Agent der Instanz, auch ein
     Cron-Lauf, den freigegebenen Eintrag ohne Rückfrage lesen.
 - **Warum Eigenentwicklung trotz Vorgabe 1:** OpenClaw fragt Exec-Befehle nur
@@ -115,6 +149,10 @@
   ebenso `env -0`, `env 2>&1` oder `node -e "console.log(process.env)"`).
   Das entspricht dem schon
   akzeptierten Risiko „Zugangsdaten als Umgebungsvariablen im Container“.
+  Gleiches gilt im Code-Modus für einen Block, der aus der JavaScript-Umgebung
+  ausbricht und dabei sowohl die Ausbruch- als auch die Tresor-Wörter
+  verschleiert (Node-Executor, Standard, keine Sicherheitsgrenze [V]); der
+  QuickJS-Executor würde das schließen, ist aber nicht eingestellt.
 - **Rückbau der früheren Allowlist:** Wo der Marker `exec-policy-ia4` liegt,
   setzt die Rolle das Freigabe-Dokument auf `full`/`off` zurück, prüft das
   Ergebnis mit `openclaw approvals get --gateway --json` und entfernt den

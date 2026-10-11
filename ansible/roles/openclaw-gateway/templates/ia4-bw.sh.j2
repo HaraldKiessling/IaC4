@@ -2,7 +2,7 @@
 # ia4-bw – Bitwarden-CLI fuer den Agenten-Tresor (ADR-027, Issue #192).
 # Von Ansible gerendert, read-only in den Container gemountet (nicht vom Agenten aenderbar).
 # Liegt bewusst NICHT auf dem PATH: Aufrufe fragt das Plugin ia4-vault-approval in Telegram ab
-# (Suche frei und nur mit ID/Name, eine Freigabe gilt 10 Min. zum Lesen eines Eintrags, ADR-027). Meldet sich selbst an, entsperrt,
+# (Suche fragt und zeigt nur ID/Name, eine Lese-Freigabe gilt 10 Min. fuer einen Eintrag, ADR-027). Meldet sich selbst an, entsperrt,
 # synchronisiert und reicht alle Argumente an das offizielle `bw` weiter.
 # create/edit: reines JSON auf stdin wird vorher kodiert (wie `bw encode`).
 set -eu
@@ -48,8 +48,8 @@ if { [ "${1:-}" = "create" ] && [ $# -eq 2 ]; } || { [ "${1:-}" = "edit" ] && [ 
   fi
   _rc=$?
 elif [ "${1:-}" = "list" ] && [ "${2:-}" = "items" ]; then
-  # Suche liefert nur ID und Name (keine Benutzernamen, URLs, Passwoerter): laeuft ohne Freigabe,
-  # erst "get" auf einen Eintrag fragt (Plugin ia4-vault-approval, ADR-027).
+  # Suche liefert nur ID und Name (keine Benutzernamen, URLs, Passwoerter); Freigabe je Suche
+  # und je "get" fragt das Plugin ia4-vault-approval ab (ADR-027).
   _out=$("$BW" "$@")
   _rc=$?
   if [ "$_rc" -eq 0 ]; then
