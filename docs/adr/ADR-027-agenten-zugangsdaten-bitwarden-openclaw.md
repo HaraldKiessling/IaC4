@@ -47,17 +47,23 @@
   einem `allow-once` darf deshalb 10 Minuten lang derselbe Eintrag ohne neue
   Frage gelesen werden, von allen Agenten der Instanz (auch Sub-Agenten).
   „Derselbe Eintrag“ heißt: derselbe Suchbegriff (`list items --search`),
-  derselbe Name oder dieselbe ID (`get …`); liefert eine freigegebene Suche
-  genau einen Treffer, gelten auch dessen ID und Name. Jedes Mal fragen
+  derselbe Name oder dieselbe ID (`get item|username|password|uri|totp|notes`);
+  liefert eine freigegebene Suche oder `get item` genau einen Eintrag (als
+  JSON), gelten auch dessen ID und Name, mit demselben Ablaufzeitpunkt (kein
+  Verlängern durch Folgezugriffe). Das Fenster gilt nur für Befehle, die
+  genau dieser Form entsprechen (Allowlist: nur `ia4-bw` mit diesen
+  Argumenten, ohne Pipe, Umleitung, Variablen-Präfix, Subshell oder zweiten
+  Befehl, ohne weitere Tool-Parameter wie `env`). Jedes Mal fragen
   weiterhin: andere Einträge, Suchen mit mehreren Treffern beim Folgezugriff,
-  `list items` ohne Suche, `create`/`edit`/`delete`, direkte `bw`-, `BW_*`-
-  und Umgebungs-Zugriffe, Befehle mit mehreren Tresor-Aufrufen oder `$(…)`.
+  `list items` ohne Suche, `create`/`edit`/`delete`, Anhänge, direkte
+  `bw`-, `BW_*`- und Umgebungs-Zugriffe und jede andere Befehlsform.
   Läuft für denselben Eintrag schon eine Anfrage, wird ein weiterer Zugriff
   ohne neue Frage abgewiesen (Hinweis an den Agenten, nach dem Ergebnis
   erneut aufzurufen). Die Karte in Telegram nennt den Umfang. Die Freigaben
   liegen nur im Speicher des Plugins (`onResolution`, `after_tool_call`, [V]
-  <https://docs.openclaw.ai/plugins/hooks/tool-policy>); Neustart, `deny`
-  und Zeitablauf beenden sie. Folge: Innerhalb der 10 Minuten kann jeder
+  <https://docs.openclaw.ai/plugins/hooks/tool-policy>); nur Zeitablauf und
+  Neustart des Gateways beenden ein offenes Fenster (kein Widerruf per
+  Telegram, weil im Fenster keine Karte erscheint). Folge: Innerhalb der 10 Minuten kann jeder
   Agent der Instanz, auch ein Cron-Lauf, diesen einen Eintrag ohne Rückfrage
   lesen.
 - **Warum Eigenentwicklung trotz Vorgabe 1:** OpenClaw fragt Exec-Befehle nur

@@ -30,7 +30,7 @@ const WINDOW_MS = 10 * 60_000;
 const APPROVAL_TIMEOUT_MS = 600_000;
 const approved = new Map<string, number>(); // Eintrag -> gueltig bis
 const pending = new Map<string, { since: number; id: number }>(); // Eintrag -> offene Anfrage
-const resolveAfterCall = new Map<string, boolean>(); // freigegebener Aufruf -> Ergebnis auswerten
+const resolveAfterCall = new Map<string, { until: number }>(); // Aufruf -> Ergebnis auswerten, Fenster-Ende erben
 let nextId = 1;
 const now = () => performance.now();
 
@@ -42,53 +42,85 @@ function paramsText(params: unknown): string {
   }
 }
 
-// Einfache Shell-Zerlegung des ia4-bw-Aufrufs (Woerter, Quotes), endet bei | ; & ) oder Zeilenende.
-function ia4bwArgs(command: string): string[] | undefined {
-  const m = command.match(/ia4-bw\b([^|;&)\n]*)/);
-  if (!m || /[`$]/.test(m[1])) return undefined;
-  const words: string[] = [];
-  for (const w of m[1].matchAll(/"([^"]*)"|'([^']*)'|([^\s"'<>]+)/g)) {
-    words.push(w[1] ?? w[2] ?? w[3]);
-  }
-  return words;
+// Fenster nur fuer Befehle, die GENAU dieser Form entsprechen (Allowlist, sonst jedes Mal fragen):
+//   [/opt/ia4-bitwarden/]ia4-bw list items --search <begriff> [--pretty]
+//   [/opt/ia4-bitwarden/]ia4-bw get item|username|password|uri|totp|notes <name-oder-id> [--raw|--pretty]
+// Woerter: ohne Sonderzeichen oder vollstaendig in '...'/"..." ohne Quotes, $, `, \ darin.
+// Keine Pipes, Umleitungen, Variablen-Praefixe, Subshells, zweiten Befehle (Review 2026-10-11).
+const WORD = /^(?:[A-Za-z0-9._@:\/+,%=-]+|"[^"'$`\\]*"|'[^"'$`\\]*')$/;
+const GET_OBJECTS = new Set(["item", "username", "password", "uri", "totp", "notes"]);
+const EXEC_KEYS = new Set(["command", "workdir", "cwd", "timeout", "timeoutMs", "yieldMs", "background", "description"]);
+
+function strictWords(command: string): string[] | undefined {
+  const parts = command.trim().split(/\s+/);
+  if (!parts.every((w) => WORD.test(w))) return undefined;
+  return parts.map((w) => (/^["']/.test(w) ? w.slice(1, -1) : w));
 }
 
-// Schluessel des Eintrags, auf den sich der Aufruf bezieht; undefined = jedes Mal fragen.
-function entryKey(command: string): string | undefined {
-  const occurrences = command.match(/ia4-bw\b/g)?.length ?? 0;
-  if (occurrences !== 1) return undefined;
-  // Ausserhalb des ia4-bw-Aufrufs darf nichts anderes den Tresor beruehren.
-  const rest = command.replace(/[^\s|;&(]*ia4-bw\b[^|;&)\n]*/, " ");
-  if (VAULT.test(rest) || ENV_DUMP.test(rest)) return undefined;
-  const a = ia4bwArgs(command);
-  if (!a) return undefined;
-  const norm = (v: string | undefined) => (v ?? "").trim().toLowerCase();
-  if (a[0] === "list" && a[1] === "items") {
-    const i = a.indexOf("--search");
-    return i > 0 && a[i + 1] ? `search:${norm(a[i + 1])}` : undefined;
+// Schluessel des Eintrags fuer das Fenster; undefined = jedes Mal fragen.
+function entryKey(params: Record<string, unknown>): { key: string; kind: "search" | "get-item" | "get" } | undefined {
+  if (typeof params.command !== "string") return undefined;
+  if (!Object.keys(params).every((k) => EXEC_KEYS.has(k))) return undefined;
+  const w = strictWords(params.command);
+  if (!w || !["ia4-bw", "/opt/ia4-bitwarden/ia4-bw"].includes(w[0])) return undefined;
+  const a = w.slice(1);
+  const norm = (v: string) => v.trim().toLowerCase();
+  if (a[0] === "list" && a[1] === "items" && a[2] === "--search" && a[3] && !a[3].startsWith("-")) {
+    if (a.slice(4).every((f) => f === "--pretty")) return { key: `search:${norm(a[3])}`, kind: "search" };
+    return undefined;
   }
-  // Nur Lesen nutzt das Fenster; create/edit/delete fragen immer.
-  if (a[0] === "get" && a[1] && a[2] && !a[2].startsWith("-")) {
-    return `entry:${norm(a[2])}`;
+  if (a[0] === "get" && GET_OBJECTS.has(a[1]) && a[2] && !a[2].startsWith("-")) {
+    if (a.slice(3).every((f) => f === "--raw" || f === "--pretty")) {
+      return { key: `entry:${norm(a[2])}`, kind: a[1] === "item" ? "get-item" : "get" };
+    }
   }
   return undefined;
 }
 
-// Liefert die Ergebnis-Ausgabe genau EINEN Eintrag, gilt die Freigabe auch fuer seine ID und
-// seinen Namen (Suche -> get item <id> fragt nicht erneut). Mehrere Treffer: keine Erweiterung.
+// Genau EIN Bitwarden-Eintrag im Ergebnis (geparstes JSON mit object "item") -> dessen ID und Name.
+// Nur nach "get item" oder "list items --search"; Mehrfachtreffer oder kein JSON: keine Erweiterung.
 function entriesFromResult(result: unknown): string[] {
-  const text = typeof result === "string" ? result : paramsText(result);
-  const ids = [...text.matchAll(/\\?"id\\?"\s*:\s*\\?"([0-9a-f-]{36})\\?"/gi)].map((m) => m[1].toLowerCase());
-  if (new Set(ids).size !== 1) return [];
-  const keys = [`entry:${ids[0]}`];
-  const afterId = text.slice(text.search(/\\?"id\\?"\s*:/));
-  const name = afterId.match(/\\?"name\\?"\s*:\s*\\?"((?:[^"\\]|\\(?!")[\s\S])*)\\?"/);
-  if (name) keys.push(`entry:${name[1].trim().toLowerCase()}`);
-  return keys;
+  const items = new Map<string, string>();
+  const visit = (v: unknown, depth: number) => {
+    if (depth > 6 || v == null) return;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (!/^[\[{]/.test(t)) return;
+      try {
+        visit(JSON.parse(t), depth + 1);
+      } catch {
+        return;
+      }
+      return;
+    }
+    if (Array.isArray(v)) {
+      const bwItems = v.filter((x) => x && typeof x === "object" && (x as Record<string, unknown>).object === "item");
+      if (bwItems.length > 1) items.set("multi", "multi");
+      v.forEach((x) => visit(x, depth + 1));
+      return;
+    }
+    if (typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      if (o.object === "item" && typeof o.id === "string") {
+        items.set(o.id.toLowerCase(), typeof o.name === "string" ? o.name : "");
+        return;
+      }
+      Object.values(o).forEach((x) => visit(x, depth + 1));
+    }
+  };
+  visit(result, 0);
+  if (items.size !== 1 || items.has("multi")) return [];
+  const [[id, name]] = [...items.entries()];
+  return name ? [`entry:${id}`, `entry:${name.trim().toLowerCase()}`] : [`entry:${id}`];
 }
 
 function callKey(event: { toolCallId?: string; params?: unknown }): string {
   return event.toolCallId ?? paramsText(event.params);
+}
+
+function purge(t: number) {
+  for (const [k, until] of approved) if (until <= t) approved.delete(k);
+  for (const [k, v] of resolveAfterCall) if (v.until <= t) resolveAfterCall.delete(k);
 }
 
 export default definePluginEntry({
@@ -107,10 +139,15 @@ export default definePluginEntry({
         if (!hit) {
           return;
         }
-        const key = typeof raw === "string" ? entryKey(raw) : undefined;
+        const entry = entryKey((event.params ?? {}) as Record<string, unknown>);
+        const key = entry?.key;
+        const expands = entry?.kind === "search" || entry?.kind === "get-item";
         const t = now();
-        if (key && (approved.get(key) ?? 0) > t) {
-          resolveAfterCall.set(callKey(event), true);
+        purge(t);
+        const until = key ? approved.get(key) ?? 0 : 0;
+        if (key && until > t) {
+          // Fenster laeuft ab wie freigegeben; Erweiterung erbt dieses Ende (kein Gleiten).
+          if (expands) resolveAfterCall.set(callKey(event), { until });
           return;
         }
         if (key) {
@@ -141,8 +178,9 @@ export default definePluginEntry({
               // Nur die eigene Anfrage abschliessen (eine aeltere Antwort setzt nichts Neueres zurueck).
               if (pending.get(key)?.id === id) pending.delete(key);
               if (decision === "allow-once") {
-                approved.set(key, now() + WINDOW_MS);
-                resolveAfterCall.set(callKey(event), true);
+                const end = now() + WINDOW_MS;
+                approved.set(key, end);
+                if (expands) resolveAfterCall.set(callKey(event), { until: end });
               }
             },
           },
@@ -152,10 +190,11 @@ export default definePluginEntry({
     );
     api.on("after_tool_call", (event) => {
       const k = callKey(event);
-      if (!resolveAfterCall.delete(k) || event.error) return;
-      const until = now() + WINDOW_MS;
+      const pendingExpand = resolveAfterCall.get(k);
+      resolveAfterCall.delete(k);
+      if (!pendingExpand || event.error || pendingExpand.until <= now()) return;
       for (const entry of entriesFromResult(event.result)) {
-        if ((approved.get(entry) ?? 0) < until) approved.set(entry, until);
+        if ((approved.get(entry) ?? 0) < pendingExpand.until) approved.set(entry, pendingExpand.until);
       }
     });
   },
