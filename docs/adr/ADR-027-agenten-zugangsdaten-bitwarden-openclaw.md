@@ -52,18 +52,26 @@
   Nachfrage. Die Rolle prüft deshalb nach dem Start mit
   `openclaw plugins inspect ia4-vault-approval --runtime --json`, dass der
   Hook registriert ist, und bricht sonst ab; der Verify-Schritt in Workflow 04
-  macht den Run ebenfalls rot.
+  macht den Run ebenfalls rot. Grenze: Die Prüfung lädt das Plugin im
+  CLI-Prozess, nicht im laufenden Gateway, und ein roter Lauf baut nichts
+  zurück; der Container läuft dann mit Zugangsdaten und ohne Nachfrage
+  weiter. Handlungsweg: Workflow 04 mit `bitwarden_secret=delete` (entfernt
+  die Zugangsdaten). Der eigentliche Nachweis bleibt der Test „`ia4-bw`
+  fragt nach“ auf DEV.
 - **Folge:** Cron-Jobs und normale Befehle laufen ohne Nachfrage; nur
   Tresor-Zugriffe fragen. Ein Tresor-Zugriff aus einem Cron-Lauf wird
   blockiert (niemand kann bestätigen).
 - **Restrisiko unverändert (keine harte Grenze), Erkennung jetzt über Text:**
   Ein Skript, das die Tresor-Wörter nicht im Aufruf trägt, fällt nicht auf
   (z. B. eigenes Skript, das die Umgebung liest, oder ein bloßes `set`, das
-  bewusst nicht erkannt wird, weil das Wort in fast jedem Tool-Aufruf vorkommt).
+  bewusst nicht erkannt wird, weil das Wort in fast jedem Tool-Aufruf vorkommt,
+  ebenso `env -0`, `env 2>&1` oder `node -e "console.log(process.env)"`).
   Das entspricht dem schon
   akzeptierten Risiko „Zugangsdaten als Umgebungsvariablen im Container“.
 - **Rückbau der früheren Allowlist:** Wo der Marker `exec-policy-ia4` liegt,
-  setzt die Rolle das Freigabe-Dokument auf `full`/`off` zurück.
+  setzt die Rolle das Freigabe-Dokument auf `full`/`off` zurück, prüft das
+  Ergebnis mit `openclaw approvals get --gateway --json` und entfernt den
+  Marker erst danach; ein Fehlschlag macht den Lauf rot.
 - Die Abschnitte unten zu Allowlist und `ask: on-miss` beschreiben den Stand
   vom 2026-10-10 und gelten nicht mehr.
 

@@ -1,8 +1,8 @@
 #!/bin/sh
 # ia4-bw – Bitwarden-CLI fuer den Agenten-Tresor (ADR-027, Issue #192).
 # Von Ansible gerendert, read-only in den Container gemountet (nicht vom Agenten aenderbar).
-# Liegt bewusst NICHT auf dem PATH und NICHT in der Exec-Allowlist: jeder Aufruf
-# loest eine OpenClaw-Exec-Freigabe (Telegram) aus. Meldet sich selbst an, entsperrt,
+# Liegt bewusst NICHT auf dem PATH: jeder Aufruf loest ueber das Plugin ia4-vault-approval
+# eine Freigabe in Telegram aus (Fix 2026-10-11). Meldet sich selbst an, entsperrt,
 # synchronisiert und reicht alle Argumente an das offizielle `bw` weiter.
 # create/edit: reines JSON auf stdin wird vorher kodiert (wie `bw encode`).
 set -eu
