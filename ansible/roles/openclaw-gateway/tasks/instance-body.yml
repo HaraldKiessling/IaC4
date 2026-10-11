@@ -445,7 +445,8 @@
   changed_when: false
   failed_when: >-
     (_oc_exec_get.rc | default(1)) != 0
-    or (_oc_exec_get.stdout | default('')) is regex('"ask": *"(on-miss|always)"')
+    or (((_oc_exec_get.stdout | default('{}') | from_json).file | default({})) | to_json)
+    is regex('"(ask": *"(on-miss|always)|security": *"allowlist)"')
   when: _oc_exec_marker.stat.exists | default(false)
 
 - name: "{{ oc.name }}: Marker entfernen (Rueckbau erledigt, nur nach erfolgreichem Zuruecksetzen)"
