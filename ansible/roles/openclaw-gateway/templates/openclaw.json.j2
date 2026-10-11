@@ -102,8 +102,23 @@
 {% else %}      "perplexity": {
         "enabled": false
       }
-{% endif %}    }
-  },
+{% endif %}{% if oc_bitwarden_active | default(false) | bool %},
+      "ia4-vault-approval": {
+        "enabled": true
+      }
+{% endif %}    }{% if oc_bitwarden_active | default(false) | bool %},
+    "load": {
+      "paths": [{{ openclaw_vault_plugin_path | tojson }}]
+    }
+{% endif %}
+  },{% if oc_bitwarden_active | default(false) | bool %}
+  "approvals": {
+    "plugin": {
+      "enabled": true,
+      "mode": "targets",
+      "targets": [{% for a in openclaw_exec_approvers %}{"channel": "telegram", "to": {{ a | string | tojson }}}{{ "," if not loop.last else "" }}{% endfor %}]
+    }
+  },{% endif %}
   "tools": {
     "web": {
       "search": {
@@ -111,12 +126,6 @@
 {% else %}        "provider": "none"
 {% endif %}      }
     }
-{% if oc_bitwarden_active | default(false) | bool %},
-    "exec": {
-      "mode": "ask",
-      "strictInlineEval": true
-    }
-{% endif %}
 {% if subagents_deny %},
     "subagents": {
       "tools": {

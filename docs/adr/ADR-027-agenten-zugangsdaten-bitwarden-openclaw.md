@@ -15,6 +15,113 @@
   lesen. Ein Skill wird heute nicht ausgerollt (kein Treffer für `skill` in
   `ansible/roles/openclaw-gateway/`) [I].
 
+## Änderung 2026-10-11: Nachfrage nur beim Tresor (Plugin statt Exec-Allowlist)
+
+- **Befund [I]:** Mit `tools.exec.mode: "ask"` und Allowlist fragte PROD oc3
+  fast jeden Befehl ab (`cd … && git …`, `python3 <Skript>`,
+  `bash <Skript>`), und Cron-Läufe (`sync-anlagen.sh`) wurden mit
+  `approval-scope-closed` abgebrochen, weil dort niemand bestätigen kann
+  (Freigabe-Protokoll von Harald, 2026-10-11).
+- **Owner-Vorgabe:** „nur Tresor-Befehle fragen, alles andere läuft wie
+  vorher“.
+- **Umsetzung:** Kein Exec-Modus und kein Freigabe-Dokument mehr von IaC4
+  (Standard `full`, wie vor ADR-027). Ein eigenes Plugin
+  `ia4-vault-approval` (rund 60 Zeilen,
+  `ansible/roles/openclaw-gateway/files/plugins/`, root-eigen und
+  schreibgeschützt eingebunden, geladen über `plugins.load.paths`) prüft per
+  `before_tool_call` jeden Tool-Aufruf. Enthalten die Parameter einen
+  Tresor-Bezug (`ia4-bw`, `@bitwarden/cli`, `bw`, `BW_*`-Variablen,
+  `/proc/*/environ`, `printenv`, ein bloßes `env`, `export -p`), verlangt es
+  eine Freigabe mit nur
+  `allow-once` oder `deny`, Zeitlimit 10 Minuten; Zeitablauf, fehlende
+  Oberfläche und Abbruch blockieren [V]
+  (<https://docs.openclaw.ai/plugins/hooks/tool-policy>,
+  <https://docs.openclaw.ai/plugins/plugin-permission-requests>). Die
+  Anfrage geht per `approvals.plugin` (Ziel Telegram, Haralds User-ID) an
+  Haralds Telegram [V]
+  (<https://docs.openclaw.ai/tools/exec-approvals-advanced>). Passwort-Felder
+  im Befehl werden in der Anfrage durch `***` ersetzt.
+- **Freigabe je Eintrag (Owner-Entscheide 2026-10-11, „10 Minuten“, „nur für
+  einen Eintrag“, „Ja, Suche frei“):** Im DEV-Test brauchte eine einzige
+  Tresor-Abfrage fünf bis sieben Freigaben (Orchestrator und Sub-Agent,
+  mehrere Suchbegriffe, Lesen der Skill-Anleitung, Auftrag an den
+  Sub-Agenten). Deshalb:
+  - **Suche frei:** `ia4-bw list items --search <begriff>` läuft ohne Karte;
+    der Wrapper gibt dabei nur ID und Name der Treffer aus (keine
+    Benutzernamen, URLs oder Passwörter). `list items` ohne Suche fragt.
+  - **Lesen eines Eintrags fragt einmal:** Nach `allow-once` darf derselbe
+    Eintrag 10 Minuten lang ohne neue Frage gelesen werden, von allen
+    Agenten der Instanz (auch Sub-Agenten). „Derselbe Eintrag“ heißt:
+    derselbe Name oder dieselbe ID bei
+    `get item|username|password|uri|totp|notes`; liefert `get item` genau
+    einen Eintrag (als JSON), gelten auch dessen ID und Name, mit demselben
+    Ablaufzeitpunkt (kein Verlängern durch Folgezugriffe).
+  - **Strikte Form:** Suche und Fenster gelten nur für Befehle genau dieser
+    Form (Allowlist: nur `ia4-bw` mit diesen Argumenten, ohne Pipe,
+    Umleitung, Variablen-Präfix, Subshell oder zweiten Befehl, ohne weitere
+    Tool-Parameter wie `env`, nur Shell-Tools). Jedes Mal fragen weiterhin:
+    andere Einträge, `create`/`edit`/`delete`, Anhänge, direkte `bw`-,
+    `BW_*`- und Umgebungs-Zugriffe und jede andere Befehlsform.
+  - **Weniger Fehlalarme durch Erwähnungen:** Das Lesen der
+    Skill-Anleitung fragt nicht mehr. Beim Auftrag an einen Sub-Agenten
+    (`sessions_spawn`) fragen nur echte Zugriffe auf Zugangsdaten oder
+    Prozess-Umgebung (`BW_*`, `/proc/*/environ`, `printenv`,
+    `process.env`); führt der Sub-Agent `ia4-bw` aus, fragt dessen Aufruf.
+    Alle anderen Tools (Datei schreiben, laufende Shell, Code-Modus) behalten
+    die volle Prüfung, damit `ia4-bw` nicht über ein geschriebenes Skript
+    ohne Karte startet. Ein Code-Modus-Block, der `ia4-bw` nur im Auftragstext
+    erwähnt, kann deshalb noch eine Karte auslösen.
+  - **Wrapper:** führende Optionen, `serve` (lokale REST-API mit entsperrtem
+    Tresor) und `export` (ganzer Tresor) lehnt `ia4-bw` ab.
+  - Läuft für denselben Eintrag schon eine Anfrage, wird ein weiterer Zugriff
+    ohne neue Frage abgewiesen (Hinweis an den Agenten, nach dem Ergebnis
+    erneut aufzurufen). Die Karte in Telegram nennt den Umfang. Die
+    Freigaben liegen nur im Speicher des Plugins (`onResolution`,
+    `after_tool_call`, [V]
+    <https://docs.openclaw.ai/plugins/hooks/tool-policy>); nur Zeitablauf
+    und Neustart des Gateways beenden ein offenes Fenster (kein Widerruf per
+    Telegram, weil im Fenster keine Karte erscheint).
+  - Folge: Ohne Freigabe sehen Agenten, welche Eintragsnamen es gibt, und
+    können über die Suche prüfen, welche Einträge zu einem Benutzernamen oder
+    einer Adresse passen (Bitwarden sucht auch darin), ohne die Werte selbst
+    zu sehen.
+    Innerhalb der 10 Minuten kann jeder Agent der Instanz, auch ein
+    Cron-Lauf, den freigegebenen Eintrag ohne Rückfrage lesen.
+- **Warum Eigenentwicklung trotz Vorgabe 1:** OpenClaw fragt Exec-Befehle nur
+  über die Allowlist ab (Treffer läuft, alles andere fragt) [V]
+  (<https://docs.openclaw.ai/tools/exec-approvals>); ein Bordmittel „nur
+  bei Befehl X fragen“ gibt es nicht. Allowlist und Owner-Vorgabe „alles
+  andere läuft wie vorher“ schließen sich deshalb aus. Der dokumentierte Weg
+  für eigene Regeln ist ein Plugin mit `before_tool_call` [V]; das kleinste
+  davon ist dieses.
+- **Absicherung gegen stilles Fehlen:** Lädt das Plugin nicht, gäbe es keine
+  Nachfrage. Die Rolle prüft deshalb nach dem Start mit
+  `openclaw plugins inspect ia4-vault-approval --runtime --json`, dass der
+  Hook registriert ist, und bricht sonst ab; der Verify-Schritt in Workflow 04
+  macht den Run ebenfalls rot. Grenze: Die Prüfung lädt das Plugin im
+  CLI-Prozess, nicht im laufenden Gateway, und ein roter Lauf baut nichts
+  zurück; der Container läuft dann mit Zugangsdaten und ohne Nachfrage
+  weiter. Handlungsweg: Workflow 04 mit `bitwarden_secret=delete` (entfernt
+  die Zugangsdaten). Der eigentliche Nachweis bleibt der Test „`ia4-bw`
+  fragt nach“ auf DEV.
+- **Folge:** Cron-Jobs und normale Befehle laufen ohne Nachfrage; nur
+  Tresor-Zugriffe fragen. Ein Tresor-Zugriff aus einem Cron-Lauf wird
+  blockiert (niemand kann bestätigen), außer er liest einen Eintrag, der
+  gerade freigegeben ist (siehe Freigabe je Eintrag).
+- **Restrisiko unverändert (keine harte Grenze), Erkennung jetzt über Text:**
+  Ein Skript, das die Tresor-Wörter nicht im Aufruf trägt, fällt nicht auf
+  (z. B. eigenes Skript, das die Umgebung liest, oder ein bloßes `set`, das
+  bewusst nicht erkannt wird, weil das Wort in fast jedem Tool-Aufruf vorkommt,
+  ebenso `env -0`, `env 2>&1` oder `node -e "console.log(process.env)"`).
+  Das entspricht dem schon
+  akzeptierten Risiko „Zugangsdaten als Umgebungsvariablen im Container“.
+- **Rückbau der früheren Allowlist:** Wo der Marker `exec-policy-ia4` liegt,
+  setzt die Rolle das Freigabe-Dokument auf `full`/`off` zurück, prüft das
+  Ergebnis mit `openclaw approvals get --gateway --json` und entfernt den
+  Marker erst danach; ein Fehlschlag macht den Lauf rot.
+- Die Abschnitte unten zu Allowlist und `ask: on-miss` beschreiben den Stand
+  vom 2026-10-10 und gelten nicht mehr.
+
 ## Fachliche Vorgaben (Owner, 2026-10-10)
 
 1. **So wenig Eigenentwicklung wie möglich:** vorhandene OpenClaw-Skills,

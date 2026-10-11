@@ -9,7 +9,7 @@
   - Install-Skript entfernt (lud `bw` ungeprüft nach `~/.local/bin`, damit
     läge es auf dem PATH und in einem freigegebenen Pfad).
   - `bw` durch `/opt/ia4-bitwarden/ia4-bw` ersetzt (Anmelden und Entsperren
-    automatisch, eine Telegram-Freigabe pro Aufruf).
+    automatisch, Telegram-Freigabe über das Plugin `ia4-vault-approval`).
   - Löschen ergänzt (nur Papierkorb), Freigabe-Hinweise und Leitplanken
     ergänzt.
   - Eindeutiger Name `ia4-bitwarden`, damit kein Workspace-Skill ihn

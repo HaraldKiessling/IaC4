@@ -401,11 +401,17 @@ jobs:
           printf 'BW_CLIENTID=%s Zeichen, ' "$(printenv BW_CLIENTID | tr -d '\n' | wc -c)"
           if [ -x /opt/ia4-bitwarden/ia4-bw ]; then printf 'ia4-bw=ja, '; else printf 'ia4-bw=nein, '; fi
           printf 'bw=%s, ' "$(/opt/ia4-bitwarden/cli/bin/bw --version 2>/dev/null || echo fehlt)"
-          if [ -f /home/node/.openclaw/skills/ia4-bitwarden/SKILL.md ]; then echo 'skill=ja'; else echo 'skill=nein'; fi
+          if [ -f /home/node/.openclaw/skills/ia4-bitwarden/SKILL.md ]; then printf 'skill=ja, '; else printf 'skill=nein, '; fi
+          if [ ! -x /opt/ia4-bitwarden/ia4-bw ]; then echo 'plugin=nicht noetig'
+          elif openclaw plugins inspect ia4-vault-approval --runtime --json 2>/dev/null | grep -q before_tool_call; then echo 'plugin=geladen'
+          else echo 'plugin=fehlt'; fi
           EOS
             )
             echo "  openclaw-$i: ${R:-nicht erreichbar}"
+            # Fail closed (Review K2, 2026-10-11): Tresor aktiv, aber Freigabe-Plugin fehlt -> Run rot
+            case "$R" in *plugin=fehlt*) echo "::error::openclaw-$i: Tresor aktiv, Freigabe-Plugin ia4-vault-approval nicht geladen"; FAIL=1 ;; esac
           done
+          [ "${FAIL:-0}" = "0" ] || exit 1
 
   # ── Temporäre Verifikation (Session 2026-08-06, Owner-Auftrag Gateway-Token-Verifikation) ──
   # Läuft NUR mit verify_token=true. Quellen: docs.openclaw.ai/gateway (Runbook) +

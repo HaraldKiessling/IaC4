@@ -48,6 +48,7 @@ services:
       # ADR-027: Skill und Wrapper read-only ueber dem beschreibbaren ./config (Agent kann sie nicht aendern).
       - ./bitwarden/skills/ia4-bitwarden:/home/node/.openclaw/skills/ia4-bitwarden:ro
       - ./bitwarden/ia4-bw:/opt/ia4-bitwarden/ia4-bw:ro
+      - ./bitwarden/plugin:/opt/ia4-bitwarden/plugin:ro
 {% endif %}
 {% if _gdrive_ready %}
       # Google-Drive-MCP: read-only Credential-Mounts (ein gemeinsames Konto nur fuer OCs).
