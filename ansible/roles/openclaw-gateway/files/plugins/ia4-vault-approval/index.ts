@@ -139,7 +139,9 @@ export default definePluginEntry({
         if (!hit) {
           return;
         }
-        const entry = entryKey((event.params ?? {}) as Record<string, unknown>);
+        // Fenster nur fuer Shell-Tools (Review Runde 2, Haertung).
+        const shellTool = event.toolName === "exec" || event.toolName === "bash";
+        const entry = shellTool ? entryKey((event.params ?? {}) as Record<string, unknown>) : undefined;
         const key = entry?.key;
         const expands = entry?.kind === "search" || entry?.kind === "get-item";
         const t = now();

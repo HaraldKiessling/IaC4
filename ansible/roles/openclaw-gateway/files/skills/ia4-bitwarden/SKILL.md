@@ -24,13 +24,14 @@ don't guess commands.
 
 Vault access asks Harald for approval on Telegram. After he approves, the
 same entry (same search term, name or ID) can be read again for 10 minutes
-without a new question; if an approved search returns exactly one item, its
-ID and name count as the same entry. Any other entry, `list items` without
+without a new question; if an approved search or `get item` returns exactly
+one item, its ID and name count as the same entry. Any other entry, `list items` without
 `--search`, create, edit and delete always ask. The no-question window only
 applies to the plain forms shown under Lookup (optionally `--raw` or
 `--pretty`): no pipes, redirects, variables or second commands in the same
 call. Before the first call, say in one sentence which entry you need and
-why. Use the item ID from the search result for follow-up `get` calls. If a call is rejected because an approval
+why. Use the item ID from the search result for follow-up `get` calls (names
+with spaces never get the no-question window). If a call is rejected because an approval
 for that entry is already pending, wait until the pending call has returned,
 then call again. If the call is denied or times out, do
 not retry with another route. Never choose "allow always" for yourself or ask
