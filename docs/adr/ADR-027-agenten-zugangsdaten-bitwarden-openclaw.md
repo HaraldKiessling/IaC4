@@ -68,11 +68,26 @@
   - **Weniger Fehlalarme durch Erwähnungen:** Das Lesen der
     Skill-Anleitung fragt nicht mehr. Beim Auftrag an einen Sub-Agenten
     (`sessions_spawn`) fragen nur echte Zugriffe auf Zugangsdaten oder
-    Prozess-Umgebung (`BW_*`, `/proc/*/environ`, `printenv`,
-    `process.env`); führt der Sub-Agent `ia4-bw` aus, fragt dessen Aufruf.
+    Prozess-Umgebung (`BW_*`, `/proc/*/environ`, `process.env`); führt der Sub-Agent `ia4-bw` aus, fragt dessen Aufruf.
     Alle anderen Tools (Datei schreiben, laufende Shell) behalten
     die volle Prüfung, damit `ia4-bw` nicht über ein geschriebenes Skript
     ohne Karte startet.
+  - **Gefilterte Umgebungs-Abfragen frei (Owner-Entscheid 2026-10-11
+    „Gefiltert frei“, DEV-Test mit drei Karten bei GitHub-Arbeit):**
+    `printenv NAME …` (Namen ohne „bw“) und
+    `printenv`/`env | grep <Namen> | sed 's/=.*/<ersatz>/'` laufen ohne
+    Karte. Die `sed`-Maskierung ist Pflicht, weil `grep` die ganze Zeile
+    `NAME=wert` trifft, ein Muster also auch in einem geheimen Wert oder in
+    einem Teil von `BW_*` treffen kann; danach bleiben nur Namen sichtbar.
+    Der Ersatztext darf kein `&`, `\`, Anführungszeichen oder `/` enthalten;
+    die Namen dürfen kein „bw“ enthalten und kein Teil eines geschützten
+    Namens sein; `grep` filtert nur positiv (kein `-v`), keine Umleitung.
+    Ungefilterte Ausgaben (`env`, `printenv`, `export -p`), eine Filterung
+    ohne Maskierung und alles mit `BW_` fragen weiter; der übrige Befehl wird
+    normal geprüft. Alle drei Befehle aus dem DEV-Test hatten diese Form [I].
+    Restrisiko: Ein mehrzeiliger Variablenwert, dessen Folgezeile das Muster
+    trifft, bliebe unmaskiert; `/usr/bin/env` erkennt die Text-Prüfung
+    generell nicht.
   - **Code-Modus (Nachtrag 2026-10-11, DEV-Test mit fünf Karten):** Im
     Code-Modus schreibt der Agent JavaScript (`exec` mit `{ title, code }`),
     und jeder darin aufgerufene Tool-Aufruf läuft erneut durch die

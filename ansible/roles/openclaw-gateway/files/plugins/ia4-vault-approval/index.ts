@@ -24,7 +24,9 @@ const VAULT =
 // Prozess-Umgebung. Erwaehnt der Auftrag nur ia4-bw, fragt erst der Sub-Agent beim Ausfuehren.
 // Alle anderen Tools (write/edit/process ...) behalten die volle Pruefung, sonst liesse
 // sich ia4-bw ueber ein geschriebenes Skript oder eine laufende Shell ohne Karte starten (Review).
-const VAULT_TEXT = /BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
+// printenv zaehlt hier nicht: den eigentlichen Shell-Aufruf prueft das Plugin beim Sub-Agenten bzw.
+// verschachtelt erneut (Owner-Entscheid "Gefiltert frei", 2026-10-11).
+const VAULT_TEXT = /BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|process\.env/;
 // Ausgabe der ganzen Prozess-Umgebung (enthaelt die BW_*-Zugangsdaten): nur am Shell-Befehl selbst
 // geprueft, weil "env" als JSON-Feldname vorkommt. "env FOO=1 cmd" bleibt frei.
 // Code-Modus-Zelle (aeusseres exec mit JavaScript): der Host kennzeichnet sie verbindlich mit
@@ -36,6 +38,30 @@ const VAULT_TEXT = /BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\
 // keine Sicherheitsgrenze [V], docs/tools/code-mode/executors.md).
 const CELL_ESCAPE = /\bprocess\s*[.\[]|\brequire\b|\bimport\b|constructor|child_process|globalThis|\bFunction\b|\beval\b/;
 const ENV_DUMP = /(^|[;&|(]|\s)(env|export\s+-p|declare\s+-[a-z]*x[a-z]*)\s*($|[;&|>)])/m;
+// Gefilterte Umgebungs-Abfragen ohne Karte (Owner-Entscheid "Gefiltert frei", 2026-10-11):
+//   printenv|env | grep [-i|-E|-F|-w|-c...] <NAME|NAME...> | sed 's/=.*/<ersatz>/'
+//   printenv NAME [NAME...]
+// Die sed-Maskierung ist Pflicht: grep trifft die ganze Zeile NAME=wert, ein Muster kann also auch in
+// einem geheimen Wert oder einem Teil von BW_* treffen; nach der Maskierung bleiben nur Namen (Review).
+// Ersatztext ohne &, \, Anfuehrungszeichen oder / (sonst kaeme der Wert zurueck). Namen ohne "bw" und
+// kein Teil eines geschuetzten Namens; kein -v, keine Umleitung. Alles andere bleibt bei der Pruefung.
+const DUMP_GREP =
+  /(^|[;&|(])(\s*)(?:printenv|env)\s*\|\s*grep((?:\s+-[iEFwc]+)*)\s+(?:'([A-Za-z0-9_|]+)'|"([A-Za-z0-9_|]+)"|([A-Za-z0-9_]+))\s*\|\s*sed\s+(?:'s\/=\.\*\/[^&\\'"\/]*\/'|"s\/=\.\*\/[^&\\'"\/$`]*\/")(?=\s*($|[;&|)]))/g;
+const PRINTENV_NAMES = /(^|[;&|(])(\s*)printenv((?:\s+[A-Za-z_][A-Za-z0-9_]*)+)(?=\s*($|[;&|>)]))/g;
+const PROTECTED_NAMES = ["BW_CLIENTID", "BW_CLIENTSECRET", "BW_PASSWORD", "BW_SESSION"];
+
+// Befehl ohne die erlaubten gefilterten Umgebungs-Abfragen (ersetzt durch "true"); der Rest wird
+// normal geprueft, ein weiterer Treffer fragt also weiterhin.
+function stripFilteredEnv(command: string): string {
+  let out = command.replace(DUMP_GREP, (m, pre, ws, _flags, q1, q2, q3) => {
+    const alts = String(q1 ?? q2 ?? q3).split("|");
+    const unsafe = (a: string) =>
+      !a || /bw/i.test(a) || PROTECTED_NAMES.some((n) => n.toLowerCase().includes(a.toLowerCase()));
+    return alts.some(unsafe) ? m : `${pre}${ws}true`;
+  });
+  out = out.replace(PRINTENV_NAMES, (m, pre, ws, names: string) => (/bw/i.test(names) ? m : `${pre}${ws}true`));
+  return out;
+}
 // Geheime Werte (JSON, auch escaped, oder NAME=wert) vor der Anzeige im Chat unkenntlich machen.
 const SECRET =
   /((?:password|totp|BW_PASSWORD|BW_CLIENTSECRET|BW_SESSION)\\?"?\s*[:=]\s*)(\\?"(?:[^"\\]|\\(?!")[\s\S])*\\?"|[^\s"\;&|]+)/gi;
@@ -155,6 +181,9 @@ export default definePluginEntry({
         const text = paramsText(event.params);
         const raw = (event.params as Record<string, unknown> | undefined)?.command;
         const command = typeof raw === "string" ? raw : text;
+        // Shell-Befehl ohne erlaubte gefilterte Umgebungs-Abfragen; der Treffer-Test laeuft darauf.
+        const shellRaw = typeof raw === "string" ? stripFilteredEnv(raw) : undefined;
+        const shellText = shellRaw === undefined ? text : paramsText({ ...(event.params as object), command: shellRaw });
         // Shell: Rohbefehl und JSON pruefen (im JSON wird ein Zeilenumbruch zu "\n", kein Wortrand vor "bw").
         const kind = (event as { toolKind?: unknown }).toolKind ?? (ctx as { toolKind?: unknown }).toolKind;
         const codeCell = kind === "code_mode_exec";
@@ -163,7 +192,7 @@ export default definePluginEntry({
             ? VAULT_TEXT.test(text)
             : codeCell
               ? VAULT_TEXT.test(text) || (VAULT.test(text) && CELL_ESCAPE.test(text))
-              : VAULT.test(text) || (typeof raw === "string" && (VAULT.test(raw) || ENV_DUMP.test(raw)));
+              : VAULT.test(shellText) || (shellRaw !== undefined && (VAULT.test(shellRaw) || ENV_DUMP.test(shellRaw)));
         if (!hit) {
           return;
         }
