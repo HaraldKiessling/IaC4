@@ -27,8 +27,10 @@ const VAULT =
 const VAULT_TEXT = /BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
 // Ausgabe der ganzen Prozess-Umgebung (enthaelt die BW_*-Zugangsdaten): nur am Shell-Befehl selbst
 // geprueft, weil "env" als JSON-Feldname vorkommt. "env FOO=1 cmd" bleibt frei.
-// Code-Modus-Zelle (exec mit JavaScript in "code", ohne "command"): jeder verschachtelte Tool-Aufruf
-// laeuft erneut durch before_tool_call [V] (docs/tools/code-mode/internals.md, "Nested tool execution").
+// Code-Modus-Zelle (aeusseres exec mit JavaScript): der Host kennzeichnet sie verbindlich mit
+// toolKind "code_mode_exec" [V] (docs/plugins/hooks/tool-policy.md); "code" und "command" tragen dort
+// denselben JS-Text. Jeder verschachtelte Tool-Aufruf laeuft erneut durch before_tool_call [V]
+// (docs/tools/code-mode/internals.md, "Nested tool execution").
 // Die Zelle selbst fragt deshalb nur bei Zugangsdaten-/Umgebungs-Text oder wenn sie Tresor-Text mit
 // Wegen aus dem Gast heraus (process., require, import, constructor ...) kombiniert (Node-Executor ist
 // keine Sicherheitsgrenze [V], docs/tools/code-mode/executors.md).
@@ -153,8 +155,8 @@ export default definePluginEntry({
         const raw = (event.params as Record<string, unknown> | undefined)?.command;
         const command = typeof raw === "string" ? raw : text;
         // Shell: Rohbefehl und JSON pruefen (im JSON wird ein Zeilenumbruch zu "\n", kein Wortrand vor "bw").
-        const p = (event.params ?? {}) as Record<string, unknown>;
-        const codeCell = event.toolName === "exec" && typeof p.code === "string" && !("command" in p);
+        const kind = (event as { toolKind?: unknown }).toolKind ?? (ctx as { toolKind?: unknown }).toolKind;
+        const codeCell = kind === "code_mode_exec";
         const hit =
           event.toolName === "sessions_spawn"
             ? VAULT_TEXT.test(text)
@@ -165,7 +167,7 @@ export default definePluginEntry({
           return;
         }
         // Fenster nur fuer Shell-Tools (Review Runde 2, Haertung).
-        const shellTool = event.toolName === "exec" || event.toolName === "bash";
+        const shellTool = !codeCell && (event.toolName === "exec" || event.toolName === "bash");
         const entry = shellTool ? entryKey((event.params ?? {}) as Record<string, unknown>) : undefined;
         const key = entry?.key;
         // Suche ohne Freigabe: der Wrapper gibt dabei nur ID und Name aus (keine Zugangsdaten).

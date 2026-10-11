@@ -74,7 +74,13 @@
     Code-Modus schreibt der Agent JavaScript (`exec` mit `{ title, code }`),
     und jeder darin aufgerufene Tool-Aufruf läuft erneut durch die
     Plugin-Prüfung ([V] OpenClaw 2026.9.8, `docs/tools/code-mode/internals.md`,
-    „Nested tool execution“). Der äußere Block fragt deshalb nur noch bei
+    „Nested tool execution“). Den äußeren Block erkennt das Plugin an der
+    Host-Kennung `toolKind: "code_mode_exec"` ([V]
+    `docs/plugins/hooks/tool-policy.md`), nicht am Parameter-Namen, denn der
+    Host trägt denselben JavaScript-Text in `code` und `command` ein ([V]
+    `dist/code-mode-control-tools`, `normalizeCodeModeExecParams`; DEV-Test
+    2026-10-11: noch zwei Karten, weil der Block als Shell-Befehl galt). Der
+    äußere Block fragt deshalb nur noch bei
     Zugangsdaten-/Umgebungs-Text oder wenn er Tresor-Text mit Wegen aus der
     JavaScript-Umgebung heraus kombiniert (`process.`, `require`, `import`,
     `constructor` …, weil der Node-Executor keine Sicherheitsgrenze ist [V]
