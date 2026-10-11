@@ -24,6 +24,12 @@ BW_SESSION=$("$BW" unlock --passwordenv BW_PASSWORD --raw)
 export BW_SESSION
 "$BW" sync >/dev/null
 
+# Fuehrende Optionen (z. B. --pretty list items) umgingen den Namensfilter; serve (lokale REST-API
+# mit entsperrtem Tresor) und export (ganzer Tresor) sind nicht vorgesehen (Review 2026-10-11).
+case "${1:-}" in
+  -*|serve|export) echo "ia4-bw: '${1}' ist nicht erlaubt (Befehl zuerst, ohne serve/export)." >&2; exit 2 ;;
+esac
+
 case "${1:-}" in
   create|edit|delete|restore|move) _write=1 ;;
   *) _write=0 ;;
@@ -50,7 +56,13 @@ elif [ "${1:-}" = "list" ] && [ "${2:-}" = "items" ]; then
     printf '%s' "$_out" | node -e '
       let d = "";
       process.stdin.on("data", (c) => (d += c)).on("end", () => {
-        const a = JSON.parse(d || "[]");
+        let a;
+        try {
+          a = JSON.parse(d || "[]");
+        } catch {
+          console.error("ia4-bw: Suchergebnis nicht lesbar.");
+          process.exit(1);
+        }
         const items = Array.isArray(a) ? a : [];
         console.log(JSON.stringify(items.map((i) => ({ id: i.id, name: i.name }))));
       });'

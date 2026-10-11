@@ -62,13 +62,17 @@
     Tool-Parameter wie `env`, nur Shell-Tools). Jedes Mal fragen weiterhin:
     andere Einträge, `create`/`edit`/`delete`, Anhänge, direkte `bw`-,
     `BW_*`- und Umgebungs-Zugriffe und jede andere Befehlsform.
-  - **Keine Fehlalarme mehr durch Erwähnungen:** Bei Tools ohne
-    Shell-Befehl (Auftrag an einen Sub-Agenten, Code-Modus, Dateien) fragen
-    nur echte Zugriffe auf Zugangsdaten oder Prozess-Umgebung (`BW_*`,
-    `/proc/*/environ`, `printenv`, `process.env`); das Lesen der
-    Skill-Anleitung fragt nicht. Führt der Sub-Agent `ia4-bw` aus, fragt
-    dessen Aufruf (verschachtelte Tool-Aufrufe laufen durch denselben Hook,
-    im DEV-Protokoll beobachtet [I], auf DEV erneut zu bestätigen).
+  - **Weniger Fehlalarme durch Erwähnungen:** Das Lesen der
+    Skill-Anleitung fragt nicht mehr. Beim Auftrag an einen Sub-Agenten
+    (`sessions_spawn`) fragen nur echte Zugriffe auf Zugangsdaten oder
+    Prozess-Umgebung (`BW_*`, `/proc/*/environ`, `printenv`,
+    `process.env`); führt der Sub-Agent `ia4-bw` aus, fragt dessen Aufruf.
+    Alle anderen Tools (Datei schreiben, laufende Shell, Code-Modus) behalten
+    die volle Prüfung, damit `ia4-bw` nicht über ein geschriebenes Skript
+    ohne Karte startet. Ein Code-Modus-Block, der `ia4-bw` nur im Auftragstext
+    erwähnt, kann deshalb noch eine Karte auslösen.
+  - **Wrapper:** führende Optionen, `serve` (lokale REST-API mit entsperrtem
+    Tresor) und `export` (ganzer Tresor) lehnt `ia4-bw` ab.
   - Läuft für denselben Eintrag schon eine Anfrage, wird ein weiterer Zugriff
     ohne neue Frage abgewiesen (Hinweis an den Agenten, nach dem Ergebnis
     erneut aufzurufen). Die Karte in Telegram nennt den Umfang. Die
@@ -77,7 +81,10 @@
     <https://docs.openclaw.ai/plugins/hooks/tool-policy>); nur Zeitablauf
     und Neustart des Gateways beenden ein offenes Fenster (kein Widerruf per
     Telegram, weil im Fenster keine Karte erscheint).
-  - Folge: Ohne Freigabe sehen Agenten, welche Eintragsnamen es gibt.
+  - Folge: Ohne Freigabe sehen Agenten, welche Eintragsnamen es gibt, und
+    können über die Suche prüfen, welche Einträge zu einem Benutzernamen oder
+    einer Adresse passen (Bitwarden sucht auch darin), ohne die Werte selbst
+    zu sehen.
     Innerhalb der 10 Minuten kann jeder Agent der Instanz, auch ein
     Cron-Lauf, den freigegebenen Eintrag ohne Rückfrage lesen.
 - **Warum Eigenentwicklung trotz Vorgabe 1:** OpenClaw fragt Exec-Befehle nur

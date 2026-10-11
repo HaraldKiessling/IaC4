@@ -19,10 +19,11 @@ import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 // Shell-Befehle (Tool-Parameter "command"): Tresor-Aufruf, CLI, Zugangsdaten, Prozess-Umgebung.
 // Der Skill-Ordner "ia4-bitwarden" allein ist kein Zugriff (Anleitung lesen fragt nicht, DEV-Test 2026-10-11).
 const VAULT =
-  /ia4-bw|@bitwarden\/cli|\bbw\b|BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
-// Alle anderen Tools (z. B. Auftrag an einen Sub-Agenten, Code-Modus, Datei lesen): nur echte
-// Zugriffe auf Zugangsdaten oder Prozess-Umgebung. Erwaehnt ein Auftrag nur ia4-bw, fragt erst der
-// Sub-Agent beim Ausfuehren (verschachtelte Tool-Aufrufe laufen ebenfalls durch diesen Hook).
+  /ia4-bw|\/opt\/ia4-bitwarden\/cli|@bitwarden\/cli|\bbw\b|BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
+// Auftrag an einen Sub-Agenten (sessions_spawn): nur echte Zugriffe auf Zugangsdaten oder
+// Prozess-Umgebung. Erwaehnt der Auftrag nur ia4-bw, fragt erst der Sub-Agent beim Ausfuehren.
+// Alle anderen Tools (write/edit/process/Code-Modus ...) behalten die volle Pruefung, sonst liesse
+// sich ia4-bw ueber ein geschriebenes Skript oder eine laufende Shell ohne Karte starten (Review).
 const VAULT_TEXT = /BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
 // Ausgabe der ganzen Prozess-Umgebung (enthaelt die BW_*-Zugangsdaten): nur am Shell-Befehl selbst
 // geprueft, weil "env" als JSON-Feldname vorkommt. "env FOO=1 cmd" bleibt frei.
@@ -143,9 +144,9 @@ export default definePluginEntry({
         const command = typeof raw === "string" ? raw : text;
         // Shell: Rohbefehl und JSON pruefen (im JSON wird ein Zeilenumbruch zu "\n", kein Wortrand vor "bw").
         const hit =
-          typeof raw === "string"
-            ? VAULT.test(text) || VAULT.test(raw) || ENV_DUMP.test(raw)
-            : VAULT_TEXT.test(text);
+          event.toolName === "sessions_spawn"
+            ? VAULT_TEXT.test(text)
+            : VAULT.test(text) || (typeof raw === "string" && (VAULT.test(raw) || ENV_DUMP.test(raw)));
         if (!hit) {
           return;
         }

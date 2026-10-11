@@ -30,7 +30,8 @@ returns one item its ID and name both count. Any other entry, `list items`
 without `--search`, create, edit and delete always ask. The no-question window only
 applies to the plain forms shown under Lookup (optionally `--raw` or
 `--pretty`): no pipes, redirects, variables or second commands in the same
-call. Before the first call, say in one sentence which entry you need and
+call. Call `ia4-bw` directly; writing it into a script or a running shell
+also asks for approval. Before the first call, say in one sentence which entry you need and
 why. Use the item ID from the search result for follow-up `get` calls (names
 with spaces never get the no-question window). If a call is rejected because an approval
 for that entry is already pending, wait until the pending call has returned,
