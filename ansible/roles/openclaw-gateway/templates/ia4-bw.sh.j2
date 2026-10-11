@@ -2,7 +2,7 @@
 # ia4-bw – Bitwarden-CLI fuer den Agenten-Tresor (ADR-027, Issue #192).
 # Von Ansible gerendert, read-only in den Container gemountet (nicht vom Agenten aenderbar).
 # Liegt bewusst NICHT auf dem PATH: Aufrufe fragt das Plugin ia4-vault-approval in Telegram ab
-# (eine Freigabe gilt 10 Min. zum Lesen eines Eintrags, ADR-027). Meldet sich selbst an, entsperrt,
+# (Suche frei und nur mit ID/Name, eine Freigabe gilt 10 Min. zum Lesen eines Eintrags, ADR-027). Meldet sich selbst an, entsperrt,
 # synchronisiert und reicht alle Argumente an das offizielle `bw` weiter.
 # create/edit: reines JSON auf stdin wird vorher kodiert (wie `bw encode`).
 set -eu
@@ -40,10 +40,26 @@ if { [ "${1:-}" = "create" ] && [ $# -eq 2 ]; } || { [ "${1:-}" = "edit" ] && [ 
   else
     "$BW" "$@"
   fi
+  _rc=$?
+elif [ "${1:-}" = "list" ] && [ "${2:-}" = "items" ]; then
+  # Suche liefert nur ID und Name (keine Benutzernamen, URLs, Passwoerter): laeuft ohne Freigabe,
+  # erst "get" auf einen Eintrag fragt (Plugin ia4-vault-approval, ADR-027).
+  _out=$("$BW" "$@")
+  _rc=$?
+  if [ "$_rc" -eq 0 ]; then
+    printf '%s' "$_out" | node -e '
+      let d = "";
+      process.stdin.on("data", (c) => (d += c)).on("end", () => {
+        const a = JSON.parse(d || "[]");
+        const items = Array.isArray(a) ? a : [];
+        console.log(JSON.stringify(items.map((i) => ({ id: i.id, name: i.name }))));
+      });'
+    _rc=$?
+  fi
 else
   "$BW" "$@"
+  _rc=$?
 fi
-_rc=$?
 set -e
 
 # Sync-Fehler nach erfolgreichem Schreiben darf den Erfolg nicht verdecken (sonst Doppel-Eintrag

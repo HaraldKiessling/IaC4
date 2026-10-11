@@ -2,11 +2,12 @@
 // Von Ansible abgelegt, root-eigen und read-only in den Container gemountet.
 // Jeder Tool-Aufruf, dessen Parameter den Agenten-Tresor beruehren (ia4-bw, Bitwarden CLI,
 // BW_*-Variablen), wartet auf Haralds Freigabe in Telegram (allow-once/deny).
-// Eine Freigabe gilt danach WINDOW_MS lang NUR fuer den freigegebenen Eintrag (Suchbegriff, ID,
-// Name) und nur zum Lesen (get, list --search), fuer alle Agenten dieser Instanz (auch Sub-Agenten).
+// Suche (list items --search) laeuft ohne Freigabe; der Wrapper zeigt dabei nur ID und Name.
+// Eine Freigabe gilt danach WINDOW_MS lang NUR zum Lesen (get) des freigegebenen Eintrags (ID,
+// Name), fuer alle Agenten dieser Instanz (auch Sub-Agenten).
 // Alles andere (anderer Eintrag, list ohne Suche, create/edit/delete, direkte bw-/BW_*-/
 // Umgebungs-Zugriffe) fragt jedes Mal
-// (Owner-Entscheide 2026-10-11: "10 Minuten", "nur fuer einen Eintrag").
+// (Owner-Entscheide 2026-10-11: "10 Minuten", "nur fuer einen Eintrag", "Ja, Suche frei").
 // Alle anderen Befehle laufen ohne Nachfrage wie vor ADR-027.
 // Grundlage [V]: docs/plugins/hooks/tool-policy.md (before_tool_call, requireApproval),
 // docs/plugins/plugin-permission-requests.md (Entscheidungen, Timeout, fail-closed).
@@ -15,8 +16,14 @@ import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 // Treffer = Nachfrage. Bewusst breit (Tresor-Befehl, CLI-Paket, Zugangsdaten-Variablen, Prozess-
 // Umgebung), aber ohne gaengige Befehle wie cd, git, python3 oder bash-Skripte.
 // Keine harte Grenze: ein Skript, das diese Woerter nicht enthaelt, faellt nicht auf (ADR-027, Restrisiko).
+// Shell-Befehle (Tool-Parameter "command"): Tresor-Aufruf, CLI, Zugangsdaten, Prozess-Umgebung.
+// Der Skill-Ordner "ia4-bitwarden" allein ist kein Zugriff (Anleitung lesen fragt nicht, DEV-Test 2026-10-11).
 const VAULT =
-  /ia4-bw|ia4-bitwarden|@bitwarden\/cli|\bbw\b|BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b/;
+  /ia4-bw|@bitwarden\/cli|\bbw\b|BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
+// Alle anderen Tools (z. B. Auftrag an einen Sub-Agenten, Code-Modus, Datei lesen): nur echte
+// Zugriffe auf Zugangsdaten oder Prozess-Umgebung. Erwaehnt ein Auftrag nur ia4-bw, fragt erst der
+// Sub-Agent beim Ausfuehren (verschachtelte Tool-Aufrufe laufen ebenfalls durch diesen Hook).
+const VAULT_TEXT = /BW_(CLIENTID|CLIENTSECRET|PASSWORD|SESSION)|\/proc\/[^/\s]*\/environ|\bprintenv\b|process\.env/;
 // Ausgabe der ganzen Prozess-Umgebung (enthaelt die BW_*-Zugangsdaten): nur am Shell-Befehl selbst
 // geprueft, weil "env" als JSON-Feldname vorkommt. "env FOO=1 cmd" bleibt frei.
 const ENV_DUMP = /(^|[;&|(]|\s)(env|export\s+-p|declare\s+-[a-z]*x[a-z]*)\s*($|[;&|>)])/m;
@@ -126,7 +133,7 @@ function purge(t: number) {
 export default definePluginEntry({
   id: "ia4-vault-approval",
   name: "IaC4 Tresor-Freigabe",
-  description: "Fragt vor Zugriffen auf den Agenten-Tresor (Bitwarden) per Telegram nach; eine Freigabe gilt 10 Minuten fuer einen Eintrag.",
+  description: "Fragt vor Zugriffen auf den Agenten-Tresor (Bitwarden) per Telegram nach; Suche frei, eine Freigabe gilt 10 Minuten fuer einen Eintrag.",
   register(api) {
     api.on(
       "before_tool_call",
@@ -134,8 +141,11 @@ export default definePluginEntry({
         const text = paramsText(event.params);
         const raw = (event.params as Record<string, unknown> | undefined)?.command;
         const command = typeof raw === "string" ? raw : text;
-        // Rohbefehl zusaetzlich pruefen: im JSON wird ein Zeilenumbruch zu "\n" (kein Wortrand vor "bw").
-        const hit = VAULT.test(text) || (typeof raw === "string" && (VAULT.test(raw) || ENV_DUMP.test(raw)));
+        // Shell: Rohbefehl und JSON pruefen (im JSON wird ein Zeilenumbruch zu "\n", kein Wortrand vor "bw").
+        const hit =
+          typeof raw === "string"
+            ? VAULT.test(text) || VAULT.test(raw) || ENV_DUMP.test(raw)
+            : VAULT_TEXT.test(text);
         if (!hit) {
           return;
         }
@@ -143,7 +153,11 @@ export default definePluginEntry({
         const shellTool = event.toolName === "exec" || event.toolName === "bash";
         const entry = shellTool ? entryKey((event.params ?? {}) as Record<string, unknown>) : undefined;
         const key = entry?.key;
-        const expands = entry?.kind === "search" || entry?.kind === "get-item";
+        // Suche ohne Freigabe: der Wrapper gibt dabei nur ID und Name aus (keine Zugangsdaten).
+        if (entry?.kind === "search") {
+          return;
+        }
+        const expands = entry?.kind === "get-item";
         const t = now();
         purge(t);
         const until = key ? approved.get(key) ?? 0 : 0;

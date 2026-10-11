@@ -22,11 +22,12 @@ don't guess commands.
 
 ## Approval
 
-Vault access asks Harald for approval on Telegram. After he approves, the
-same entry (same search term, name or ID) can be read again for 10 minutes
-without a new question; if an approved search or `get item` returns exactly
-one item, its ID and name count as the same entry. Any other entry, `list items` without
-`--search`, create, edit and delete always ask. The no-question window only
+Searching (`list items --search "query"`) runs without approval and returns
+only the ID and name of each match. Reading an entry (`get …`) asks Harald for
+approval on Telegram; after he approves, the same entry (same name or ID) can
+be read again for 10 minutes without a new question, and if `get item`
+returns one item its ID and name both count. Any other entry, `list items`
+without `--search`, create, edit and delete always ask. The no-question window only
 applies to the plain forms shown under Lookup (optionally `--raw` or
 `--pretty`): no pipes, redirects, variables or second commands in the same
 call. Before the first call, say in one sentence which entry you need and

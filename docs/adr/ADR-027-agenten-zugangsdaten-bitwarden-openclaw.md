@@ -42,30 +42,44 @@
   (<https://docs.openclaw.ai/tools/exec-approvals-advanced>). Passwort-Felder
   im Befehl werden in der Anfrage durch `***` ersetzt.
 - **Freigabe je Eintrag (Owner-Entscheide 2026-10-11, „10 Minuten“, „nur für
-  einen Eintrag“):** Im DEV-Test brauchte eine einzige Tresor-Abfrage fünf
-  Freigaben (Orchestrator und Sub-Agent, je Suche/Lesen ein Aufruf). Nach
-  einem `allow-once` darf deshalb 10 Minuten lang derselbe Eintrag ohne neue
-  Frage gelesen werden, von allen Agenten der Instanz (auch Sub-Agenten).
-  „Derselbe Eintrag“ heißt: derselbe Suchbegriff (`list items --search`),
-  derselbe Name oder dieselbe ID (`get item|username|password|uri|totp|notes`);
-  liefert eine freigegebene Suche oder `get item` genau einen Eintrag (als
-  JSON), gelten auch dessen ID und Name, mit demselben Ablaufzeitpunkt (kein
-  Verlängern durch Folgezugriffe). Das Fenster gilt nur für Befehle, die
-  genau dieser Form entsprechen (Allowlist: nur `ia4-bw` mit diesen
-  Argumenten, ohne Pipe, Umleitung, Variablen-Präfix, Subshell oder zweiten
-  Befehl, ohne weitere Tool-Parameter wie `env`). Jedes Mal fragen
-  weiterhin: andere Einträge, Suchen mit mehreren Treffern beim Folgezugriff,
-  `list items` ohne Suche, `create`/`edit`/`delete`, Anhänge, direkte
-  `bw`-, `BW_*`- und Umgebungs-Zugriffe und jede andere Befehlsform.
-  Läuft für denselben Eintrag schon eine Anfrage, wird ein weiterer Zugriff
-  ohne neue Frage abgewiesen (Hinweis an den Agenten, nach dem Ergebnis
-  erneut aufzurufen). Die Karte in Telegram nennt den Umfang. Die Freigaben
-  liegen nur im Speicher des Plugins (`onResolution`, `after_tool_call`, [V]
-  <https://docs.openclaw.ai/plugins/hooks/tool-policy>); nur Zeitablauf und
-  Neustart des Gateways beenden ein offenes Fenster (kein Widerruf per
-  Telegram, weil im Fenster keine Karte erscheint). Folge: Innerhalb der 10 Minuten kann jeder
-  Agent der Instanz, auch ein Cron-Lauf, diesen einen Eintrag ohne Rückfrage
-  lesen.
+  einen Eintrag“, „Ja, Suche frei“):** Im DEV-Test brauchte eine einzige
+  Tresor-Abfrage fünf bis sieben Freigaben (Orchestrator und Sub-Agent,
+  mehrere Suchbegriffe, Lesen der Skill-Anleitung, Auftrag an den
+  Sub-Agenten). Deshalb:
+  - **Suche frei:** `ia4-bw list items --search <begriff>` läuft ohne Karte;
+    der Wrapper gibt dabei nur ID und Name der Treffer aus (keine
+    Benutzernamen, URLs oder Passwörter). `list items` ohne Suche fragt.
+  - **Lesen eines Eintrags fragt einmal:** Nach `allow-once` darf derselbe
+    Eintrag 10 Minuten lang ohne neue Frage gelesen werden, von allen
+    Agenten der Instanz (auch Sub-Agenten). „Derselbe Eintrag“ heißt:
+    derselbe Name oder dieselbe ID bei
+    `get item|username|password|uri|totp|notes`; liefert `get item` genau
+    einen Eintrag (als JSON), gelten auch dessen ID und Name, mit demselben
+    Ablaufzeitpunkt (kein Verlängern durch Folgezugriffe).
+  - **Strikte Form:** Suche und Fenster gelten nur für Befehle genau dieser
+    Form (Allowlist: nur `ia4-bw` mit diesen Argumenten, ohne Pipe,
+    Umleitung, Variablen-Präfix, Subshell oder zweiten Befehl, ohne weitere
+    Tool-Parameter wie `env`, nur Shell-Tools). Jedes Mal fragen weiterhin:
+    andere Einträge, `create`/`edit`/`delete`, Anhänge, direkte `bw`-,
+    `BW_*`- und Umgebungs-Zugriffe und jede andere Befehlsform.
+  - **Keine Fehlalarme mehr durch Erwähnungen:** Bei Tools ohne
+    Shell-Befehl (Auftrag an einen Sub-Agenten, Code-Modus, Dateien) fragen
+    nur echte Zugriffe auf Zugangsdaten oder Prozess-Umgebung (`BW_*`,
+    `/proc/*/environ`, `printenv`, `process.env`); das Lesen der
+    Skill-Anleitung fragt nicht. Führt der Sub-Agent `ia4-bw` aus, fragt
+    dessen Aufruf (verschachtelte Tool-Aufrufe laufen durch denselben Hook,
+    im DEV-Protokoll beobachtet [I], auf DEV erneut zu bestätigen).
+  - Läuft für denselben Eintrag schon eine Anfrage, wird ein weiterer Zugriff
+    ohne neue Frage abgewiesen (Hinweis an den Agenten, nach dem Ergebnis
+    erneut aufzurufen). Die Karte in Telegram nennt den Umfang. Die
+    Freigaben liegen nur im Speicher des Plugins (`onResolution`,
+    `after_tool_call`, [V]
+    <https://docs.openclaw.ai/plugins/hooks/tool-policy>); nur Zeitablauf
+    und Neustart des Gateways beenden ein offenes Fenster (kein Widerruf per
+    Telegram, weil im Fenster keine Karte erscheint).
+  - Folge: Ohne Freigabe sehen Agenten, welche Eintragsnamen es gibt.
+    Innerhalb der 10 Minuten kann jeder Agent der Instanz, auch ein
+    Cron-Lauf, den freigegebenen Eintrag ohne Rückfrage lesen.
 - **Warum Eigenentwicklung trotz Vorgabe 1:** OpenClaw fragt Exec-Befehle nur
   über die Allowlist ab (Treffer läuft, alles andere fragt) [V]
   (<https://docs.openclaw.ai/tools/exec-approvals>); ein Bordmittel „nur
