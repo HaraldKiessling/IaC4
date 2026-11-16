@@ -91,18 +91,18 @@
   },
   "plugins": {
     "entries": {
-{% if oc_websearch_api_key | default('') | length > 0 %}      "perplexity": {
+{# Key-freie Web-Suche (Owner-Entscheid "Weg 2", 2026-11-16): Provider "duckduckgo" des Plugins
+   @openclaw/duckduckgo-plugin (Install: tasks/instance-body.yml). Kein API-Key; region/safeSearch
+   sind optional (Manifest openclaw.plugin.json: webSearch.region, webSearch.safeSearch). #}
+      "duckduckgo": {
         "enabled": true,
         "config": {
           "webSearch": {
-            "apiKey": "{{ oc_websearch_api_key }}"
+            "region": {{ openclaw_duckduckgo_region | default('de-de') | tojson }},
+            "safeSearch": {{ openclaw_duckduckgo_safesearch | default('moderate') | tojson }}
           }
         }
-      }
-{% else %}      "perplexity": {
-        "enabled": false
-      }
-{% endif %}{% if oc_bitwarden_active | default(false) | bool %},
+      }{% if oc_bitwarden_active | default(false) | bool %},
       "ia4-vault-approval": {
         "enabled": true
       }
@@ -122,9 +122,8 @@
   "tools": {
     "web": {
       "search": {
-{% if oc_websearch_api_key | default('') | length > 0 %}        "provider": "perplexity"
-{% else %}        "provider": "none"
-{% endif %}      }
+        "provider": "duckduckgo"
+      }
     }
 {% if subagents_deny %},
     "subagents": {
