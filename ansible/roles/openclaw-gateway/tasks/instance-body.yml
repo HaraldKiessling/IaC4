@@ -431,7 +431,8 @@
   when: not (oc_ddg_enabled | bool)
 
 - name: "{{ oc.name }}: Web-Suche auf duckduckgo aktivieren (Config + Restart, erst nach Install)"
-  when: not (oc_ddg_enabled | bool)
+  # Bewusst ohne when: Der Block muss AUCH laufen, wenn oc_ddg_enabled erst durch
+  # den Install-Task true geworden ist. Re-Render ist idempotent (kein Restart ohne Change).
   block:
     - name: "{{ oc.name }}: oc_ddg_enabled setzen (Plugin ist jetzt installiert)"
       ansible.builtin.set_fact:
