@@ -1,0 +1,134 @@
+---
+# Read-only-Diagnose fuer eine OpenClaw-Instanz auf einem VPS.
+# Zweck: State-DB-/Maintenance-Status, Container-Status, Mounts und Logs ansehen,
+# ohne irgendetwas zu schreiben oder zu restarten.
+name: "Diag – OC State/Maintenance (read-only)"
+run-name: "diag oc-state ${{ inputs.target }}/${{ inputs.instance }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Ziel-VPS'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - dev
+          - prod
+      instance:
+        description: 'OC-Instanz'
+        required: true
+        default: 'oc3'
+        type: choice
+        options:
+          - oc1
+          - oc2
+          - oc3
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diag-oc-state-${{ inputs.target }}-${{ inputs.instance }}
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+    steps:
+      - name: Connect Runner to Tailnet
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: Tailscale OAuth-Token holen
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+        run: |
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          echo "TS_TOKEN=${TS_TOKEN}" >> "$GITHUB_ENV"
+
+      - name: VPS Tailscale-IP ermitteln
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          NODE="vps-${{ inputs.target }}"
+          API_RESP=$(curl -sS -w "\nHTTP_CODE:%{http_code}" \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            -H "Authorization: Bearer ${TS_TOKEN}")
+          HTTP_CODE=$(printf '%s' "$API_RESP" | tail -1 | cut -d: -f2)
+          API_BODY=$(printf '%s' "$API_RESP" | sed '$d')
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Tailscale-API Fehler (HTTP ${HTTP_CODE})"
+            printf '%s\n' "$API_BODY" | head -5
+            exit 1
+          fi
+          TS_IP=$(printf '%s' "$API_BODY" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+          if [ -z "$TS_IP" ] || [ "$TS_IP" = "null" ]; then
+            echo "❌ Keine Tailscale-IP für ${NODE}"
+            exit 1
+          fi
+          echo "VPS_TS_IP=${TS_IP}" >> "$GITHUB_ENV"
+          echo "✅ ${NODE} → ${TS_IP}"
+
+      - name: SSH-Key vorbereiten
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_TS_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Read-only Status sammeln
+        env:
+          INSTANCE: ${{ inputs.instance }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -uo pipefail
+          SSH="ssh -i $HOME/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR ${VPS_USER}@${VPS_TS_IP}"
+          C="openclaw-${INSTANCE}"
+
+          echo "### Container"
+          $SSH "sudo docker ps -a --filter name=^${C}\$ --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'" || true
+
+          echo
+          echo "### Inspect"
+          $SSH "sudo docker inspect ${C} --format 'status={{.State.Status}} running={{.State.Running}} restarts={{.RestartCount}} started={{.State.StartedAt}} image={{.Config.Image}}'" || true
+
+          echo
+          echo "### Mounts"
+          $SSH "sudo docker inspect ${C} --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{\"\n\"}}{{end}}'" || true
+
+          echo
+          echo "### Version"
+          $SSH "sudo docker exec ${C} openclaw --version 2>&1" || true
+
+          echo
+          echo "### Update-Status"
+          $SSH "sudo docker exec ${C} openclaw update status --json 2>&1" || true
+
+          echo
+          echo "### Logs (gefiltert)"
+          $SSH "sudo docker logs --tail 250 ${C} 2>&1 | grep -iE 'maintenance|schema|migrat|error|fatal|ready|listen' | tail -60" || true
+
+          echo
+          echo "### Host-State-Pfad"
+          $SSH "sudo find /srv/openclaw/${INSTANCE} -maxdepth 4 \( -iname '*maintenance*' -o -iname '*.lock' -o -iname '*update*' \) -print 2>/dev/null | head -40" || true
+
+          echo
+          echo "### State-Dateien"
+          $SSH "sudo ls -la /srv/openclaw/${INSTANCE}/config/state 2>/dev/null || sudo ls -la /srv/openclaw/${INSTANCE}/state 2>/dev/null || true" || true
+
+      - name: Hinweis
+        if: always()
+        run: |
+          echo "Read-only: Es wurden keine Schreiboperationen ausgeführt."
