@@ -91,18 +91,29 @@
   },
   "plugins": {
     "entries": {
-{% if oc_websearch_api_key | default('') | length > 0 %}      "perplexity": {
+{# Key-freie Web-Suche (Owner-Entscheid "Weg 2", 2026-11-16): Provider "duckduckgo" des Plugins
+   @openclaw/duckduckgo-plugin. WICHTIG (Fix 2026-11-17): Der Eintrag wird NUR gerendert, wenn das
+   Plugin nachweislich installiert ist (oc_ddg_enabled, gesetzt in tasks/instance-body.yml). Ein
+   plugins.entries-Eintrag ohne installiertes Plugin laesst das Gateway beim Start crashen.
+   Fallback ohne Plugin: bisherige perplexity/none-Logik (Rollback-Pfad bleibt intakt). #}
+{% if oc_ddg_enabled | default(false) %}      "duckduckgo": {
+        "enabled": true,
+        "config": {
+          "webSearch": {
+            "region": {{ openclaw_duckduckgo_region | default('de-de') | tojson }},
+            "safeSearch": {{ openclaw_duckduckgo_safesearch | default('moderate') | tojson }}
+          }
+        }
+      }{% elif oc_websearch_api_key | default('') | length > 0 %}      "perplexity": {
         "enabled": true,
         "config": {
           "webSearch": {
             "apiKey": "{{ oc_websearch_api_key }}"
           }
         }
-      }
-{% else %}      "perplexity": {
+      }{% else %}      "perplexity": {
         "enabled": false
-      }
-{% endif %}{% if oc_bitwarden_active | default(false) | bool %},
+      }{% endif %}{% if oc_bitwarden_active | default(false) | bool %},
       "ia4-vault-approval": {
         "enabled": true
       }
@@ -122,9 +133,11 @@
   "tools": {
     "web": {
       "search": {
-{% if oc_websearch_api_key | default('') | length > 0 %}        "provider": "perplexity"
+{% if oc_ddg_enabled | default(false) %}        "provider": "duckduckgo"
+{% elif oc_websearch_api_key | default('') | length > 0 %}        "provider": "perplexity"
 {% else %}        "provider": "none"
-{% endif %}      }
+{% endif %}
+      }
     }
 {% if subagents_deny %},
     "subagents": {

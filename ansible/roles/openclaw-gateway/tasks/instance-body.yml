@@ -269,6 +269,23 @@
     state: absent
   when: not (oc_bitwarden_active | bool)
 
+# Fix 2026-11-17 (Restart-Loop/Schema-22-Vorfall): Der Config-Eintrag plugins.entries.duckduckgo
+# darf erst gerendert werden, wenn das Plugin im config-Mount liegt. Pruefung bewusst auf dem
+# HOST (config/extensions, ueberlebt Recreate) statt im Container: der Container kann gerade
+# restart-loopen und waere dann nicht befragbar. Ergebnis steuert openclaw.json.j2.
+- name: "{{ oc.name }}: DuckDuckGo-Plugin vorhanden? (Host-Pfad config/extensions)"
+  ansible.builtin.find:
+    paths: "{{ openclaw_data_root }}/{{ oc.name }}/config/extensions"
+    patterns: "*duckduckgo*"
+    file_type: directory
+    recurse: false
+  register: _oc_ddg_dir
+  failed_when: false
+
+- name: "{{ oc.name }}: Web-Suche-Provider festlegen (duckduckgo nur bei installiertem Plugin)"
+  ansible.builtin.set_fact:
+    oc_ddg_enabled: "{{ (_oc_ddg_dir.matched | default(0)) > 0 }}"
+
 - name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
 
   ansible.builtin.template:
@@ -379,6 +396,71 @@
   changed_when: false
   failed_when: _oc_gdrive_ver.rc != 0
 
+# Key-freie Web-Suche (Owner-Entscheid "Weg 2", 2026-11-16): Install + Aktivierung sind nach VORNE
+# gezogen (vor das Health-Gate) und laufen in ZWEI Phasen: (1) Plugin per offizieller CLI installieren
+# (QMD-Muster; das Paket importiert "openclaw/plugin-sdk/*", npm -g loest das nicht auf), (2) erst
+# danach openclaw.json mit plugins.entries.duckduckgo rendern + Container neu starten. So startet das
+# Gateway nie mit einem Eintrag fuer ein noch fehlendes Plugin (Start-Crash/Restart-Loop).
+# Idempotent: 2. Lauf findet das Plugin im config-Mount -> oc_ddg_enabled=true beim ersten Render,
+# kein zweiter Restart. Version gepinnt (ADR-017).
+- name: "{{ oc.name }}: DuckDuckGo-Plugin installieren (key-frei, Version gepinnt)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: >-
+      /bin/sh -lc "if openclaw plugins inspect duckduckgo >/dev/null 2>&1; then echo skip;
+      else openclaw plugins install npm:@openclaw/duckduckgo-plugin@{{ openclaw_duckduckgo_plugin_version }}
+      --force --accept-capabilities && echo installed; fi"
+  register: _oc_ddg_install
+  changed_when: "'installed' in (_oc_ddg_install.stdout | default(''))"
+  # Upgrade-Pfad: Beim Wechsel der Image-Version migriert das Gateway die bestehende
+  # State-DB (Schema 19 -> 22). Waehrend dieser Migration antwortet die CLI mit
+  # "state ... is undergoing offline maintenance". Darum warten statt sofort scheitern.
+  failed_when: false
+  until: _oc_ddg_install.rc == 0
+  retries: 50
+  delay: 10
+  when: not (oc_ddg_enabled | bool)
+
+- name: "{{ oc.name }}: DuckDuckGo-Plugin-Install pruefen (Wartezeit auf State-DB-Migration)"
+  ansible.builtin.assert:
+    that: _oc_ddg_install.rc == 0
+    fail_msg: >-
+      Plugin-Install fehlgeschlagen (rc={{ _oc_ddg_install.rc }}):
+      {{ _oc_ddg_install.stderr | default('') | truncate(400) }}
+  when: not (oc_ddg_enabled | bool)
+
+- name: "{{ oc.name }}: Web-Suche auf duckduckgo aktivieren (Config + Restart, erst nach Install)"
+  # Bewusst ohne when: Der Block muss AUCH laufen, wenn oc_ddg_enabled erst durch
+  # den Install-Task true geworden ist. Re-Render ist idempotent (kein Restart ohne Change).
+  block:
+    - name: "{{ oc.name }}: oc_ddg_enabled setzen (Plugin ist jetzt installiert)"
+      ansible.builtin.set_fact:
+        oc_ddg_enabled: true
+
+    - name: "{{ oc.name }}: openclaw.json mit duckduckgo rendern (nach Install)"
+      ansible.builtin.template:
+        src: openclaw.json.j2
+        dest: "{{ openclaw_data_root }}/{{ oc.name }}/config/openclaw.json"
+        mode: '0600'
+        owner: '1000'
+        group: '1000'
+      register: _oc_cfg_ddg
+
+    - name: "{{ oc.name }}: Container neu starten (duckduckgo aktiviert)"
+      ansible.builtin.command:
+        cmd: "docker compose -f {{ openclaw_data_root }}/{{ oc.name }}/docker-compose.yml restart openclaw"
+      when: _oc_cfg_ddg.changed
+      changed_when: true
+
+    - name: "{{ oc.name }}: Container-Port stabilisieren (nach Aktivierung)"
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ oc.port }}"
+        delay: 10
+        timeout: 120
+      failed_when: false
+
 # Health-Gate NACH Install/Verify (s.o.). Retry-Budget 36x10s (~360s) zzgl. 10s Vorlauf aus
 # wait_for: deckt den transienten Container-Restart beim Recreate UND die einmalige
 # 2026.9.8-State-DB-/Config-Migration (~3 Min) beim ersten Start ab (Runs 37282760139 /
@@ -414,6 +496,20 @@
     - name: "{{ oc.name }}: Health fehlgeschlagen (Diagnose oben)"
       ansible.builtin.fail:
         msg: "Health-Check {{ oc.name }} (Port {{ oc.port }}) fehlgeschlagen - Diagnose (docker ps / docker logs) siehe oben."
+
+
+# Fail-closed: ohne geladenen Provider waere tools.web.search.provider=duckduckgo wirkungslos und
+# der Deploy trotzdem gruen. --runtime laedt das Plugin-Modul (wie beim Tresor-Plugin-Gate).
+- name: "{{ oc.name }}: Web-Suche provider=duckduckgo geladen? (fail-closed)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: openclaw plugins inspect duckduckgo --runtime --json
+  register: _oc_ddg_inspect
+  changed_when: false
+  retries: 6
+  delay: 10
+  until: _oc_ddg_inspect.rc | default(1) == 0
 
 # Exec-Freigaben (ADR-027, Fix 2026-10-11): IaC4 setzt kein Exec-Freigabe-Dokument mehr; die
 # Tresor-Nachfrage macht das Plugin ia4-vault-approval. Instanzen, auf denen das fruehere

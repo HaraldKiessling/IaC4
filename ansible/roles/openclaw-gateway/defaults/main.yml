@@ -1,7 +1,10 @@
 ---
 # Fallback (SSoT: group_vars/all.yml)
 openclaw_image: "ghcr.io/openclaw/openclaw"
-openclaw_image_version: "2026.9.8"   # Pin (ADR-017); kein latest-Fallback (Reviewer B12)
+openclaw_image_version: "2026.11.4"   # Pin (ADR-017); kein latest-Fallback (Reviewer B12)
+openclaw_duckduckgo_plugin_version: "2026.11.4"   # Fallback (SSoT: group_vars/all.yml)
+openclaw_duckduckgo_region: "de-de"              # Key-freie Web-Suche: DDG-Region (z. B. de-de, us-en)
+openclaw_duckduckgo_safesearch: "moderate"       # strict | moderate | off
 openclaw_instances: []
 openclaw_instance_filter: "all"   # all | oc1 | oc2 | oc3 (Harald 2026-08-01: getrennt deploybar)
 openclaw_data_root: /srv/openclaw
