@@ -413,7 +413,21 @@
       --force --accept-capabilities && echo installed; fi"
   register: _oc_ddg_install
   changed_when: "'installed' in (_oc_ddg_install.stdout | default(''))"
-  failed_when: _oc_ddg_install.rc != 0
+  # Upgrade-Pfad: Beim Wechsel der Image-Version migriert das Gateway die bestehende
+  # State-DB (Schema 19 -> 22). Waehrend dieser Migration antwortet die CLI mit
+  # "state ... is undergoing offline maintenance". Darum warten statt sofort scheitern.
+  failed_when: false
+  until: _oc_ddg_install.rc == 0
+  retries: 50
+  delay: 10
+  when: not (oc_ddg_enabled | bool)
+
+- name: "{{ oc.name }}: DuckDuckGo-Plugin-Install pruefen (Wartezeit auf State-DB-Migration)"
+  ansible.builtin.assert:
+    that: _oc_ddg_install.rc == 0
+    fail_msg: >-
+      Plugin-Install fehlgeschlagen (rc={{ _oc_ddg_install.rc }}):
+      {{ _oc_ddg_install.stderr | default('') | truncate(400) }}
   when: not (oc_ddg_enabled | bool)
 
 - name: "{{ oc.name }}: Web-Suche auf duckduckgo aktivieren (Config + Restart, erst nach Install)"
