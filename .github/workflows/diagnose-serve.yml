@@ -27,6 +27,14 @@ on:
         options:
           - dev
           - prod
+      host_diag:
+        description: 'BONUS (read-only): Host-Zustand fuer rc=137 (Mem/Disk/Docker) miterfassen'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
   push:
     branches: [dev]
 
@@ -167,3 +175,30 @@ jobs:
             echo "--- openclaw mcp probe gdrive (Capabilities/Tools) ---"
             $SSH "sudo docker exec openclaw-$i openclaw mcp probe gdrive" 2>&1 || echo "(mcp probe rc=$?)"
           done
+      # =====================================================================
+      # Host-Zustand rc=137 (read-only, opt-in via host_diag=true)
+      #   Klaert SIGKILL bei npm-Install im Container: Host-OOM vs. Disk voll.
+      # =====================================================================
+      - name: "Host-Zustand rc=137 (read-only)"
+        if: inputs.host_diag == 'true'
+        run: |
+          set -uo pipefail
+          SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i $HOME/.ssh/id_ed25519 $VPS_USER@$VPS_TS_IP"
+          echo "===== UPTIME/LOAD ====="
+          $SSH "uptime; nproc; uname -r" 2>&1 || true
+          echo "===== MEMORY ====="
+          $SSH "free -m; echo; head -5 /proc/meminfo" 2>&1 || true
+          echo "===== OOM-HISTORY ====="
+          $SSH "sudo dmesg -T 2>/dev/null | grep -iE 'out of memory|oom-kill|killed process' | tail -20 || echo dmesg-leer" 2>&1 || true
+          echo "===== DISK ====="
+          $SSH "df -h / /var/lib/docker /srv 2>&1; echo; df -i / /srv 2>&1" 2>&1 || true
+          echo "===== DOCKER SYSTEM DF ====="
+          $SSH "sudo docker system df 2>&1" 2>&1 || true
+          echo "===== CONTAINERS ====="
+          $SSH "sudo docker ps -a --format '{{.Names}} {{.Image}} {{.Status}}'" 2>&1 || true
+          echo "===== IMAGES (top 15) ====="
+          $SSH "sudo docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | head -15" 2>&1 || true
+          echo "===== LOGS openclaw-oc1 (tail 40) ====="
+          $SSH "sudo docker logs --tail 40 openclaw-oc1 2>&1 | tail -40" 2>&1 || true
+          echo "===== NODE/NPM IN CONTAINERN ====="
+          $SSH "for c in oc1 oc2 oc3; do echo --- $c; sudo docker exec openclaw-$c sh -lc 'node -v; npm -v; command -v qmd || echo qmd-missing' 2>&1; done" 2>&1 || true
