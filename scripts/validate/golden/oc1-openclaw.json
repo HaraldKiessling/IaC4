@@ -42,15 +42,21 @@
   },
   "plugins": {
     "entries": {
-      "perplexity": {
-        "enabled": false
+      "duckduckgo": {
+        "enabled": true,
+        "config": {
+          "webSearch": {
+            "region": "de-de",
+            "safeSearch": "moderate"
+          }
+        }
       }
     }
   },
   "tools": {
     "web": {
       "search": {
-        "provider": "none"
+        "provider": "duckduckgo"
       }
     }
   },
