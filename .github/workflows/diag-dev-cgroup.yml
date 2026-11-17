@@ -72,22 +72,24 @@ jobs:
 
       - name: cgroup/OOM-Diagnose (read-only)
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           SSH="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o LogLevel=ERROR $VPS_USER@$VPS_TS_IP"
+          D="sudo -n docker"
           echo "===== HOST MEM (Gegenprobe) ====="
-          $SSH "free -m"
+          $SSH "free -m" || echo "!! free fehlgeschlagen"
           for c in oc1 oc2 oc3; do
             N="openclaw-$c"
             echo "===== $N: STATE/OOMKilled ====="
-            $SSH "docker inspect -f 'OOMKilled={{.State.OOMKilled}} Status={{.State.Status}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}}' $N 2>&1"
+            $SSH "$D inspect -f 'OOMKilled={{.State.OOMKilled}} Status={{.State.Status}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}}' $N 2>&1" || echo "!! inspect fehlgeschlagen"
             echo "===== $N: HostConfig.Memory (Bytes) ====="
-            $SSH "docker inspect -f 'Memory={{.HostConfig.Memory}} MemorySwap={{.HostConfig.MemorySwap}} MemoryReservation={{.HostConfig.MemoryReservation}} NanoCpus={{.HostConfig.NanoCpus}}' $N 2>&1"
+            $SSH "$D inspect -f 'Memory={{.HostConfig.Memory}} MemorySwap={{.HostConfig.MemorySwap}} MemoryReservation={{.HostConfig.MemoryReservation}} NanoCpus={{.HostConfig.NanoCpus}}' $N 2>&1" || echo "!! inspect fehlgeschlagen"
             echo "===== $N: Container-cgroup memory (v2/v1) ====="
-            $SSH "docker exec $N sh -lc 'for f in /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory/memory.limit_in_bytes /sys/fs/cgroup/memory/memory.max_usage_in_bytes; do [ -f \"\$f\" ] && echo \"\$f=\$(cat \$f)\"; done' 2>&1"
+            $SSH "$D exec $N sh -lc 'for f in /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory/memory.limit_in_bytes /sys/fs/cgroup/memory/memory.max_usage_in_bytes; do [ -f \"\$f\" ] && echo \"\$f=\$(cat \$f)\"; done' 2>&1" || echo "!! exec fehlgeschlagen (Container evtl. im Restart-Loop)"
           done
           echo "===== docker stats --no-stream ====="
-          $SSH "docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.CPUPerc}}' 2>&1"
+          $SSH "$D stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.CPUPerc}}' 2>&1" || echo "!! stats fehlgeschlagen"
           echo "===== docker ps -a ====="
-          $SSH "docker ps -a --format '{{.Names}} {{.Image}} {{.Status}}' 2>&1"
+          $SSH "$D ps -a --format '{{.Names}} {{.Image}} {{.Status}}' 2>&1" || echo "!! ps fehlgeschlagen"
           echo "===== LOGS oc1 (tail 60) ====="
-          $SSH "docker logs --tail 60 openclaw-oc1 2>&1 | tail -60"
+          $SSH "$D logs --tail 60 openclaw-oc1 2>&1 | tail -60" || echo "!! logs fehlgeschlagen"
+          echo "===== DIAG ENDE ====="
