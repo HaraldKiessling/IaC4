@@ -415,39 +415,6 @@
       ansible.builtin.fail:
         msg: "Health-Check {{ oc.name }} (Port {{ oc.port }}) fehlgeschlagen - Diagnose (docker ps / docker logs) siehe oben."
 
-# Key-freie Web-Suche (Owner-Entscheid "Weg 2", 2026-11-16): @openclaw/duckduckgo-plugin stellt den
-# Provider "duckduckgo" ohne API-Key bereit (Manifest openclaw.plugin.json: contracts.webSearchProviders
-# = ["duckduckgo"], requiresCredential false, config webSearch.region/safeSearch). Install bewusst ueber
-# die offizielle CLI statt npm -g (QMD-Muster): das Paket importiert "openclaw/plugin-sdk/*" und wird vom
-# Gateway live geladen - eine globale npm-Installation loest diese Peer-Imports im Container nicht auf.
-# Idempotent ueber den inspect-Vorlauf (2. Lauf = 1. Lauf), Version gepinnt (ADR-017). Ablage unter
-# <data_root>/<inst>/config/extensions (Mount ./config) -> ueberlebt Recreate.
-# Nach dem Health-Gate: das Gateway ist dann bereit und uebernimmt die Installation live (kein Restart).
-- name: "{{ oc.name }}: DuckDuckGo-Plugin installieren (key-frei, Version gepinnt)"
-  community.docker.docker_container_exec:
-    container: "openclaw-{{ oc.name }}"
-    user: "node"
-    command: >-
-      /bin/sh -lc "if openclaw plugins inspect duckduckgo >/dev/null 2>&1; then echo skip;
-      else openclaw plugins install npm:@openclaw/duckduckgo-plugin@{{ openclaw_duckduckgo_plugin_version }}
-      --force --accept-capabilities && echo installed; fi"
-  register: _oc_ddg_install
-  changed_when: "'installed' in (_oc_ddg_install.stdout | default(''))"
-  failed_when: _oc_ddg_install.rc != 0
-
-# Fail-closed: ohne geladenen Provider waere tools.web.search.provider=duckduckgo wirkungslos und
-# der Deploy trotzdem gruen. --runtime laedt das Plugin-Modul (wie beim Tresor-Plugin-Gate).
-- name: "{{ oc.name }}: Web-Suche provider=duckduckgo geladen? (fail-closed)"
-  community.docker.docker_container_exec:
-    container: "openclaw-{{ oc.name }}"
-    user: "node"
-    command: openclaw plugins inspect duckduckgo --runtime --json
-  register: _oc_ddg_inspect
-  changed_when: false
-  retries: 6
-  delay: 10
-  until: _oc_ddg_inspect.rc | default(1) == 0
-
 # Exec-Freigaben (ADR-027, Fix 2026-10-11): IaC4 setzt kein Exec-Freigabe-Dokument mehr; die
 # Tresor-Nachfrage macht das Plugin ia4-vault-approval. Instanzen, auf denen das fruehere
 # Allowlist-Dokument liegt (Marker exec-policy-ia4), bekommen das vorherige Verhalten ohne
