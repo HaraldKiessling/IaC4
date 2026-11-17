@@ -121,6 +121,10 @@ jobs:
           $SSH "sudo docker logs --tail 250 ${C} 2>&1 | grep -iE 'maintenance|schema|migrat|error|fatal|ready|listen' | tail -60" || true
 
           echo
+          echo "### Web-Suche-Config"
+          $SSH "sudo docker exec ${C} openclaw config get tools.web.search --json 2>&1" || true
+
+          echo
           echo "### Host-State-Pfad"
           $SSH "sudo find /srv/openclaw/${INSTANCE} -maxdepth 4 \( -iname '*maintenance*' -o -iname '*.lock' -o -iname '*update*' \) -print 2>/dev/null | head -40" || true
 
