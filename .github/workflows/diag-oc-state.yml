@@ -25,6 +25,14 @@ on:
           - oc1
           - oc2
           - oc3
+      seed_legacy_token:
+        description: 'TESTFIXTURE (dev only): legt .gh-token mit DUMMY-Inhalt an, um die Loesch-Task des Deploys zu pruefen'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: read
@@ -56,6 +64,7 @@ jobs:
           TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
             --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
             "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          echo "::add-mask::${TS_TOKEN}"
           echo "TS_TOKEN=${TS_TOKEN}" >> "$GITHUB_ENV"
 
       - name: VPS Tailscale-IP ermitteln
@@ -131,6 +140,57 @@ jobs:
           echo
           echo "### State-Dateien"
           $SSH "sudo ls -la /srv/openclaw/${INSTANCE}/config/state 2>/dev/null || sudo ls -la /srv/openclaw/${INSTANCE}/state 2>/dev/null || true" || true
+
+      - name: "Testfixture .gh-token anlegen (nur seed_legacy_token=true)"
+        if: inputs.seed_legacy_token == 'true'
+        env:
+          INSTANCE: ${{ inputs.instance }}
+        run: |
+          set -euo pipefail
+          SSH="ssh -i $HOME/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR ${VPS_USER}@${VPS_TS_IP}"
+          WS="/srv/openclaw/${INSTANCE}/workspace"
+          if $SSH "sudo test -e ${WS}/.gh-token"; then
+            echo "FIXTURE=already-present"
+          else
+            $SSH "sudo sh -c 'printf %s \"DUMMY-LEGACY-TOKEN-TESTFIXTURE-NOT-A-REAL-TOKEN\" > ${WS}/.gh-token && chmod 600 ${WS}/.gh-token && chown 1000:1000 ${WS}/.gh-token'"
+            echo "FIXTURE=created"
+          fi
+          $SSH "sudo stat -c 'mode=%a owner=%U size=%s' ${WS}/.gh-token" || true
+
+      - name: "Token-Quellen pruefen (read-only: gh-token / gh-read-token / GH_TOKEN)"
+        env:
+          INSTANCE: ${{ inputs.instance }}
+        run: |
+          set -uo pipefail
+          SSH="ssh -i $HOME/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR ${VPS_USER}@${VPS_TS_IP}"
+          C="openclaw-${INSTANCE}"
+          WS="/srv/openclaw/${INSTANCE}/workspace"
+
+          echo "### Workspace"
+          $SSH "sudo ls -ld ${WS}" || true
+
+          echo
+          echo "### Altlast .gh-token (SOLL: ABSENT)"
+          if $SSH "sudo test -e ${WS}/.gh-token"; then
+            echo "RESULT=.gh-token=PRESENT"
+            $SSH "sudo stat -c 'mode=%a owner=%U size=%s mtime=%y' ${WS}/.gh-token" || true
+          else
+            echo "RESULT=.gh-token=ABSENT"
+          fi
+
+          echo
+          echo "### .gh-read-token (SOLL: PRESENT, 0600)"
+          if $SSH "sudo test -e ${WS}/.gh-read-token"; then
+            echo "RESULT=.gh-read-token=PRESENT"
+            $SSH "sudo stat -c 'mode=%a owner=%U size=%s mtime=%y' ${WS}/.gh-read-token" || true
+            $SSH "sudo sh -c 'echo -n prefix=; head -c 12 ${WS}/.gh-read-token; echo; echo -n len=; wc -c < ${WS}/.gh-read-token'" || true
+          else
+            echo "RESULT=.gh-read-token=ABSENT"
+          fi
+
+          echo
+          echo "### GH_TOKEN im Container (nur Praefix/Laenge)"
+          $SSH "sudo docker exec ${C} sh -c 'V=\$(printenv GH_TOKEN); if [ -z \"\$V\" ]; then echo RESULT=GH_TOKEN=UNSET; else echo RESULT=GH_TOKEN=SET; echo -n prefix=; printf %s \"\$V\" | cut -c1-12; echo; echo -n len=; printf %s \"\$V\" | wc -c; fi'" || true
 
       - name: Hinweis
         if: always()
