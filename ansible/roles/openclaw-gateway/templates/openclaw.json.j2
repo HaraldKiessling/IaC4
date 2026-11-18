@@ -61,9 +61,8 @@
 {% endif %}
     }
 {% if oc.agents | length > 0 %},
-    "list": [
-{% for a in oc.agents %}{% set agent_id = a | lower | replace(' ', '-') %}      {
-        "id": "{{ agent_id }}",
+    "entries": {
+{% for a in oc.agents %}{% set agent_id = a | lower | replace(' ', '-') %}      "{{ agent_id }}": {
         "name": "{{ a }}",
         "model": {
           "primary": "{{ am[a].primary }}",
@@ -83,7 +82,7 @@
         }
 {% endif %}
       }{{ "," if not loop.last else "" }}
-{% endfor %}    ]
+{% endfor %}    }
 {% endif %}
   },
   "memory": {
