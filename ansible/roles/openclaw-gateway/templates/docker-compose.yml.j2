@@ -21,6 +21,10 @@ services:
       # K4-3 (PR #83): deaktiviert exec-Startup-Snapshot, der Secret-Variablen ausschliesst
       # (docs/tools/exec.md Z.74: "Set OPENCLAW_EXEC_SHELL_SNAPSHOT=0 ... to disable this snapshot path")
       OPENCLAW_EXEC_SHELL_SNAPSHOT: "0"
+      # Frisch-Install/Upgrade: kein externer Supervisor im Container -> Respawn-Handoff
+      # wuerde den Prozess beenden und Docker restartet mitten in der DB-Maintenance (Livelock).
+      OPENCLAW_NO_RESPAWN: "1"
+      NODE_COMPILE_CACHE: "/var/tmp/openclaw-compile-cache"
       # K3-3 (PR #83): GH-Read-Token ZWEI Wege, bewusst:
       #  1) GH_TOKEN-Env -> gh-CLI im Container nutzt Token nativ (gh liest GH_TOKEN automatisch)
       #  2) .gh-read-token-Datei (instance.yml) -> Agents lesen Token via read (Pilot-Prompt-Pfad,
