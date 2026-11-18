@@ -22,6 +22,7 @@
 | **Nie Secrets committen** – immer GH Secrets + `.env.example` | Alle |
 | **Nie Gateway-Prozess killen** (Vorfall 2026-07-16, 6h Downtime) | Alle |
 | **`main` bleibt immer sauber: Merge auf `main` erst nach bestandenem unabhängigem Agenten-Review, DEV-Vorstellung + expliziter Freigabe** – Ergebnis auf DEV (Deploy-Run-Link, Testnachweis, Test-Kontext) MUSS Harald vorgestellt sein; erst seine ausdrückliche Freigabe danach = Auftrag zum Merge (dann nicht erneut rückfragen). Freigabe vor der DEV-Vorstellung zählt nicht. Gilt auch für andere Repos von Harald (u. a. Home Assistant) | Alle |
+| **Image-Pin/Config-Schema: erst validieren, dann EINE dev-OC aus dem Branch** – `openclaw config schema` + `config validate --json` (isoliertes State-Dir) + Frisch-Install-Test auf einer dev-Instanz (wipe/deploy); nie prod zuerst, kein Pin-Downgrade. Details: `docs/openclaw/image-pin-upgrade.md` (Vorfall 2026-11-18) | Alle |
 | **PROD-Deploy** = nur Harald | Orchestrator |
 | **Pre-Flight Validation vor Push** – yamllint + markdownlint lokal prüfen | Alle |
 | **Nie `sed`/Regex-Editing auf YAML/JSON/Templates** – gezielt editieren + Parser-Validierung (P4b) | Alle |
