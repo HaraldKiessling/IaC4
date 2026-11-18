@@ -424,8 +424,8 @@
       /bin/sh -c "if [ \"$(/usr/local/bin/gh --version 2>/dev/null | head -1 | cut -d' ' -f3)\" = '{{ openclaw_gh_cli_version }}' ]; then echo skip;
       else ARCH=$(uname -m); case \"$ARCH\" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac;
       curl -fsSL \"https://github.com/cli/cli/releases/download/v{{ openclaw_gh_cli_version }}/gh_{{ openclaw_gh_cli_version }}_linux_${ARCH}.tar.gz\" -o /tmp/gh.tgz &&
-      tar -xzf /tmp/gh.tgz -C /tmp && install -m 0755 /tmp/gh_{{ openclaw_gh_cli_version }}_linux-${ARCH}/bin/gh /usr/local/bin/gh &&
-      rm -rf /tmp/gh.tgz /tmp/gh_{{ openclaw_gh_cli_version }}_linux-${ARCH} && echo installed; fi"
+      tar -xzf /tmp/gh.tgz -C /tmp && install -m 0755 /tmp/gh_*/bin/gh /usr/local/bin/gh &&
+      rm -rf /tmp/gh.tgz /tmp/gh_*/ && echo installed; fi"
   register: _oc_gh_install
   changed_when: "'installed' in (_oc_gh_install.stdout | default(''))"
   failed_when: _oc_gh_install.rc != 0
