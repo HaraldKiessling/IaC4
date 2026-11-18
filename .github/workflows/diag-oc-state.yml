@@ -161,6 +161,14 @@ jobs:
           $SSH "CID=\$(sudo docker inspect -f '{{.Id}}' ${C} 2>/dev/null); sudo cat /sys/fs/cgroup/system.slice/docker-\$CID.scope/memory.max 2>/dev/null || sudo cat /sys/fs/cgroup/memory/docker/\$CID/memory.limit_in_bytes 2>/dev/null || echo 'n/a'" || true
 
           echo
+          echo "### Channels"
+          $SSH "sudo docker exec ${C} openclaw channels status 2>&1 | head -40" || true
+
+          echo
+          echo "### Telegram-Logs"
+          $SSH "sudo docker logs --tail 400 ${C} 2>&1 | grep -iE 'telegram|getUpdates|409|conflict|unauthorized|bot' | tail -40" || true
+
+          echo
           echo "### Host-Memory"
           $SSH "free -h; echo; nproc; uptime" || true
 
