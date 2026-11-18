@@ -125,6 +125,18 @@ jobs:
           $SSH "sudo docker exec ${C} openclaw config get tools.web.search --json 2>&1" || true
 
           echo
+          echo "### Host-Memory"
+          $SSH "free -h; echo; nproc; uptime" || true
+
+          echo
+          echo "### Kernel OOM (90 Min)"
+          $SSH "sudo journalctl -k --since '90 min ago' --no-pager 2>/dev/null | grep -iE 'oom|killed process' | tail -30" || true
+
+          echo
+          echo "### OOMKilled/Restarts"
+          $SSH "sudo docker inspect ${C} --format 'status={{.State.Status}} oomkilled={{.State.OOMKilled}} restarts={{.RestartCount}}'" || true
+
+          echo
           echo "### Host-State-Pfad"
           $SSH "sudo find /srv/openclaw/${INSTANCE} -maxdepth 4 \( -iname '*maintenance*' -o -iname '*.lock' -o -iname '*update*' \) -print 2>/dev/null | head -40" || true
 
