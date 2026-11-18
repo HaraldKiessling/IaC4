@@ -385,6 +385,20 @@
 # installiert/verifiziert. Vorher lagen sie dahinter – brach der Health-Check ab, lief der Deploy
 # nie bis zu den Installationen und die Instanz hatte keine Binaries. Jetzt: Start/Recreate ->
 # Install/Verify -> Health. Idempotent (command -v ... || install), 2. Lauf = 1. Lauf.
+# Frisch-Install-Haertung: Unter Memory-Druck kann der Container pausiert werden (Docker 409).
+# Vor den Install-Schritten einmal reaktivieren; Fehler sind hier bewusst harmlos.
+- name: "{{ oc.name }}: Container reaktivieren (unpause, falls pausiert)"
+  ansible.builtin.command:
+    cmd: "docker unpause openclaw-{{ oc.name }}"
+  failed_when: false
+  changed_when: false
+
+- name: "{{ oc.name }}: Container starten (falls gestoppt)"
+  ansible.builtin.command:
+    cmd: "docker start openclaw-{{ oc.name }}"
+  failed_when: false
+  changed_when: false
+
 - name: "{{ oc.name }}: QMD im Container installieren (User-npm, Version gepinnt K3-2)"
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
@@ -404,7 +418,10 @@
     command: /bin/sh -lc "/home/node/.openclaw/tools/bin/qmd --version | grep -q '{{ openclaw_qmd_version }}'"
   register: _oc_qmd_ver
   changed_when: false
-  failed_when: _oc_qmd_ver.rc != 0
+  failed_when: false
+  until: (_oc_qmd_ver.rc | default(1)) == 0
+  retries: 3
+  delay: 15
 
 # Bitwarden CLI (ADR-027): als root in einen eigenen Prefix ausserhalb des PATH installiert
 # (Aufrufe fragt das Plugin ia4-vault-approval ab); der Agent (node) kann sie nicht aendern. Liegt in der
@@ -432,7 +449,10 @@
     command: /bin/sh -c "{{ openclaw_bitwarden_prefix }}/bin/bw --version | grep -qx '{{ openclaw_bitwarden_cli_version }}'"
   register: _oc_bw_ver
   changed_when: false
-  failed_when: _oc_bw_ver.rc != 0
+  failed_when: false
+  until: (_oc_bw_ver.rc | default(1)) == 0
+  retries: 3
+  delay: 15
   when: oc_bitwarden_active | bool
 
 - name: "{{ oc.name }}: Google-Drive-MCP im Container installieren (User-npm, Version gepinnt Issue #171)"
@@ -455,7 +475,10 @@
     command: /bin/sh -lc "/home/node/.openclaw/tools/bin/google-drive-mcp --version | grep -q '{{ openclaw_gdrive_mcp_version }}'"
   register: _oc_gdrive_ver
   changed_when: false
-  failed_when: _oc_gdrive_ver.rc != 0
+  failed_when: false
+  until: (_oc_gdrive_ver.rc | default(1)) == 0
+  retries: 3
+  delay: 20
 
 # GitHub CLI (gh): ermoeglicht Agents das Arbeiten mit GH-Workflows (gh workflow run/list, gh run view).
 # Token kommt aus GH_TOKEN (Compose-Env); gh liest es automatisch. Pin (ADR-017), idempotent per Version.
@@ -484,7 +507,10 @@
     command: /bin/sh -c "/home/node/.openclaw/tools/bin/gh --version | head -1 | grep -q '{{ openclaw_gh_cli_version }}'"
   register: _oc_gh_ver
   changed_when: false
-  failed_when: _oc_gh_ver.rc != 0
+  failed_when: false
+  until: (_oc_gh_ver.rc | default(1)) == 0
+  retries: 3
+  delay: 10
   when: oc_gh_token | default('') | length > 0
 
 # Key-freie Web-Suche (Owner-Entscheid "Weg 2", 2026-11-16): Install + Aktivierung sind nach VORNE
