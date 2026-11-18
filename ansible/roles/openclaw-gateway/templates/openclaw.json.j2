@@ -20,7 +20,8 @@
 {% set _gdrive_ready = (openclaw_gdrive_client_id | default('', true) | length > 0)
                        and (openclaw_gdrive_client_secret | default('', true) | length > 0)
                        and (openclaw_gdrive_refresh_token | default('', true) | length > 0)
-                       and (openclaw_gdrive_access_token | default('', true) | length > 0) %}
+                       and (openclaw_gdrive_access_token | default('', true) | length > 0)
+                       and (oc_gdrive_bin_present | default(true) | bool) %}
 {
   "gateway": {
     "mode": "local",
