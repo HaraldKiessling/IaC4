@@ -109,7 +109,7 @@ jobs:
           $SSH "sudo docker rm -f openclaw-${INSTANCE} 2>/dev/null || true"
           if [ "${{ inputs.validate }}" = "true" ]; then
             echo "### Config validate (isolierter State)"
-            $SSH "cd /srv/openclaw/${INSTANCE} && sudo timeout ${SECONDS_RUN} docker compose run --rm -e OPENCLAW_STATE_DIR=/tmp/ocv openclaw openclaw config validate --json 2>&1 | tail -80" || true
+            $SSH "cd /srv/openclaw/${INSTANCE} && sudo timeout ${SECONDS_RUN} docker compose run --rm -e OPENCLAW_STATE_DIR=/tmp/ocv -e OPENCLAW_CONFIG_PATH=/home/node/.openclaw/openclaw.json openclaw openclaw config validate --json 2>&1 | tail -80" || true
           else
             echo "### Foreground (${SECONDS_RUN}s)"
             $SSH "cd /srv/openclaw/${INSTANCE} && sudo timeout ${SECONDS_RUN} docker compose run --rm --service-ports openclaw 2>&1 | tail -250" || true
