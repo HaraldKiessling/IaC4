@@ -304,15 +304,48 @@
   ansible.builtin.set_fact:
     oc_ddg_enabled: "{{ (_oc_ddg_dir.matched | default(0)) > 0 }}"
 
-- name: "{{ oc.name }}: openclaw.json deployen (SSoT)"
-
+- name: "{{ oc.name }}: openclaw.json rendern (Temp)"
   ansible.builtin.template:
     src: openclaw.json.j2
+    dest: "/tmp/oc-{{ oc.name }}-openclaw.json"
+    mode: '0600'
+  changed_when: false
+  register: _oc_cfg_render
+
+- name: "{{ oc.name }}: Render-Checksumme ermitteln"
+  ansible.builtin.stat:
+    path: "/tmp/oc-{{ oc.name }}-openclaw.json"
+    checksum_algorithm: sha256
+  register: _oc_cfg_stat
+
+- name: "{{ oc.name }}: zuletzt gewuenschte Config-Checksumme lesen"
+  ansible.builtin.slurp:
+    src: "{{ openclaw_data_root }}/{{ oc.name }}/config/.openclaw.json.desired.sha256"
+  register: _oc_cfg_marker
+  failed_when: false
+
+# Idempotenz: Der Gateway normalisiert openclaw.json beim Start. Deshalb wird nur
+# geschrieben, wenn sich der GEWUENSCHTE Render aendert (Marker-Checksumme), nicht
+# wenn die Live-Datei abweicht. Verhindert Restart + DB-Startphase bei jedem Deploy.
+- name: "{{ oc.name }}: openclaw.json uebernehmen (nur bei gewollter Aenderung)"
+  ansible.builtin.copy:
+    src: "/tmp/oc-{{ oc.name }}-openclaw.json"
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/config/openclaw.json"
+    remote_src: true
     mode: '0600'
     owner: '1000'
     group: '1000'
   register: _oc_cfg
+  when: ((_oc_cfg_marker.content | default('')) | b64decode | trim) != _oc_cfg_stat.stat.checksum
+
+- name: "{{ oc.name }}: gewuenschte Config-Checksumme merken"
+  ansible.builtin.copy:
+    content: "{{ _oc_cfg_stat.stat.checksum }}"
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/config/.openclaw.json.desired.sha256"
+    mode: '0600'
+    owner: '1000'
+    group: '1000'
+  when: _oc_cfg.changed | default(false)
 
 - name: "{{ oc.name }}: docker-compose.yml deployen (gepinnt, ADR-017)"
   ansible.builtin.template:
@@ -356,7 +389,7 @@
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
-    command: /bin/sh -lc "if [ -x $HOME/.local/bin/qmd ] || command -v qmd >/dev/null 2>&1; then echo skip; else (mkdir -p ~/.local/bin ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g @tobilu/qmd@{{ openclaw_qmd_version }} && ln -sf ~/.npm-global/bin/qmd ~/.local/bin/qmd) && echo installed; fi"
+    command: /bin/sh -lc "if [ -x /home/node/.openclaw/tools/bin/qmd ]; then echo skip; else (mkdir -p /home/node/.openclaw/tools && npm config set prefix /home/node/.openclaw/tools && npm install -g @tobilu/qmd@{{ openclaw_qmd_version }}) && echo installed; fi"
   register: _oc_qmd
   changed_when: "'installed' in (_oc_qmd.stdout | default(''))"
   failed_when: _oc_qmd.rc != 0
@@ -365,7 +398,7 @@
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
-    command: /bin/sh -lc "export PATH=$HOME/.local/bin:$PATH; qmd --version | grep -q '{{ openclaw_qmd_version }}'"
+    command: /bin/sh -lc "/home/node/.openclaw/tools/bin/qmd --version | grep -q '{{ openclaw_qmd_version }}'"
   register: _oc_qmd_ver
   changed_when: false
   failed_when: _oc_qmd_ver.rc != 0
@@ -400,7 +433,7 @@
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
-    command: /bin/sh -lc "if [ -x $HOME/.local/bin/google-drive-mcp ] || command -v google-drive-mcp >/dev/null 2>&1; then echo skip; else (mkdir -p ~/.local/bin ~/.npm-global && npm config set prefix ~/.npm-global && npm install -g @piotr-agier/google-drive-mcp@{{ openclaw_gdrive_mcp_version }} && ln -sf ~/.npm-global/bin/google-drive-mcp ~/.local/bin/google-drive-mcp) && echo installed; fi"
+    command: /bin/sh -lc "if [ -x /home/node/.openclaw/tools/bin/google-drive-mcp ]; then echo skip; else (mkdir -p /home/node/.openclaw/tools && npm config set prefix /home/node/.openclaw/tools && npm install -g @piotr-agier/google-drive-mcp@{{ openclaw_gdrive_mcp_version }}) && echo installed; fi"
   register: _oc_gdrive_install
   changed_when: "'installed' in (_oc_gdrive_install.stdout | default(''))"
   failed_when: _oc_gdrive_install.rc != 0
@@ -409,7 +442,7 @@
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
-    command: /bin/sh -lc "export PATH=$HOME/.local/bin:$PATH; google-drive-mcp --version | grep -q '{{ openclaw_gdrive_mcp_version }}'"
+    command: /bin/sh -lc "/home/node/.openclaw/tools/bin/google-drive-mcp --version | grep -q '{{ openclaw_gdrive_mcp_version }}'"
   register: _oc_gdrive_ver
   changed_when: false
   failed_when: _oc_gdrive_ver.rc != 0
@@ -421,10 +454,10 @@
     container: "openclaw-{{ oc.name }}"
     user: "root"
     command: >-
-      /bin/sh -c "if [ \"$(/usr/local/bin/gh --version 2>/dev/null | head -1 | cut -d' ' -f3)\" = '{{ openclaw_gh_cli_version }}' ]; then echo skip;
+      /bin/sh -c "if [ \"$(/home/node/.openclaw/tools/bin/gh --version 2>/dev/null | head -1 | cut -d' ' -f3)\" = '{{ openclaw_gh_cli_version }}' ]; then echo skip;
       else ARCH=$(uname -m); case \"$ARCH\" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac;
       curl -fsSL \"https://github.com/cli/cli/releases/download/v{{ openclaw_gh_cli_version }}/gh_{{ openclaw_gh_cli_version }}_linux_${ARCH}.tar.gz\" -o /tmp/gh.tgz &&
-      tar -xzf /tmp/gh.tgz -C /tmp && install -m 0755 /tmp/gh_*/bin/gh /usr/local/bin/gh &&
+      tar -xzf /tmp/gh.tgz -C /tmp && mkdir -p /home/node/.openclaw/tools/bin && install -m 0755 /tmp/gh_*/bin/gh /home/node/.openclaw/tools/bin/gh &&
       rm -rf /tmp/gh.tgz /tmp/gh_*/ && echo installed; fi"
   register: _oc_gh_install
   changed_when: "'installed' in (_oc_gh_install.stdout | default(''))"
@@ -435,7 +468,7 @@
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "root"
-    command: /bin/sh -c "/usr/local/bin/gh --version | head -1 | grep -q '{{ openclaw_gh_cli_version }}'"
+    command: /bin/sh -c "/home/node/.openclaw/tools/bin/gh --version | head -1 | grep -q '{{ openclaw_gh_cli_version }}'"
   register: _oc_gh_ver
   changed_when: false
   failed_when: _oc_gh_ver.rc != 0
@@ -476,8 +509,9 @@
   when: not (oc_ddg_enabled | bool)
 
 - name: "{{ oc.name }}: Web-Suche auf duckduckgo aktivieren (Config + Restart, erst nach Install)"
-  # Bewusst ohne when: Der Block muss AUCH laufen, wenn oc_ddg_enabled erst durch
-  # den Install-Task true geworden ist. Re-Render ist idempotent (kein Restart ohne Change).
+  # Nur nach einem echten Erst-Install: dann fehlt der Config-Eintrag noch. Ist das Plugin
+  # schon da, ist der SSoT-Render oben bereits korrekt und es gibt keinen Restart.
+  when: _oc_ddg_install.changed | default(false)
   block:
     - name: "{{ oc.name }}: oc_ddg_enabled setzen (Plugin ist jetzt installiert)"
       ansible.builtin.set_fact:
