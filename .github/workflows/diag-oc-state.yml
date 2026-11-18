@@ -153,6 +153,14 @@ jobs:
           $SSH "sudo journalctl -u hosted-compute-agent --since '60 min ago' --no-pager 2>/dev/null | tail -30" || true
 
           echo
+          echo "### Docker-Stats (Mem-Limit)"
+          $SSH "sudo docker stats --no-stream ${C} 2>/dev/null" || true
+
+          echo
+          echo "### cgroup memory.max (Container)"
+          $SSH "CID=\$(sudo docker inspect -f '{{.Id}}' ${C} 2>/dev/null); sudo cat /sys/fs/cgroup/system.slice/docker-\$CID.scope/memory.max 2>/dev/null || sudo cat /sys/fs/cgroup/memory/docker/\$CID/memory.limit_in_bytes 2>/dev/null || echo 'n/a'" || true
+
+          echo
           echo "### Host-Memory"
           $SSH "free -h; echo; nproc; uptime" || true
 
