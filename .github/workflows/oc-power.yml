@@ -1,0 +1,105 @@
+---
+# Start/Stop einer OpenClaw-Instanz auf einem VPS (nicht destruktiv).
+# Fuer Memory-Entlastung und kontrollierte Tests. Stop ist reversibel.
+name: "OC Power – start/stop einer Instanz"
+run-name: "${{ inputs.action }} ${{ inputs.target }}/${{ inputs.instance }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Ziel-VPS'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, prod]
+      instance:
+        description: 'Instanz (z. B. oc4)'
+        required: true
+        type: string
+      action:
+        description: 'Aktion'
+        required: true
+        default: 'stop'
+        type: choice
+        options: [stop, start]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oc-power-${{ inputs.target }}-${{ inputs.instance }}
+  cancel-in-progress: false
+
+jobs:
+  power:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+    steps:
+      - name: Eingaben validieren
+        run: |
+          case "${{ inputs.instance }}" in
+            oc[1-9]|oc[1-9][0-9]) ;;
+            *) echo "❌ ungueltige Instanz"; exit 2 ;;
+          esac
+
+      - name: Connect Runner to Tailnet
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: Tailscale OAuth-Token holen
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+        run: |
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          echo "TS_TOKEN=${TS_TOKEN}" >> "$GITHUB_ENV"
+
+      - name: VPS Tailscale-IP ermitteln
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          NODE="vps-${{ inputs.target }}"
+          API_RESP=$(curl -sS -w "\nHTTP_CODE:%{http_code}" \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            -H "Authorization: Bearer ${TS_TOKEN}")
+          HTTP_CODE=$(printf '%s' "$API_RESP" | tail -1 | cut -d: -f2)
+          API_BODY=$(printf '%s' "$API_RESP" | sed '$d')
+          [ "$HTTP_CODE" = "200" ] || { echo "❌ Tailscale-API HTTP $HTTP_CODE"; exit 1; }
+          TS_IP=$(printf '%s' "$API_BODY" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+          [ -n "$TS_IP" ] && [ "$TS_IP" != "null" ] || { echo "❌ keine IP fuer $NODE"; exit 1; }
+          echo "VPS_TS_IP=${TS_IP}" >> "$GITHUB_ENV"
+
+      - name: SSH-Key vorbereiten
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_TS_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Aktion ausfuehren
+        env:
+          INSTANCE: ${{ inputs.instance }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          SSH="ssh -i $HOME/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR ${VPS_USER}@${VPS_TS_IP}"
+          C="openclaw-${INSTANCE}"
+          echo "### vorher"
+          $SSH "sudo docker ps -a --filter name=^${C}\$ --format 'table {{.Names}}\t{{.Status}}'" || true
+          if [ "$ACTION" = "stop" ]; then
+            $SSH "sudo docker stop ${C}" || true
+          else
+            $SSH "sudo docker start ${C}" || true
+          fi
+          echo "### nachher"
+          $SSH "sudo docker ps -a --filter name=^${C}\$ --format 'table {{.Names}}\t{{.Status}}'" || true
+          echo "### Memory"
+          $SSH "free -h" || true
