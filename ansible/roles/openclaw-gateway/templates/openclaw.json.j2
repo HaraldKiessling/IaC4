@@ -20,7 +20,8 @@
 {% set _gdrive_ready = (openclaw_gdrive_client_id | default('', true) | length > 0)
                        and (openclaw_gdrive_client_secret | default('', true) | length > 0)
                        and (openclaw_gdrive_refresh_token | default('', true) | length > 0)
-                       and (openclaw_gdrive_access_token | default('', true) | length > 0) %}
+                       and (openclaw_gdrive_access_token | default('', true) | length > 0)
+                       and (oc_gdrive_bin_present | default(true) | bool) %}
 {
   "gateway": {
     "mode": "local",
@@ -49,10 +50,7 @@
         "primary": "{{ am['Orchestrator'].primary }}",
         "fallbacks": {{ am['Orchestrator'].fallbacks | tojson }}
       }
-{% endif %},
-      "memorySearch": {
-        "provider": "local"
-      }
+{% endif %}
 {% if skip_bootstrap | default(false) | bool %},
       "skipBootstrap": true
 {% endif %}
@@ -61,9 +59,9 @@
 {% endif %}
     }
 {% if oc.agents | length > 0 %},
-    "list": [
-{% for a in oc.agents %}{% set agent_id = a | lower | replace(' ', '-') %}      {
-        "id": "{{ agent_id }}",
+    "ownership": "explicit",
+    "entries": {
+{% for a in oc.agents %}{% set agent_id = a | lower | replace(' ', '-') %}      "{{ agent_id }}": {
         "name": "{{ a }}",
         "model": {
           "primary": "{{ am[a].primary }}",
@@ -83,11 +81,13 @@
         }
 {% endif %}
       }{{ "," if not loop.last else "" }}
-{% endfor %}    ]
+{% endfor %}    }
 {% endif %}
   },
   "memory": {
-    "backend": "qmd"
+    "search": {
+      "provider": "local"
+    }
   },
   "plugins": {
     "entries": {
