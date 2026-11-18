@@ -1,0 +1,107 @@
+---
+# Seeded generische Tool-/Plugin-Verzeichnisse (npm, tools) von einer Quell-Instanz
+# in eine Ziel-Instanz auf demselben VPS. Umgeht npm-Installs bei Frisch-Deploys.
+# Nur fuer Reparatur/Tests; Ziel-Container wird gestoppt.
+name: "Seed – Tools/Plugins zwischen OC-Instanzen kopieren"
+run-name: "seed ${{ inputs.target }} oc${{ inputs.src }} -> oc${{ inputs.dst }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Ziel-VPS'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, prod]
+      src:
+        description: 'Quell-Instanz (Nummer)'
+        required: true
+        default: '1'
+        type: string
+      dst:
+        description: 'Ziel-Instanz (Nummer)'
+        required: true
+        default: '2'
+        type: string
+      confirm:
+        description: 'Owner-Freigabe (EXAKT: SEED-TOOLS)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seed-tools-${{ inputs.target }}-${{ inputs.dst }}
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+    steps:
+      - name: Owner-Gate
+        run: |
+          if [ "${{ inputs.confirm }}" != "SEED-TOOLS" ]; then
+            echo "❌ confirm muss EXAKT 'SEED-TOOLS' sein"; exit 1
+          fi
+          for v in "${{ inputs.src }}" "${{ inputs.dst }}"; do
+            case "$v" in ''|*[!0-9]*) echo "❌ ungueltige Nummer: $v"; exit 2;; esac
+          done
+
+      - name: Connect Runner to Tailnet
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: Tailscale OAuth-Token holen
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+        run: |
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" \
+            --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+            "https://api.tailscale.com/api/v2/oauth/token" | jq -r '.access_token')
+          echo "TS_TOKEN=${TS_TOKEN}" >> "$GITHUB_ENV"
+
+      - name: VPS Tailscale-IP ermitteln
+        env:
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          NODE="vps-${{ inputs.target }}"
+          API_RESP=$(curl -sS -w "\nHTTP_CODE:%{http_code}" \
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+            -H "Authorization: Bearer ${TS_TOKEN}")
+          HTTP_CODE=$(printf '%s' "$API_RESP" | tail -1 | cut -d: -f2)
+          API_BODY=$(printf '%s' "$API_RESP" | sed '$d')
+          [ "$HTTP_CODE" = "200" ] || { echo "❌ Tailscale-API HTTP $HTTP_CODE"; exit 1; }
+          TS_IP=$(printf '%s' "$API_BODY" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' | head -1)
+          [ -n "$TS_IP" ] && [ "$TS_IP" != "null" ] || { echo "❌ keine IP fuer $NODE"; exit 1; }
+          echo "VPS_TS_IP=${TS_IP}" >> "$GITHUB_ENV"
+
+      - name: SSH-Key vorbereiten
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_TS_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Seed
+        env:
+          SRC: oc${{ inputs.src }}
+          DST: oc${{ inputs.dst }}
+        run: |
+          SSH="ssh -i $HOME/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR ${VPS_USER}@${VPS_TS_IP}"
+          $SSH "sudo docker stop openclaw-${DST} 2>/dev/null || true"
+          for d in npm tools; do
+            echo "### ${d}"
+            $SSH "sudo test -d /srv/openclaw/${SRC}/config/${d} && (sudo rm -rf /srv/openclaw/${DST}/config/${d} && sudo cp -a /srv/openclaw/${SRC}/config/${d} /srv/openclaw/${DST}/config/ && sudo chown -R 1000:1000 /srv/openclaw/${DST}/config/${d} && sudo du -sh /srv/openclaw/${DST}/config/${d}) || echo 'quelle fehlt: ${d}'"
+          done
+          echo "### Ziel"
+          $SSH "sudo ls -la /srv/openclaw/${DST}/config | head -20"
