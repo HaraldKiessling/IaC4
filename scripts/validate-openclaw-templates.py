@@ -241,7 +241,9 @@ try:
     oc1 = next(oc for oc in dev['openclaw_instances'] if oc['name'] == 'oc1')
     current = json.dumps(render(oc1, dev), indent=2, ensure_ascii=False) + '\n'
     if current != golden:
-        failures.append("Golden-File-Renderdiff: OC1-Render weicht byte-genau ab (Template-Regression)")
+        import difflib
+        diff = list(difflib.unified_diff(golden.splitlines(), current.splitlines(), 'golden', 'current', lineterm=''))[:40]
+        failures.append("Golden-File-Renderdiff: OC1-Render weicht byte-genau ab (Template-Regression)\n" + "\n".join(diff))
 except FileNotFoundError:
     failures.append(f"Golden-File fehlt: {GOLDEN}")
 
