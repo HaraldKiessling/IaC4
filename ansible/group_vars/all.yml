@@ -70,7 +70,8 @@ openclaw_duckduckgo_plugin_version: "2026.11.4"   # Pin (ADR-017): @openclaw/duc
 # Schema belegt aus npm-Paket @piotr-agier/google-drive-mcp 2.12.0 (docs/authentication.md,
 # docs/configuration.md, dist/index.js): v2-Token-Store {version:2,accounts:{...}} plus
 # OAuth-Client-Credentials in gcp-oauth.keys.json (die Token-Datei enthaelt KEINE client_id/secret).
-openclaw_gdrive_mcp_version: "2.12.0"      # Pin (ADR-017); Update = Variable + Deploy
+openclaw_gdrive_mcp_version: "2.12.0"
+openclaw_gh_cli_version: "2.105.0"            # Pin (ADR-017): GitHub CLI (gh) im Container, 2026-11-18      # Pin (ADR-017); Update = Variable + Deploy
 openclaw_gdrive_client_id: "{{ lookup('env', 'GDRIVE_CLIENT_ID') | default('', true) }}"
 openclaw_gdrive_client_secret: "{{ lookup('env', 'GDRIVE_CLIENT_SECRET') | default('', true) }}"
 openclaw_gdrive_refresh_token: "{{ lookup('env', 'GDRIVE_REFRESH_TOKEN') | default('', true) }}"

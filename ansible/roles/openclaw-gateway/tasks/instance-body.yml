@@ -414,6 +414,33 @@
   changed_when: false
   failed_when: _oc_gdrive_ver.rc != 0
 
+# GitHub CLI (gh): ermoeglicht Agents das Arbeiten mit GH-Workflows (gh workflow run/list, gh run view).
+# Token kommt aus GH_TOKEN (Compose-Env); gh liest es automatisch. Pin (ADR-017), idempotent per Version.
+- name: "{{ oc.name }}: GitHub CLI (gh) im Container installieren (root, Version gepinnt)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "root"
+    command: >-
+      /bin/sh -c "if [ \"$(/usr/local/bin/gh --version 2>/dev/null | head -1 | cut -d' ' -f3)\" = '{{ openclaw_gh_cli_version }}' ]; then echo skip;
+      else ARCH=$(uname -m); case \"$ARCH\" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac;
+      curl -fsSL \"https://github.com/cli/cli/releases/download/v{{ openclaw_gh_cli_version }}/gh_{{ openclaw_gh_cli_version }}_linux_${ARCH}.tar.gz\" -o /tmp/gh.tgz &&
+      tar -xzf /tmp/gh.tgz -C /tmp && install -m 0755 /tmp/gh_*/bin/gh /usr/local/bin/gh &&
+      rm -rf /tmp/gh.tgz /tmp/gh_*/ && echo installed; fi"
+  register: _oc_gh_install
+  changed_when: "'installed' in (_oc_gh_install.stdout | default(''))"
+  failed_when: _oc_gh_install.rc != 0
+  when: oc_gh_token | default('') | length > 0
+
+- name: "{{ oc.name }}: GitHub CLI (gh) verifizieren (erwartet {{ openclaw_gh_cli_version }})"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "root"
+    command: /bin/sh -c "/usr/local/bin/gh --version | head -1 | grep -q '{{ openclaw_gh_cli_version }}'"
+  register: _oc_gh_ver
+  changed_when: false
+  failed_when: _oc_gh_ver.rc != 0
+  when: oc_gh_token | default('') | length > 0
+
 # Key-freie Web-Suche (Owner-Entscheid "Weg 2", 2026-11-16): Install + Aktivierung sind nach VORNE
 # gezogen (vor das Health-Gate) und laufen in ZWEI Phasen: (1) Plugin per offizieller CLI installieren
 # (QMD-Muster; das Paket importiert "openclaw/plugin-sdk/*", npm -g loest das nicht auf), (2) erst
