@@ -520,6 +520,18 @@
 # Gateway nie mit einem Eintrag fuer ein noch fehlendes Plugin (Start-Crash/Restart-Loop).
 # Idempotent: 2. Lauf findet das Plugin im config-Mount -> oc_ddg_enabled=true beim ersten Render,
 # kein zweiter Restart. Version gepinnt (ADR-017).
+- name: "{{ oc.name }}: Container reaktivieren vor Plugin-Install (unpause)"
+  ansible.builtin.command:
+    cmd: "docker unpause openclaw-{{ oc.name }}"
+  failed_when: false
+  changed_when: false
+
+- name: "{{ oc.name }}: Container starten vor Plugin-Install (falls gestoppt)"
+  ansible.builtin.command:
+    cmd: "docker start openclaw-{{ oc.name }}"
+  failed_when: false
+  changed_when: false
+
 - name: "{{ oc.name }}: DuckDuckGo-Plugin installieren (key-frei, Version gepinnt)"
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
@@ -534,7 +546,7 @@
   # State-DB (Schema 19 -> 22). Waehrend dieser Migration antwortet die CLI mit
   # "state ... is undergoing offline maintenance". Darum warten statt sofort scheitern.
   failed_when: false
-  until: _oc_ddg_install.rc == 0
+  until: (_oc_ddg_install.rc | default(1)) == 0
   retries: 50
   delay: 10
   when: not (oc_ddg_enabled | bool)
