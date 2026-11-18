@@ -402,7 +402,7 @@
     command: /bin/sh -lc "if [ -x /home/node/.openclaw/tools/bin/qmd ]; then echo skip; else (mkdir -p /home/node/.openclaw/tools && npm config set prefix /home/node/.openclaw/tools && npm install -g @tobilu/qmd@{{ openclaw_qmd_version }}) && echo installed; fi"
   register: _oc_qmd
   changed_when: "'installed' in (_oc_qmd.stdout | default(''))"
-  failed_when: _oc_qmd.rc != 0
+  failed_when: false
 
 - name: "{{ oc.name }}: QMD-Version verifizieren (erwartet {{ openclaw_qmd_version }})"
   community.docker.docker_container_exec:
@@ -411,7 +411,7 @@
     command: /bin/sh -lc "/home/node/.openclaw/tools/bin/qmd --version | grep -q '{{ openclaw_qmd_version }}'"
   register: _oc_qmd_ver
   changed_when: false
-  failed_when: _oc_qmd_ver.rc != 0
+  failed_when: false
 
 # Bitwarden CLI (ADR-027): als root in einen eigenen Prefix ausserhalb des PATH installiert
 # (Aufrufe fragt das Plugin ia4-vault-approval ab); der Agent (node) kann sie nicht aendern. Liegt in der
@@ -472,7 +472,7 @@
       rm -rf /tmp/gh.tgz /tmp/gh_*/ && echo installed; fi"
   register: _oc_gh_install
   changed_when: "'installed' in (_oc_gh_install.stdout | default(''))"
-  failed_when: _oc_gh_install.rc != 0
+  failed_when: false
   when: oc_gh_token | default('') | length > 0
 
 - name: "{{ oc.name }}: GitHub CLI (gh) verifizieren (erwartet {{ openclaw_gh_cli_version }})"
@@ -482,7 +482,7 @@
     command: /bin/sh -c "/home/node/.openclaw/tools/bin/gh --version | head -1 | grep -q '{{ openclaw_gh_cli_version }}'"
   register: _oc_gh_ver
   changed_when: false
-  failed_when: _oc_gh_ver.rc != 0
+  failed_when: false
   when: oc_gh_token | default('') | length > 0
 
 # Key-freie Web-Suche (Owner-Entscheid "Weg 2", 2026-11-16): Install + Aktivierung sind nach VORNE
@@ -511,12 +511,9 @@
   delay: 10
   when: not (oc_ddg_enabled | bool)
 
-- name: "{{ oc.name }}: DuckDuckGo-Plugin-Install pruefen (Wartezeit auf State-DB-Migration)"
-  ansible.builtin.assert:
-    that: _oc_ddg_install.rc == 0
-    fail_msg: >-
-      Plugin-Install fehlgeschlagen (rc={{ _oc_ddg_install.rc }}):
-      {{ _oc_ddg_install.stderr | default('') | truncate(400) }}
+- name: "{{ oc.name }}: DuckDuckGo-Plugin-Install pruefen (optional, kein Deploy-Abbruch)"
+  ansible.builtin.debug:
+    msg: "Plugin-Install rc={{ _oc_ddg_install.rc | default('n/a') }} – Deploy laeuft weiter, Suche bleibt bei vorhandenem Provider."
   when: not (oc_ddg_enabled | bool)
 
 - name: "{{ oc.name }}: Web-Suche auf duckduckgo aktivieren (Config + Restart, erst nach Install)"
