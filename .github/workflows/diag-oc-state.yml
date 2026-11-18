@@ -133,6 +133,10 @@ jobs:
           $SSH "sudo docker logs --tail 40 ${C} 2>&1" || true
 
           echo
+          echo "### Config-Validitaet"
+          $SSH "sudo ls -la /srv/openclaw/${INSTANCE}/config/openclaw.json 2>/dev/null; sudo python3 -c \"import json;json.load(open('/srv/openclaw/${INSTANCE}/config/openclaw.json'));print('JSON_OK')\" 2>&1 | tail -3" || true
+
+          echo
           echo "### Host-Memory"
           $SSH "free -h; echo; nproc; uptime" || true
 
