@@ -103,5 +103,8 @@ jobs:
             echo "### ${d}"
             $SSH "sudo test -d /srv/openclaw/${SRC}/config/${d} && (sudo rm -rf /srv/openclaw/${DST}/config/${d} && sudo cp -a /srv/openclaw/${SRC}/config/${d} /srv/openclaw/${DST}/config/ && sudo chown -R 1000:1000 /srv/openclaw/${DST}/config/${d} && sudo du -sh /srv/openclaw/${DST}/config/${d}) || echo 'quelle fehlt: ${d}'"
           done
+          echo "### npm-global aus Quell-Container"
+          $SSH "sudo mkdir -p /srv/openclaw/${DST}/config/tools && sudo docker cp openclaw-${SRC}:/home/node/.npm-global/. /srv/openclaw/${DST}/config/tools/ 2>/dev/null && sudo chown -R 1000:1000 /srv/openclaw/${DST}/config/tools && sudo ls -la /srv/openclaw/${DST}/config/tools/bin | head -10" || echo "npm-global-Copy fehlgeschlagen"
+
           echo "### Ziel"
           $SSH "sudo ls -la /srv/openclaw/${DST}/config | head -20"
