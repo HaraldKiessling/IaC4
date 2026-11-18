@@ -84,6 +84,17 @@
 {% endfor %}    }
 {% endif %}
   },
+{% if 'Orchestrator' in oc.agents %}
+  "bindings": [
+    {
+      "agentId": "orchestrator",
+      "match": {
+        "channel": "telegram",
+        "accountId": "default"
+      }
+    }
+  ],
+{% endif %}
   "memory": {
     "search": {
       "provider": "local"
