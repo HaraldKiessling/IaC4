@@ -389,10 +389,13 @@
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
-    command: /bin/sh -lc "if [ -x /home/node/.openclaw/tools/bin/qmd ]; then echo skip; else (mkdir -p /home/node/.openclaw/tools && npm config set prefix /home/node/.openclaw/tools && npm install -g @tobilu/qmd@{{ openclaw_qmd_version }}) && echo installed; fi"
+    command: /bin/sh -lc "if [ -x /home/node/.openclaw/tools/bin/qmd ]; then echo skip; else (mkdir -p /home/node/.openclaw/tools && npm config set prefix /home/node/.openclaw/tools && npm install -g --no-audit --no-fund @tobilu/qmd@{{ openclaw_qmd_version }}) && echo installed; fi"
   register: _oc_qmd
   changed_when: "'installed' in (_oc_qmd.stdout | default(''))"
-  failed_when: _oc_qmd.rc != 0
+  failed_when: false
+  until: _oc_qmd.rc == 0
+  retries: 3
+  delay: 15
 
 - name: "{{ oc.name }}: QMD-Version verifizieren (erwartet {{ openclaw_qmd_version }})"
   community.docker.docker_container_exec:
@@ -416,7 +419,10 @@
       || (npm install -g --prefix {{ openclaw_bitwarden_prefix }} @bitwarden/cli@{{ openclaw_bitwarden_cli_version }} >/dev/null && echo installed)"
   register: _oc_bw_install
   changed_when: "'installed' in (_oc_bw_install.stdout | default(''))"
-  failed_when: _oc_bw_install.rc != 0
+  failed_when: false
+  until: _oc_bw_install.rc == 0
+  retries: 3
+  delay: 15
   when: oc_bitwarden_active | bool
 
 - name: "{{ oc.name }}: Bitwarden CLI verifizieren (als node, erwartet {{ openclaw_bitwarden_cli_version }})"
@@ -433,10 +439,14 @@
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
-    command: /bin/sh -lc "if [ -x /home/node/.openclaw/tools/bin/google-drive-mcp ]; then echo skip; else (mkdir -p /home/node/.openclaw/tools && npm config set prefix /home/node/.openclaw/tools && npm install -g @piotr-agier/google-drive-mcp@{{ openclaw_gdrive_mcp_version }}) && echo installed; fi"
+    command: /bin/sh -lc "if [ -x /home/node/.openclaw/tools/bin/google-drive-mcp ]; then echo skip; else (mkdir -p /home/node/.openclaw/tools && npm config set prefix /home/node/.openclaw/tools && npm install -g --no-audit --no-fund @piotr-agier/google-drive-mcp@{{ openclaw_gdrive_mcp_version }}) && echo installed; fi"
   register: _oc_gdrive_install
   changed_when: "'installed' in (_oc_gdrive_install.stdout | default(''))"
-  failed_when: _oc_gdrive_install.rc != 0
+  # Frisch-Install kann transient per SIGKILL (rc 137, Memory-Spike) abbrechen -> erneut versuchen.
+  failed_when: false
+  until: _oc_gdrive_install.rc == 0
+  retries: 4
+  delay: 20
 
 - name: "{{ oc.name }}: Google-Drive-MCP-Version verifizieren (erwartet {{ openclaw_gdrive_mcp_version }})"
   community.docker.docker_container_exec:
@@ -461,7 +471,10 @@
       rm -rf /tmp/gh.tgz /tmp/gh_*/ && echo installed; fi"
   register: _oc_gh_install
   changed_when: "'installed' in (_oc_gh_install.stdout | default(''))"
-  failed_when: _oc_gh_install.rc != 0
+  failed_when: false
+  until: _oc_gh_install.rc == 0
+  retries: 3
+  delay: 10
   when: oc_gh_token | default('') | length > 0
 
 - name: "{{ oc.name }}: GitHub CLI (gh) verifizieren (erwartet {{ openclaw_gh_cli_version }})"
