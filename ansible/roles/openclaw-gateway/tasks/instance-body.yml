@@ -304,6 +304,16 @@
   ansible.builtin.set_fact:
     oc_ddg_enabled: "{{ (_oc_ddg_dir.matched | default(0)) > 0 }}"
 
+- name: "{{ oc.name }}: GDrive-MCP-Binary vorhanden? (Config-Gate)"
+  ansible.builtin.stat:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/config/tools/bin/google-drive-mcp"
+    follow: true
+  register: _oc_gdrive_bin
+
+- name: "{{ oc.name }}: GDrive-Verfuegbarkeit fuer Config setzen"
+  ansible.builtin.set_fact:
+    oc_gdrive_bin_present: "{{ _oc_gdrive_bin.stat.exists | default(false) }}"
+
 - name: "{{ oc.name }}: openclaw.json rendern (Temp)"
   ansible.builtin.template:
     src: openclaw.json.j2
@@ -436,7 +446,8 @@
     command: /bin/sh -lc "if [ -x /home/node/.openclaw/tools/bin/google-drive-mcp ]; then echo skip; else (mkdir -p /home/node/.openclaw/tools && npm config set prefix /home/node/.openclaw/tools && npm install -g @piotr-agier/google-drive-mcp@{{ openclaw_gdrive_mcp_version }}) && echo installed; fi"
   register: _oc_gdrive_install
   changed_when: "'installed' in (_oc_gdrive_install.stdout | default(''))"
-  failed_when: _oc_gdrive_install.rc != 0
+  # Optional: fehlendes MCP darf den Deploy nicht abbrechen; Config laesst es dann aus.
+  failed_when: false
 
 - name: "{{ oc.name }}: Google-Drive-MCP-Version verifizieren (erwartet {{ openclaw_gdrive_mcp_version }})"
   community.docker.docker_container_exec:
@@ -445,7 +456,7 @@
     command: /bin/sh -lc "/home/node/.openclaw/tools/bin/google-drive-mcp --version | grep -q '{{ openclaw_gdrive_mcp_version }}'"
   register: _oc_gdrive_ver
   changed_when: false
-  failed_when: _oc_gdrive_ver.rc != 0
+  failed_when: false
 
 # GitHub CLI (gh): ermoeglicht Agents das Arbeiten mit GH-Workflows (gh workflow run/list, gh run view).
 # Token kommt aus GH_TOKEN (Compose-Env); gh liest es automatisch. Pin (ADR-017), idempotent per Version.
