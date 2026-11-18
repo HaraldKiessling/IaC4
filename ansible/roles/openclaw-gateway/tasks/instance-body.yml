@@ -340,7 +340,7 @@
 
 - name: "{{ oc.name }}: gewuenschte Config-Checksumme merken"
   ansible.builtin.copy:
-    content: "{{ _oc_cfg_stat.stat.checksum }}\\n"
+    content: "{{ _oc_cfg_stat.stat.checksum }}"
     dest: "{{ openclaw_data_root }}/{{ oc.name }}/config/.openclaw.json.desired.sha256"
     mode: '0600'
     owner: '1000'
