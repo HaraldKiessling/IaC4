@@ -141,6 +141,10 @@ jobs:
           $SSH "sudo docker exec ${C} openclaw config validate --json 2>&1 | head -40" || true
 
           echo
+          echo "### Config-Validate (isolierter State)"
+          $SSH "sudo docker exec -e OPENCLAW_STATE_DIR=/tmp/ocv -e OPENCLAW_CONFIG_PATH=/home/node/.openclaw/openclaw.json ${C} openclaw config validate --json 2>&1 | head -60" || true
+
+          echo
           echo "### Host-Memory"
           $SSH "free -h; echo; nproc; uptime" || true
 
