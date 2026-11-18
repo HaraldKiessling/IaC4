@@ -421,7 +421,7 @@
     container: "openclaw-{{ oc.name }}"
     user: "root"
     command: >-
-      /bin/sh -c "if [ \"$(/usr/local/bin/gh --version 2>/dev/null | head -1 | awk '{print $3}')\" = '{{ openclaw_gh_cli_version }}' ]; then echo skip;
+      /bin/sh -c "if [ \"$(/usr/local/bin/gh --version 2>/dev/null | head -1 | cut -d' ' -f3)\" = '{{ openclaw_gh_cli_version }}' ]; then echo skip;
       else ARCH=$(uname -m); case \"$ARCH\" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac;
       curl -fsSL \"https://github.com/cli/cli/releases/download/v{{ openclaw_gh_cli_version }}/gh_{{ openclaw_gh_cli_version }}_linux_${ARCH}.tar.gz\" -o /tmp/gh.tgz &&
       tar -xzf /tmp/gh.tgz -C /tmp && install -m 0755 /tmp/gh_{{ openclaw_gh_cli_version }}_linux-${ARCH}/bin/gh /usr/local/bin/gh &&
