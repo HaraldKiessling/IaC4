@@ -25,9 +25,6 @@
           "google/gemini-3.5-flash"
         ]
       },
-      "memorySearch": {
-        "provider": "local"
-      },
       "subagents": {
         "delegationMode": "suggest",
         "maxChildrenPerAgent": 5,
@@ -38,25 +35,21 @@
     }
   },
   "memory": {
-    "backend": "qmd"
+    "search": {
+      "provider": "local"
+    }
   },
   "plugins": {
     "entries": {
-      "duckduckgo": {
-        "enabled": true,
-        "config": {
-          "webSearch": {
-            "region": "de-de",
-            "safeSearch": "moderate"
-          }
-        }
+      "perplexity": {
+        "enabled": false
       }
     }
   },
   "tools": {
     "web": {
       "search": {
-        "provider": "duckduckgo"
+        "provider": "none"
       }
     }
   },
