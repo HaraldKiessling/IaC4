@@ -145,6 +145,14 @@ jobs:
           $SSH "sudo docker exec -e OPENCLAW_STATE_DIR=/tmp/ocv -e OPENCLAW_CONFIG_PATH=/home/node/.openclaw/openclaw.json ${C} openclaw config validate --json 2>&1 | head -60" || true
 
           echo
+          echo "### Docker-Events (pause/unpause/die, 60 Min)"
+          $SSH "sudo timeout 5 docker events --since 60m --until 1s --filter container=${C} --format '{{.Time}} {{.Action}} {{.Actor.Attributes.name}}' 2>/dev/null | grep -iE 'pause|unpause|die|oom|kill' | tail -30" || true
+
+          echo
+          echo "### Hosted-Compute-Agent (Memory-Aktionen)"
+          $SSH "sudo journalctl -u hosted-compute-agent --since '60 min ago' --no-pager 2>/dev/null | tail -30" || true
+
+          echo
           echo "### Host-Memory"
           $SSH "free -h; echo; nproc; uptime" || true
 
