@@ -398,7 +398,7 @@
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
-    command: /bin/sh -lc "export PATH=$HOME/.local/bin:$PATH; qmd --version | grep -q '{{ openclaw_qmd_version }}'"
+    command: /bin/sh -lc "/home/node/.openclaw/tools/bin/qmd --version | grep -q '{{ openclaw_qmd_version }}'"
   register: _oc_qmd_ver
   changed_when: false
   failed_when: _oc_qmd_ver.rc != 0
@@ -442,7 +442,7 @@
   community.docker.docker_container_exec:
     container: "openclaw-{{ oc.name }}"
     user: "node"
-    command: /bin/sh -lc "export PATH=$HOME/.local/bin:$PATH; google-drive-mcp --version | grep -q '{{ openclaw_gdrive_mcp_version }}'"
+    command: /bin/sh -lc "/home/node/.openclaw/tools/bin/google-drive-mcp --version | grep -q '{{ openclaw_gdrive_mcp_version }}'"
   register: _oc_gdrive_ver
   changed_when: false
   failed_when: _oc_gdrive_ver.rc != 0
