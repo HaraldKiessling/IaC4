@@ -52,12 +52,16 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             assert 'providers' not in d, "Root-providers verboten (models.providers)"
             assert 'models' in d and 'providers' in d['models']
             # Memory-Konfiguration (Fix 2026-08-03): FTS-only explizit – kein Embedding-Default
-            assert d['memory']['backend'] == 'qmd', f"{oc['name']}: memory.backend != qmd (lokal-konsistent)"
-            assert d['agents']['defaults'].get('memorySearch', {}).get('provider') == 'local', \
-                f"{oc['name']}: memorySearch.provider != local (QMD-Setup wie PROD-Host; Default 'openai' verursacht Index-Warnung)"
+            assert 'backend' not in d['memory'], f"{oc['name']}: memory.backend existiert im Schema nicht mehr"
+            assert d['memory'].get('search', {}).get('provider') == 'local', \
+                f"{oc['name']}: memory.search.provider != local (Default 'openai' verursacht Index-Warnung)"
+            assert 'memorySearch' not in d['agents']['defaults'], f"{oc['name']}: memorySearch ist nach memory.search gewandert"
+            entries = d['agents'].get('entries', {})
+            if oc['agents']:
+                assert d['agents'].get('ownership') == 'explicit', f"{oc['name']}: agents.ownership != explicit"
             for a in oc['agents']:
                 aid = a.lower().replace(' ', '-')
-                assert any(x.get('id') == aid for x in d['agents'].get('list', [])), f"agent id {aid} fehlt"
+                assert aid in entries, f"agent id {aid} fehlt in agents.entries"
             # OC2/OC3-Benchmark (Design 01-oc2-oc3-benchmark): per-Instanz-Conditionals
             if 'subagents_defaults' not in oc:
                 # Byte-Identitäts-Garantie: Instanzen ohne Konfiguration bekommen KEINEN subagents-Key
@@ -66,7 +70,7 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                 assert d['agents']['defaults'].get('subagents') == oc['subagents_defaults'], \
                     f"{oc['name']}: subagents_defaults nicht gerendert"
             if oc.get('subagents_allow_agents'):
-                orch = next(x for x in d['agents']['list'] if x['id'] == 'orchestrator')
+                orch = entries['orchestrator']
                 assert orch.get('subagents', {}).get('allowAgents') == oc['subagents_allow_agents'], \
                     f"{oc['name']}: allowAgents fehlt/falsch (nur Orchestrator)"
             if 'agent_models' in oc:
@@ -77,7 +81,7 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                         assert d['agents']['defaults'].get('model', {}).get('primary') == mdl['primary'], \
                             f"{oc['name']}: defaults.model != {mdl['primary']} (OC1-Fairness-Fix)"
                         continue
-                    a = next(x for x in d['agents']['list'] if x['id'] == eid)
+                    a = entries[eid]
                     assert a['model']['primary'] == mdl['primary'], \
                         f"{oc['name']}/{eid}: primary {a['model']['primary']} != {mdl['primary']}"
                     assert a['model']['fallbacks'] == mdl['fallbacks'], \
@@ -86,7 +90,7 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
                 # Design 06: Per-Agent-Workspace NUR für Sub-Agents (Orchestrator behält Root)
                 for a in oc['agents']:
                     aid = a.lower().replace(' ', '-')
-                    ent = next(x for x in d['agents']['list'] if x['id'] == aid)
+                    ent = entries[aid]
                     if aid == 'orchestrator':
                         assert 'workspace' not in ent, f"{oc['name']}/orchestrator: workspace unerwartet (Root bleibt)"
                     else:
@@ -95,7 +99,7 @@ for tf in ('vps-dev.yml', 'vps-prod.yml'):
             if oc.get('agent_thinking'):
                 for a, lvl in oc['agent_thinking'].items():
                     eid = a.lower().replace(' ', '-')
-                    ent = next(x for x in d['agents']['list'] if x['id'] == eid)
+                    ent = entries[eid]
                     assert ent.get('thinkingDefault') == lvl, \
                         f"{oc['name']}/{eid}: thinkingDefault {ent.get('thinkingDefault')} != {lvl}"
             if oc.get('subagents_tools_deny'):
