@@ -50,10 +50,7 @@
         "primary": "{{ am['Orchestrator'].primary }}",
         "fallbacks": {{ am['Orchestrator'].fallbacks | tojson }}
       }
-{% endif %},
-      "memorySearch": {
-        "provider": "local"
-      }
+{% endif %}
 {% if skip_bootstrap | default(false) | bool %},
       "skipBootstrap": true
 {% endif %}
@@ -62,6 +59,7 @@
 {% endif %}
     }
 {% if oc.agents | length > 0 %},
+    "ownership": "explicit",
     "entries": {
 {% for a in oc.agents %}{% set agent_id = a | lower | replace(' ', '-') %}      "{{ agent_id }}": {
         "name": "{{ a }}",
@@ -87,7 +85,9 @@
 {% endif %}
   },
   "memory": {
-    "backend": "qmd"
+    "search": {
+      "provider": "local"
+    }
   },
   "plugins": {
     "entries": {
