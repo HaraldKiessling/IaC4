@@ -23,6 +23,12 @@ on:
         required: true
         default: '90'
         type: string
+      validate:
+        description: 'Statt Gateway: config validate mit isoliertem State-Dir'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
       confirm:
         description: 'Owner-Freigabe (EXAKT: RUN-FG)'
         required: true
@@ -101,7 +107,12 @@ jobs:
           echo "### Container vorher"
           $SSH "sudo docker ps -a --filter name=^openclaw-${INSTANCE}\$ --format 'table {{.Names}}\t{{.Status}}'" || true
           $SSH "sudo docker rm -f openclaw-${INSTANCE} 2>/dev/null || true"
-          echo "### Foreground (${SECONDS_RUN}s)"
-          $SSH "cd /srv/openclaw/${INSTANCE} && sudo timeout ${SECONDS_RUN} docker compose run --rm --service-ports openclaw 2>&1 | tail -250" || true
+          if [ "${{ inputs.validate }}" = "true" ]; then
+            echo "### Config validate (isolierter State)"
+            $SSH "cd /srv/openclaw/${INSTANCE} && sudo timeout ${SECONDS_RUN} docker compose run --rm -e OPENCLAW_STATE_DIR=/tmp/ocv openclaw openclaw config validate --json 2>&1 | tail -80" || true
+          else
+            echo "### Foreground (${SECONDS_RUN}s)"
+            $SSH "cd /srv/openclaw/${INSTANCE} && sudo timeout ${SECONDS_RUN} docker compose run --rm --service-ports openclaw 2>&1 | tail -250" || true
+          fi
           echo "### Danach"
           $SSH "sudo docker ps -a --filter name=^openclaw-${INSTANCE}\$ --format 'table {{.Names}}\t{{.Status}}'" || true
