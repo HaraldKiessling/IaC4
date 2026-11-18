@@ -125,6 +125,14 @@ jobs:
           $SSH "sudo docker exec ${C} openclaw config get tools.web.search --json 2>&1" || true
 
           echo
+          echo "### Exit/Error"
+          $SSH "sudo docker inspect ${C} --format 'exit={{.State.ExitCode}} err={{.State.Error}} restarts={{.RestartCount}}'" || true
+
+          echo
+          echo "### Logs raw"
+          $SSH "sudo docker logs --tail 40 ${C} 2>&1" || true
+
+          echo
           echo "### Host-Memory"
           $SSH "free -h; echo; nproc; uptime" || true
 
