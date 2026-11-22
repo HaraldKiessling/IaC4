@@ -1,6 +1,21 @@
 ---
 # Qdrant (ADR-011) – gepinnt, HTTP-only; TLS-Terminierung via Tailscale Serve auf 6333
 # (Entscheidung Harald 2026-08-01: NUR Tailscale terminiert TLS, Qdrant bleibt HTTP)
+#
+# Selbstheilung (Befund 2026-11-22, Prod): Der Container kann mit korrekter Compose-
+# Config, aber ohne Netzwerkanbindung laufen (NetworkSettings.Networks = {}), z. B.
+# wenn die gemeinsame Bridge ({{ docker_network }}) neu erstellt wurde. Dann fehlen
+# Port-Publish (6333/6334) und Traefik-Anbindung; /healthz ist auf dem Host refused
+# und der Tailscale-Serve-Proxy antwortet 502. Die Compose-Config-Hash ist dabei
+# identisch zum Soll-Zustand – `docker_compose_v2 state=present` erkennt das NICHT.
+# Deshalb unten: Zustandsprüfung + Entfernen des verwaisten Containers (Named Volume
+# `qdrant-data` bleibt erhalten) vor dem Compose-Up.
+#
+# Port-Bindung (Befund 2026-11-22, Prod): Der Host-Publish MUSS Loopback sein
+# (127.0.0.1:6333/6334). tailscaled haelt auf prod 100.77.47.98%tailscale0:6333/6334
+# (Tailscale Serve -> localhost:6333/6334); ein 0.0.0.0-Publish scheitert mit
+# "failed to bind host port 0.0.0.0:6333: address already in use". Die Serve-Route
+# bleibt unveraendert (Proxy-Ziel 127.0.0.1). Die Assertion unten haelt das fest.
 
 - name: Qdrant-Verzeichnisse anlegen
   ansible.builtin.file:
@@ -20,10 +35,86 @@
     dest: /opt/qdrant/docker-compose.yml
     mode: '0644'
 
-- name: Qdrant-Container starten
+- name: Qdrant-Container-Zustand abfragen (docker inspect, read-only)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - "--format"
+      - "{{ '{{' }}json .State{{ '}}' }}|{{ '{{' }}json .NetworkSettings.Networks{{ '}}' }}"
+      - qdrant
+  register: _qdrant_state
+  changed_when: false
+  failed_when: false
+
+- name: "Befund: Qdrant-Container verwaist (nicht laufend oder ohne {{ docker_network }})"
+  ansible.builtin.debug:
+    msg: >-
+      running={{ (_qdrant_state.stdout.split('|')[0] | from_json).Running | default(false) }},
+      Netze={{ (_qdrant_state.stdout.split('|')[1] | from_json) | list }} –
+      Container wird entfernt und durch Compose neu erstellt (Named Volume qdrant-data bleibt).
+  when:
+    - _qdrant_state.rc == 0
+    - >-
+      not ((_qdrant_state.stdout.split('|')[0] | from_json).Running | default(false) | bool)
+      or docker_network not in (_qdrant_state.stdout.split('|')[1] | from_json)
+
+- name: Verwaisten Qdrant-Container stoppen (Graceful, 30s)
+  ansible.builtin.command: docker stop -t 30 qdrant
+  when:
+    - _qdrant_state.rc == 0
+    - >-
+      not ((_qdrant_state.stdout.split('|')[0] | from_json).Running | default(false) | bool)
+      or docker_network not in (_qdrant_state.stdout.split('|')[1] | from_json)
+  register: _qdrant_stop
+  changed_when: _qdrant_stop.rc == 0
+  failed_when: false
+
+- name: Verwaisten Qdrant-Container entfernen (Named Volume qdrant-data bleibt erhalten)
+  ansible.builtin.command: docker rm qdrant
+  when:
+    - _qdrant_state.rc == 0
+    - >-
+      not ((_qdrant_state.stdout.split('|')[0] | from_json).Running | default(false) | bool)
+      or docker_network not in (_qdrant_state.stdout.split('|')[1] | from_json)
+  register: _qdrant_rm
+  changed_when: _qdrant_rm.rc == 0
+  failed_when: _qdrant_rm.rc != 0
+
+- name: Qdrant-Container starten (Compose, Soll-Netz + Port-Publish)
   community.docker.docker_compose_v2:
     project_src: /opt/qdrant
     state: present
+
+- name: Qdrant-Container-Zustand nach Deploy pruefen (running + Netzwerk + Ports)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - "--format"
+      - "{{ '{{' }}json .State{{ '}}' }}|{{ '{{' }}json .NetworkSettings.Networks{{ '}}' }}|{{ '{{' }}json .NetworkSettings.Ports{{ '}}' }}"
+      - qdrant
+  register: _qdrant_state_after
+  changed_when: false
+  failed_when: >-
+    _qdrant_state_after.rc != 0
+    or not ((_qdrant_state_after.stdout.split('|')[0] | from_json).Running | default(false) | bool)
+    or docker_network not in (_qdrant_state_after.stdout.split('|')[1] | from_json)
+    or '6333/tcp' not in (_qdrant_state_after.stdout.split('|')[2] | from_json)
+
+- name: Qdrant-Host-Ports auswerten (Loopback-Pflicht)
+  ansible.builtin.set_fact:
+    _qdrant_ports: "{{ _qdrant_state_after.stdout.split('|')[2] | from_json }}"
+
+- name: Qdrant-Publish nur auf 127.0.0.1 pruefen (kein 0.0.0.0, Kollision mit tailscaled)
+  ansible.builtin.assert:
+    that:
+      - (_qdrant_ports['6333/tcp'] | default([]) | map(attribute='HostIp') | list) == ['127.0.0.1']
+      - (_qdrant_ports['6334/tcp'] | default([]) | map(attribute='HostIp') | list) == ['127.0.0.1']
+    fail_msg: >-
+      Qdrant ist nicht loopback-only gebunden (erwartet 127.0.0.1 fuer 6333/tcp und 6334/tcp).
+      Ein 0.0.0.0-Publish kollidiert auf prod mit tailscaled (Tailscale Serve).
+    quiet: true
 
 - name: Auf Qdrant warten (HTTP /healthz; /health existiert nicht → 404)
   ansible.builtin.uri:
@@ -34,7 +125,15 @@
   retries: 10
   delay: 3
 
-- name: Collection {{ qdrant_collection }} anlegen (idempotent, 3072d/Cosine)
+- name: Collection {{ qdrant_collection }} Zustand abfragen (read-only)
+  ansible.builtin.uri:
+    url: "http://localhost:6333/collections/{{ qdrant_collection }}"
+    method: GET
+    status_code: [200, 404]
+  register: _qdrant_collection_pre
+  changed_when: false
+
+- name: Collection {{ qdrant_collection }} anlegen (nur wenn nicht vorhanden, 3072d/Cosine)
   ansible.builtin.uri:
     url: "http://localhost:6333/collections/{{ qdrant_collection }}"
     method: PUT
@@ -46,7 +145,18 @@
         size: "{{ qdrant_collection_size }}"
         distance: "{{ qdrant_collection_distance }}"
     status_code: 200
-  failed_when: false   # existiert bereits → kein Fehler
+  when: _qdrant_collection_pre.status == 404
+  register: _qdrant_collection_put
+
+- name: Collection-Konfiguration verifizieren (Dimension + Distance)
+  ansible.builtin.uri:
+    url: "http://localhost:6333/collections/{{ qdrant_collection }}"
+    status_code: 200
+  register: _qdrant_collection_get
+  failed_when: >-
+    _qdrant_collection_get.status != 200
+    or (_qdrant_collection_get.json.result.config.params.vectors.size | int) != (qdrant_collection_size | int)
+    or (_qdrant_collection_get.json.result.config.params.vectors.distance | string) != (qdrant_collection_distance | string)
 
 - name: Tailscale Serve-Status abfragen (idempotenz)
   ansible.builtin.shell: tailscale serve status
