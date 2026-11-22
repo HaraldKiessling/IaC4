@@ -111,6 +111,26 @@
       changed_when: false
       failed_when: false
 
+    - name: NetworkMode des Containers vs. vorhandene Netzwerk-ID
+      ansible.builtin.shell: |
+        echo "QDRANT_NETWORKMODE=$(docker inspect qdrant --format '{{ "{{" }}.HostConfig.NetworkMode{{ "}}" }}' 2>&1)"
+        echo "QDRANT_NETWORKID_REF=$(docker inspect qdrant --format '{{ "{{" }}range .NetworkSettings.Networks{{ "}}" }}{{ "{{" }}.NetworkID{{ "}}" }}{{ "{{" }}end{{ "}}" }}' 2>&1)"
+        echo "TRAEFIK_NET_ID=$(docker network inspect traefik-network --format '{{ "{{" }}.Id{{ "}}" }}' 2>&1)"
+        echo "TRAEFIK_NET_CREATED=$(docker network inspect traefik-network --format '{{ "{{" }}.Created{{ "}}" }}' 2>&1)"
+        echo "DOCKER_VERSION=$(docker version --format '{{ "{{" }}.Server.Version{{ "}}" }}' 2>&1)"
+      register: diag_netmode
+      changed_when: false
+      failed_when: false
+
+    - name: Docker-Ereignisse zu qdrant/Netzwerk (journalctl, read-only)
+      ansible.builtin.shell: >-
+        journalctl -u docker --no-pager --since '2026-10-01' 2>/dev/null
+        | grep -iE 'qdrant|traefik-network|network (rm|remove|disconnect)|failed to set up container networking'
+        | tail -60 || echo "keine passenden journal-Eintraege"
+      register: diag_journal
+      changed_when: false
+      failed_when: false
+
     - name: Verzeichnis /opt/qdrant
       ansible.builtin.shell: ls -la /opt/qdrant 2>&1 || echo "/opt/qdrant FEHLT"
       register: diag_dir
@@ -180,6 +200,8 @@
           - "HTTP_IM_CONTAINER: {{ diag_http_in.stdout | default('') }}"
           - "HTTP_UEBER_IP: {{ diag_http_ip.stdout_lines | default([]) }}"
           - "COMPOSE_PS: {{ diag_cps.stdout_lines | default([]) }}"
+          - "NETMODE_VS_NETID: {{ diag_netmode.stdout_lines | default([]) }}"
+          - "JOURNAL: {{ diag_journal.stdout_lines | default([]) }}"
           - "DIR_OPT_QDRANT: {{ diag_dir.stdout_lines | default([]) }}"
           - "COMPOSE: {{ diag_compose.stdout_lines | default([]) }}"
           - "CONFIG_HEAD: {{ diag_config.stdout_lines | default([]) }}"
