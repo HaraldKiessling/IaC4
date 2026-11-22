@@ -26,7 +26,7 @@ permissions:
 jobs:
   bdd:
     name: "BDD-Tests (target: ${{ inputs.target }})"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       VPS_USER: ${{ secrets.VPS_USER }}

@@ -94,7 +94,7 @@ jobs:
   bitwarden-secret:
     name: "Bitwarden-Secret-Datei (${{ inputs.bitwarden_secret }}, target: ${{ inputs.target }})"
     if: inputs.bitwarden_secret != 'none'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: oc-bitwarden-${{ inputs.target }}
     env:
@@ -200,7 +200,7 @@ jobs:
     needs: bitwarden-secret
     # laeuft auch, wenn der Tresor-Job uebersprungen wurde (bitwarden_secret=none)
     if: always() && (needs.bitwarden-secret.result == 'success' || needs.bitwarden-secret.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       VPS_USER: ${{ secrets.VPS_USER }}
@@ -421,7 +421,7 @@ jobs:
   # sonst FALSE MISMATCH (Session-Befund 2026-08-06: sha256(TOKEN\n) != sha256(TOKEN)).
   gateway-token-verify:
     name: "Gateway-Token-Verify (target: ${{ inputs.target }}, ${{ inputs.instance }})"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: service-deploy
     if: inputs.verify_token == 'true'
