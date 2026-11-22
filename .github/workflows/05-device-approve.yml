@@ -181,7 +181,7 @@ jobs:
             exit 1
           fi
 
-          if [ "$INPUT_MODE" = "list" ] || [ "$INPUT_MODE" = "e2e" ]; then
+          if [ "$INPUT_MODE" = "list" ] || [ "$INPUT_MODE" = "e2e" ] || [ "$INPUT_MODE" = "owner" ]; then
             # ── Listen-Modus (v3.1, R02) / E2E-Modus (v3.3) ──
             # id wird ignoriert: NICHT validieren, NICHT in GITHUB_ENV schreiben,
             # NICHT an approve.py übergeben. type=auto → both (O3: keine ID zum
@@ -544,7 +544,7 @@ jobs:
       # diesen Step).
       - name: Discovery + Aktion (Approve/Reject/Remove, Ein-Job)
         id: full_run
-        if: ${{ inputs.mode != 'list' && inputs.mode != 'e2e' }}
+        if: ${{ inputs.mode != 'list' && inputs.mode != 'e2e' && inputs.mode != 'owner' }}
         env:
           INPUT_MODE: ${{ inputs.mode || 'approve' }}
         run: |
