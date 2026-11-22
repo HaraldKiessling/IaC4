@@ -23,17 +23,23 @@ on:
         options:
           - dev
           - prod
+  # Push-Trigger nur auf dem Diagnose-Branch (read-only, fest gegen prod) –
+  # workflow_dispatch ist auf Branches ohne Workflow im Default-Branch nicht
+  # dispatchbar (GitHub: 404), daher self-triggernd beim Branch-Push.
+  push:
+    branches:
+      - diag/qdrant-prod-readonly
 
 permissions:
   contents: read
 
 jobs:
   diagnose-qdrant:
-    name: "Qdrant-Ist-Zustand (target: ${{ inputs.target }}) – read-only"
+    name: "Qdrant-Ist-Zustand (target: ${{ github.event_name == 'push' && 'prod' || inputs.target }}) – read-only"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      TARGET: ${{ inputs.target }}
+      TARGET: ${{ github.event_name == 'push' && 'prod' || inputs.target }}
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
 
