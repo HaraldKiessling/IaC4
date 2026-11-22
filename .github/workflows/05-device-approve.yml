@@ -301,6 +301,10 @@ jobs:
             echo "ownerAllowFrom openclaw-$i = telegram:$TG_ID"
             ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR "$VPS_USER@$VPS_IP" "sudo docker exec openclaw-$i openclaw config set commands.ownerAllowFrom '$OWNER_LIST'"
           done
+          for i in $INSTS; do
+            echo "===== LOGS openclaw-$i (tail 80) ====="
+            ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR "$VPS_USER@$VPS_IP" "sudo docker logs openclaw-$i --tail 80 2>&1" || true
+          done
           echo "::notice::Owner-Genehmigung temporaer gesetzt (geht beim naechsten Deploy verloren)"
       - name: "Device E2E Lifecycle (Request→List→Approve→Nutzbar→Delete→Nicht-nutzbar)"
         if: ${{ inputs.mode == 'e2e' }}
