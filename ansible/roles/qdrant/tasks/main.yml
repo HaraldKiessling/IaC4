@@ -105,7 +105,15 @@
   retries: 10
   delay: 3
 
-- name: Collection {{ qdrant_collection }} anlegen (idempotent, 3072d/Cosine)
+- name: Collection {{ qdrant_collection }} Zustand abfragen (read-only)
+  ansible.builtin.uri:
+    url: "http://localhost:6333/collections/{{ qdrant_collection }}"
+    method: GET
+    status_code: [200, 404]
+  register: _qdrant_collection_pre
+  changed_when: false
+
+- name: Collection {{ qdrant_collection }} anlegen (nur wenn nicht vorhanden, 3072d/Cosine)
   ansible.builtin.uri:
     url: "http://localhost:6333/collections/{{ qdrant_collection }}"
     method: PUT
@@ -117,9 +125,8 @@
         size: "{{ qdrant_collection_size }}"
         distance: "{{ qdrant_collection_distance }}"
     status_code: 200
+  when: _qdrant_collection_pre.status == 404
   register: _qdrant_collection_put
-  # 409 = existiert bereits mit anderer Konfiguration -> soll sichtbar fehlschlagen
-  failed_when: _qdrant_collection_put.status not in [200]
 
 - name: Collection-Konfiguration verifizieren (Dimension + Distance)
   ansible.builtin.uri:
