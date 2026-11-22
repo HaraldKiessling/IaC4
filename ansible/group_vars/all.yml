@@ -56,6 +56,11 @@ openclaw_image: "ghcr.io/openclaw/openclaw"
 openclaw_image_version: "2026.11.4"         # Pin (ADR-017); Update = Variable + Deploy. GHCR-Tag bei Deploy verifizieren
 openclaw_qmd_version: "2.5.3"              # Pin (K3-2, PR #83): QMD-Sidecar im Container; Pilot-verifiziert 2026-08-03
 openclaw_duckduckgo_plugin_version: "2026.11.4"   # Pin (ADR-017): @openclaw/duckduckgo-plugin, key-freie Web-Suche
+# Health-Gate-Budget je Instanz (Issue #202): 90 x 10 s = 15 min deckt langsame Kaltstarts
+# inkl. State-/Config-Migration ab. Evidenz Run 45026424960 (2026-11-22, oc3): 36 x 10 s
+# ausgeschoepft, Container weiterhin "health: starting" bei leerem docker log.
+openclaw_health_retries: 90
+openclaw_health_delay: 10
 # Google-Drive-MCP (Issue #171, S3): read-write Drive-Tool als stdio-Server je Instanz.
 # EIN dediziertes Google-Konto -> EIN gemeinsamer Secret-Satz fuer alle 6 Instanzen (dev+prod, oc1/oc2/oc3).
 # Das Konto ist AUSSCHLIESSLICH fuer die OC-Instanzen gedacht; bewusst KEINE Rotation und
