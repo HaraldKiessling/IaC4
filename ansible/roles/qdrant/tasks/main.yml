@@ -10,6 +10,12 @@
 # identisch zum Soll-Zustand – `docker_compose_v2 state=present` erkennt das NICHT.
 # Deshalb unten: Zustandsprüfung + Entfernen des verwaisten Containers (Named Volume
 # `qdrant-data` bleibt erhalten) vor dem Compose-Up.
+#
+# Port-Bindung (Befund 2026-11-22, Prod): Der Host-Publish MUSS Loopback sein
+# (127.0.0.1:6333/6334). tailscaled haelt auf prod 100.77.47.98%tailscale0:6333/6334
+# (Tailscale Serve -> localhost:6333/6334); ein 0.0.0.0-Publish scheitert mit
+# "failed to bind host port 0.0.0.0:6333: address already in use". Die Serve-Route
+# bleibt unveraendert (Proxy-Ziel 127.0.0.1). Die Assertion unten haelt das fest.
 
 - name: Qdrant-Verzeichnisse anlegen
   ansible.builtin.file:
@@ -95,6 +101,20 @@
     or not ((_qdrant_state_after.stdout.split('|')[0] | from_json).Running | default(false) | bool)
     or docker_network not in (_qdrant_state_after.stdout.split('|')[1] | from_json)
     or '6333/tcp' not in (_qdrant_state_after.stdout.split('|')[2] | from_json)
+
+- name: Qdrant-Host-Ports auswerten (Loopback-Pflicht)
+  ansible.builtin.set_fact:
+    _qdrant_ports: "{{ _qdrant_state_after.stdout.split('|')[2] | from_json }}"
+
+- name: Qdrant-Publish nur auf 127.0.0.1 pruefen (kein 0.0.0.0, Kollision mit tailscaled)
+  ansible.builtin.assert:
+    that:
+      - (_qdrant_ports['6333/tcp'] | default([]) | map(attribute='HostIp') | list) == ['127.0.0.1']
+      - (_qdrant_ports['6334/tcp'] | default([]) | map(attribute='HostIp') | list) == ['127.0.0.1']
+    fail_msg: >-
+      Qdrant ist nicht loopback-only gebunden (erwartet 127.0.0.1 fuer 6333/tcp und 6334/tcp).
+      Ein 0.0.0.0-Publish kollidiert auf prod mit tailscaled (Tailscale Serve).
+    quiet: true
 
 - name: Auf Qdrant warten (HTTP /healthz; /health existiert nicht → 404)
   ansible.builtin.uri:

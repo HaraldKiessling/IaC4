@@ -11,7 +11,7 @@
     ├── docker0 (172.17.0.1)   – Docker Bridge
     │
     ├── Container: traefik      → Port 80 (Tailnet-only, UFW-CGNAT)
-    ├── Container: qdrant       → Port 6333, 6334 (lokal + TS)
+    ├── Container: qdrant       → Port 6333, 6334 (Host-Publish nur 127.0.0.1; TS via Serve)
     ├── Container: code-server  → Port 8443 (via Traefik)
     ├── Container: openclaw-oc1 → Port 18789 (localhost-only, TS-Serve-TLS) – Default-Gateway
     ├── Container: openclaw-oc2 → Port 18790 (localhost-only, TS-Serve-TLS) – DevOps (4 Agents)
