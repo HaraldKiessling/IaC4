@@ -485,6 +485,68 @@
   failed_when: false
   when: oc_gh_token | default('') | length > 0
 
+# Issue #201 (2026-11-22): GH_TOKEN ist ein statisches PAT aus dem GH-Secret
+# <TARGET>_OC<n>_GH_TOKEN und wird nur beim Container-(Re)Create in die Env geschrieben.
+# Ein abgelaufenes/widerrufenes Token fiel bisher erst beim ersten Push auf
+# ("Invalid username or token"). Gate: read-only GET /user, kein Token-Wert im Log.
+- name: "{{ oc.name }}: GH_TOKEN gegen GitHub pruefen (Gate, Issue #201)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "node"
+    command: >-
+      /bin/sh -c 'code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15
+      -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/user || echo 000);
+      echo "gh_token_http=$code"; [ "$code" = "200" ]'
+  register: _oc_gh_gate
+  changed_when: false
+  failed_when: false
+  when: oc_gh_token | default('') | length > 0
+
+- name: "{{ oc.name }}: GH_TOKEN ungueltig - Deploy abbrechen (Issue #201)"
+  ansible.builtin.fail:
+    msg: >-
+      GH_TOKEN fuer {{ oc.name }} ist ungueltig ({{ _oc_gh_gate.stdout | default('keine Antwort', true) | trim }}).
+      Das PAT im Secret {{ oc.gh_token_env }} ist abgelaufen oder widerrufen. Neues
+      Fine-grained-PAT (Contents: Read and write auf HaraldKiessling/IaC4) setzen:
+      gh secret set {{ oc.gh_token_env }} -R HaraldKiessling/IaC4 - dann Deploy wiederholen.
+  when:
+    - oc_gh_token | default('') | length > 0
+    - _oc_gh_gate.rc | default(1) != 0
+
+# Issue #201: git pusht sonst ausschliesslich mit dem Env-GH_TOKEN (kein credential.helper
+# im Image). Der Helper liest das deployte 0600-File .gh-read-token (einzige Token-Quelle,
+# keine zweite Secret-Kopie) und bleibt damit auch korrekt, wenn ein Ablauf GH_TOKEN in
+# einer Shell ueberschreibt. /etc/gitconfig ist im Container ephem und fuer uid 1000 nicht
+# schreibbar; der Helper wird bei jedem Deploy neu abgelegt (idempotent).
+- name: "{{ oc.name }}: Helper-Verzeichnis config/tools sicherstellen (Issue #201)"
+  ansible.builtin.file:
+    path: "{{ openclaw_data_root }}/{{ oc.name }}/config/tools"
+    state: directory
+    mode: '0755'
+    owner: '1000'
+    group: '1000'
+  when: oc_gh_token | default('') | length > 0
+
+- name: "{{ oc.name }}: git-Credential-Helper ablegen (liest .gh-read-token, Issue #201)"
+  ansible.builtin.copy:
+    src: git-credential-ghread
+    dest: "{{ openclaw_data_root }}/{{ oc.name }}/config/tools/git-credential-ghread"
+    mode: '0755'
+    owner: root
+    group: root
+  when: oc_gh_token | default('') | length > 0
+
+- name: "{{ oc.name }}: git credential.helper systemweit setzen (Issue #201)"
+  community.docker.docker_container_exec:
+    container: "openclaw-{{ oc.name }}"
+    user: "root"
+    command: >-
+      git config --system --replace-all credential.helper
+      '!/home/node/.openclaw/tools/git-credential-ghread'
+  register: _oc_git_cred
+  changed_when: false
+  when: oc_gh_token | default('') | length > 0
+
 # Key-freie Web-Suche (Owner-Entscheid "Weg 2", 2026-11-16): Install + Aktivierung sind nach VORNE
 # gezogen (vor das Health-Gate) und laufen in ZWEI Phasen: (1) Plugin per offizieller CLI installieren
 # (QMD-Muster; das Paket importiert "openclaw/plugin-sdk/*", npm -g loest das nicht auf), (2) erst
