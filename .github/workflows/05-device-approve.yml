@@ -53,7 +53,7 @@ on:
         required: false
         default: 'approve'
         type: choice
-        options: [approve, list, reject, remove, e2e]
+        options: [approve, list, reject, remove, e2e, owner]
       scope:
         description: 'Remove-Scope: device = ein Geraet per id (Default); instance = ALLE gepaarten Geraete der gefilterten Instanzen (nur mode=remove, max 50)'
         required: false
@@ -83,6 +83,11 @@ on:
         type: string
       confirm:
         description: 'Owner-Freigabe für mode=remove (Wortlaut: DEVICE-REMOVE; Pflicht – Löschen bleibt owner-pflichtig)'
+        required: false
+        default: ''
+        type: string
+      telegram_id:
+        description: 'Telegram-User-ID (nur mode=owner)'
         required: false
         default: ''
         type: string
@@ -270,6 +275,33 @@ jobs:
       #   5) Löschen (devices remove <deviceId>) 6) Nicht mehr nutzbar (1008)
       #   7) Cleanup (reject neuer Request). Abbruch mit Befund, falls die UUID
       #      nicht gefunden wird (vermuteter Bug-Pfad). Kein Merge.
+      - name: "Owner-Genehmigung (commands.ownerAllowFrom, temporaer)"
+        if: ${{ inputs.mode == 'owner' }}
+        env:
+          TG_ID: ${{ inputs.telegram_id }}
+          TARGET: ${{ inputs.target }}
+          INSTANCE: ${{ inputs.instance }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TG_ID" | grep -qE '^[0-9]+$'; then
+            echo "::error::Ungueltige Telegram-ID (nur Ziffern)"
+            exit 2
+          fi
+          case "$INSTANCE" in
+            all) INSTS="oc1 oc2 oc3" ;;
+            oc[1-9]*) INSTS="$INSTANCE" ;;
+            *) echo "::error::Ungueltige Instanz"; exit 2 ;;
+          esac
+          TS_TOKEN=$(curl -s --max-time 30 --data-urlencode "client_id=$TS_CLIENT_ID" --data-urlencode "client_secret=$TS_CLIENT_SECRET" "https://api.tailscale.com/api/v2/oauth/token" | jq -r .access_token)
+          NODE="vps-$TARGET"
+          VPS_IP=$(curl -sS "https://api.tailscale.com/api/v2/tailnet/$TS_TAILNET/devices?fields=hostname,addresses" -H "Authorization: Bearer $TS_TOKEN" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty')
+          [ -n "$VPS_IP" ] && [ "$VPS_IP" != "null" ] || { echo "::error::Keine Tailscale-IP fuer $NODE"; exit 1; }
+          for i in $INSTS; do
+            OWNER_LIST=$(printf '["telegram:%s"]' "$TG_ID")
+            echo "ownerAllowFrom openclaw-$i = telegram:$TG_ID"
+            ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o LogLevel=ERROR "$VPS_USER@$VPS_IP" "sudo docker exec openclaw-$i openclaw config set commands.ownerAllowFrom '$OWNER_LIST'"
+          done
+          echo "::notice::Owner-Genehmigung temporaer gesetzt (geht beim naechsten Deploy verloren)"
       - name: "Device E2E Lifecycle (Request→List→Approve→Nutzbar→Delete→Nicht-nutzbar)"
         if: ${{ inputs.mode == 'e2e' }}
         env:
