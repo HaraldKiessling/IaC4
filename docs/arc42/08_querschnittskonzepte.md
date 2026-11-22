@@ -10,7 +10,8 @@
 ## Secrets-Management
 | Secret | Ort | Typ |
 |--------|-----|-----|
-| GH_TOKEN | GH Actions Secret | PAT (Contents: write) |
+| GH_TOKEN | GH Actions Secret | PAT (Contents: write) – nur Bootstrap-Workflows 00/01 |
+| <T>_OC<n>_GH_TOKEN | GH Actions Secret | Fine-grained PAT je Instanz (Contents: Read and write auf IaC4); Deploy-Gate + git-Helper, Issue #201 |
 | SSH_KEY | GH Actions Secret | ED25519 Private Key |
 | TAILSCALE_OAUTH_CLIENT_ID | GH Actions Secret | OAuth-Client-ID |
 | TAILSCALE_OAUTH_CLIENT_SECRET | GH Actions Secret | OAuth-Client-Secret |
@@ -21,6 +22,13 @@
 | <T>_OC<n>_TELEGRAM_BOT_TOKEN | GH Actions Secret | Telegram-Bot je Instanz (optional) |
 
 **Nicht in diesem Repo:** Secret-Werte (nur Env-Referenzen in Workflow/group_vars); Ollama braucht keinen Key (lokal, Docker-DNS)
+
+### GH-Token-Provisioning (Issue #201)
+
+- **Kette:** GH-Secret `<T>_OC<n>_GH_TOKEN` → Job-Env in Workflow 04 → `group_vars/vps-{dev,prod}.yml` (`gh_token_env`) → Rolle `openclaw-gateway` (`oc_gh_token`) → Compose-Env `GH_TOKEN` + Workspace-File `.gh-read-token` (0600).
+- **Keine Auto-Renewal:** Ein abgelaufenes oder widerrufenes PAT wirkt erst beim naechsten Container-Recreate. Deshalb prueft der Deploy nach dem Start `GET /user` (HTTP 200) und bricht sonst rot ab; die Meldung nennt das Secret, nie den Wert.
+- **git:** nutzt nicht `GH_TOKEN`, sondern `credential.helper = !/home/node/.openclaw/tools/git-credential-ghread` (liest `.gh-read-token`). Ein Push haengt damit nicht an der Shell-Env.
+- Das generische Repo-Secret `GH_TOKEN` gehoert zu den Bootstrap-Workflows 00/01 und wird von Workflow 04 nicht gelesen.
 
 ## Persistenz
 - **Qdrant:** Docker-Volume (`qdrant_data`)
@@ -55,7 +63,7 @@ Jeder Workflow liest und schreibt bestimmte GitHub Secrets. Die folgende Tabelle
 | **01** | `TAILSCALE_API_KEY`, `TAILSCALE_TAILNET`, `GH_TOKEN` | **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`** |
 | **02** | `SSH_KEY`, `VPS_USER`, `VPS_DEV_PUBLIC_IP` (dev) / `VPS_PROD_PUBLIC_IP` (prod), **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET` (OAuth-Client-Token) | – |
 | **03** | `SSH_KEY`, `VPS_USER`, **`TAILSCALE_OAUTH_CLIENT_ID`**, **`TAILSCALE_OAUTH_CLIENT_SECRET`**, `TAILSCALE_TAILNET` (OAuth-Client-Token; IP via Tailscale-API – keine Public-IP-Secrets) | – |
-| **04** | `SSH_KEY`, `VPS_USER`, Tailscale-OAuth-Secrets, `TRAEFIK_DASHBOARD_AUTH`(hist.), `CODE_SERVER_*`, `<T>_<PROVIDER>_API_KEY`, `<T>_OC<n>_{WEBSEARCH,GATEWAY,TELEGRAM}` | – |
+| **04** | `SSH_KEY`, `VPS_USER`, Tailscale-OAuth-Secrets, `TRAEFIK_DASHBOARD_AUTH`(hist.), `CODE_SERVER_*`, `<T>_<PROVIDER>_API_KEY`, `<T>_OC<n>_{WEBSEARCH,GH,GATEWAY,TELEGRAM}` | – |
 | **04b** | `SSH_KEY`, `VPS_USER`, Tailscale-OAuth-Secrets, `VPS_DEV_PUBLIC_IP` | – |
 | **CI** | – | – |
 
