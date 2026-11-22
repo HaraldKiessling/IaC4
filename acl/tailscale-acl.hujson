@@ -26,7 +26,9 @@
   //   live = base + iac4 + ha-tagowners + ha-acl + mqtt-1883 + ha-runner
   //          + owner-8123 + console-owner + ha-ssh + energie-read
   //          + ksem-read + goe-read + shelly-read
-  //   pending (deklariert, NICHT Teil des Live-Solls): — (derzeit KEINE)
+  //   pending (deklariert, NICHT Teil des Live-Solls): upload-bridge
+  //          (Issue #167; Owner-Freigabe Grill 2026-10-03, Apply aussteht – nur mit
+  //           Owner-Wort 'confirm'; bis dahin bricht `--rules all` im APPLY fail-closed ab)
   //          (goe-read wurde am 2026-09-23 live angewendet und ist damit managed;
   //           seit 2026-09-16 ist ksem-read managed; shelly-read wurde am
   //           2026-09-20 live angewendet und ist damit ebenfalls managed, s. u.)
@@ -208,6 +210,26 @@
       "action": "accept",
       "src": ["tag:ia4"],
       "dst": ["192.168.0.26:80", "192.168.0.27:80", "192.168.0.63:80", "192.168.0.67:80"],
+    },
+
+    // rule: upload-bridge pending — UPLOAD-BRÜCKE (Issue #167): autogroup:owner →
+    // tag:ia4 (BEIDE VPS) auf GENAU die drei Tailscale-Serve-HTTPS-Ports der
+    // Brücke :8443 / :8444 / :8445 (oc1/oc2/oc3; vgl. ansible/group_vars/vps-prod.yml
+    // `upload_bridge_https`). accept-only; keine Subnetz-Öffnung, kein Schreib-Block.
+    // KOMMENTAR-HERKUNFT: Konvention acl/README.md — `pending` = deklariert, aber
+    // NICHT Teil des aktuellen Live-Solls. OWNER-FREIGABE (bindend): Grill
+    // 2026-10-03. Der additive Apply läuft SPÄTER und ausschließlich mit dem
+    // Owner-Wort 'confirm' (NICHT Teil dieses PRs). Erster Lauf: reine Einfügung
+    // (0 Entfernungen). Nach dem Apply wird der Marker auf `managed` gesetzt und
+    // Live-Anker + Toleranz-Layout nachgezogen.
+    // PLATZIERUNG: additiv am Ende des acls-Blocks (neue Gruppe, keine
+    // Verschränkung mit Bestandsgruppen) — thematisch nach den iac4-/ha-Regeln.
+    // SOLANGE pending: `--rules all` bricht im APPLY fail-closed ab (exit 2);
+    // die Gruppe ist nur explizit via `--rules upload-bridge` selektierbar.
+    {
+      "action": "accept",
+      "src": ["autogroup:owner"],
+      "dst": ["tag:ia4:8443", "tag:ia4:8444", "tag:ia4:8445"],
     },
   ],
 
