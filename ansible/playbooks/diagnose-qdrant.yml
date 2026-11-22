@@ -1,0 +1,135 @@
+---
+# =============================================================================
+# Diagnose – Qdrant (read-only)
+#
+# Zweck: Ist-Zustand des Qdrant-Backends auf einem VPS erfassen, ohne den Host
+#        zu verändern. Kontext: Prod-BDD 2026-11-22 rot (Q1 502, Q3 /healthz
+#        leer, Q4 Collection fehlt) bei gruenem Dev-BDD (77/77).
+#
+# STRENG READ-ONLY:
+#   - nur lesende Kommandos (docker ps/inspect/images/logs, ss, ls, df,
+#     tailscale serve status, systemctl is-active, uptime)
+#   - KEIN docker compose up/down, KEIN pull, KEIN tailscale serve --bg,
+#     KEIN Datei-/Zustandswechsel (changed_when: false überall)
+#
+# Aufruf (Runner im Tailnet, SSH-Key via SSH_KEY_PATH):
+#   ansible-playbook playbooks/diagnose-qdrant.yml \
+#     -i inventories/prod/hosts.yml -e ansible_host=<ts-ip>
+# =============================================================================
+
+- name: Qdrant – read-only Ist-Zustand
+  hosts: vps
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Host-Kontext (Uptime / Bootzeit / Kernel)
+      ansible.builtin.command: uptime -s
+      register: diag_boot
+      changed_when: false
+      failed_when: false
+
+    - name: Docker-Daemon aktiv?
+      ansible.builtin.command: systemctl is-active docker
+      register: diag_docker_active
+      changed_when: false
+      failed_when: false
+
+    - name: Alle Container (auch gestoppte)
+      ansible.builtin.command: >-
+        docker ps -a --format '{{ '{{' }}.Names{{ '}}' }}|{{ '{{' }}.Image{{ '}}' }}|{{ '{{' }}.Status{{ '}}' }}|{{ '{{' }}.Ports{{ '}}' }}'
+      register: diag_ps
+      changed_when: false
+      failed_when: false
+
+    - name: Qdrant-Container im Detail (State/RestartCount/ExitCode/Image)
+      ansible.builtin.shell: >-
+        docker inspect qdrant --format '{{ '{{' }}json .State{{ '}}' }}|{{ '{{' }}.Config.Image{{ '}}' }}|{{ '{{' }}json .HostConfig.RestartPolicy{{ '}}' }}' 2>&1
+      register: diag_inspect
+      changed_when: false
+      failed_when: false
+
+    - name: Qdrant-Image lokal vorhanden?
+      ansible.builtin.shell: docker images --format '{{ '{{' }}.Repository{{ '}}' }}:{{ '{{' }}.Tag{{ '}}' }} {{ '{{' }}.ID{{ '}}' }} {{ '{{' }}.CreatedSince{{ '}}' }}' | grep -i qdrant || echo "KEIN qdrant-Image"
+      register: diag_images
+      changed_when: false
+      failed_when: false
+
+    - name: Qdrant-Container-Logs (letzte 60 Zeilen)
+      ansible.builtin.shell: docker logs qdrant --tail 60 2>&1 || echo "KEIN qdrant-Container"
+      register: diag_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Verzeichnis /opt/qdrant
+      ansible.builtin.shell: ls -la /opt/qdrant 2>&1 || echo "/opt/qdrant FEHLT"
+      register: diag_dir
+      changed_when: false
+      failed_when: false
+
+    - name: Deployte Compose-Datei (falls vorhanden)
+      ansible.builtin.shell: cat /opt/qdrant/docker-compose.yml 2>&1 || echo "KEINE compose-Datei"
+      register: diag_compose
+      changed_when: false
+      failed_when: false
+
+    - name: Deployte Qdrant-Config (Kopf, falls vorhanden)
+      ansible.builtin.shell: head -20 /opt/qdrant/config.yaml 2>&1 || echo "KEINE config.yaml"
+      register: diag_config
+      changed_when: false
+      failed_when: false
+
+    - name: Lauschende Ports 6333/6334
+      ansible.builtin.shell: ss -lntp 2>/dev/null | grep -E ':(6333|6334)' || echo "KEIN Listener auf 6333/6334"
+      register: diag_ports
+      changed_when: false
+      failed_when: false
+
+    - name: Lokaler HTTP-Check 6333
+      ansible.builtin.shell: curl -s -m 5 -o /dev/null -w 'http_code=%{http_code}' http://localhost:6333/healthz || echo "curl rc=$?"
+      register: diag_curl
+      changed_when: false
+      failed_when: false
+
+    - name: Docker-Netzwerke
+      ansible.builtin.shell: docker network ls --format '{{ '{{' }}.Name{{ '}}' }}|{{ '{{' }}.Driver{{ '}}' }}' 2>&1; echo '---'; docker network inspect traefik-network --format '{{ '{{' }}range .Containers{{ '}}' }}{{ '{{' }}.Name{{ '}}' }} {{ '{{' }}end{{ '}}' }}' 2>&1 || echo "traefik-network FEHLT"
+      register: diag_net
+      changed_when: false
+      failed_when: false
+
+    - name: Tailscale Serve-Status
+      ansible.builtin.command: tailscale serve status
+      register: diag_serve
+      changed_when: false
+      failed_when: false
+
+    - name: Tailscale-Backend-Zustand (serve config, read-only)
+      ansible.builtin.command: tailscale status --json
+      register: diag_ts
+      changed_when: false
+      failed_when: false
+
+    - name: Speicherplatz / Docker-Disk
+      ansible.builtin.shell: df -h / | tail -1; echo '---'; docker system df 2>&1 | head -6
+      register: diag_disk
+      changed_when: false
+      failed_when: false
+
+    - name: Qdrant-Befund ausgeben
+      ansible.builtin.debug:
+        msg:
+          - "BOOT_SEIT: {{ diag_boot.stdout | default('n/a') }}"
+          - "DOCKER_ACTIVE: {{ diag_docker_active.stdout | default('n/a') }}"
+          - "CONTAINER: {{ diag_ps.stdout_lines | default([]) }}"
+          - "INSPECT_QDRANT: {{ diag_inspect.stdout | default('') }}"
+          - "IMAGES_QDRANT: {{ diag_images.stdout | default('') }}"
+          - "LOGS_QDRANT: {{ diag_logs.stdout_lines | default([]) }}"
+          - "DIR_OPT_QDRANT: {{ diag_dir.stdout_lines | default([]) }}"
+          - "COMPOSE: {{ diag_compose.stdout_lines | default([]) }}"
+          - "CONFIG_HEAD: {{ diag_config.stdout_lines | default([]) }}"
+          - "PORTS_6333_6334: {{ diag_ports.stdout_lines | default([]) }}"
+          - "CURL_HEALTHZ: {{ diag_curl.stdout | default('') }}"
+          - "NETWORKS: {{ diag_net.stdout_lines | default([]) }}"
+          - "TAILSCALE_SERVE: {{ diag_serve.stdout_lines | default([]) }}"
+          - "TS_BACKEND_STATE: {{ (diag_ts.stdout | default('{}', true) | from_json).BackendState | default('n/a') }}"
+          - "DISK: {{ diag_disk.stdout_lines | default([]) }}"

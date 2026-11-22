@@ -1,0 +1,139 @@
+# =============================================================================
+# Diagnose – Qdrant (read-only)
+#
+# Liest den LIVE-Zustand des Qdrant-Backends eines Ziel-VPS aus (Container,
+# Image, Logs, /opt/qdrant, Listener, traefik-network, Tailscale-Serve, Disk).
+#
+# STRENG READ-ONLY: keine Mutation auf dem Host (kein compose up/down, kein
+# pull, kein serve --bg, kein Dateischreiben). Kontext: Prod-BDD 2026-11-22
+# rot (Qdrant Q1/Q3/Q4) bei gruenem Dev (77/77).
+#
+# Manuell startbar via workflow_dispatch (target: dev|prod, Default prod).
+# =============================================================================
+name: "Diagnose – Qdrant (read-only)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Ziel-VPS'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - dev
+          - prod
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose-qdrant:
+    name: "Qdrant-Ist-Zustand (target: ${{ inputs.target }}) – read-only"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TARGET: ${{ inputs.target }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vorbedingungen prüfen (Secrets)
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          FAIL=0
+          [ -n "$SSH_KEY" ] || { echo "❌ Secret SSH_KEY fehlt"; FAIL=1; }
+          [ -n "$VPS_USER" ] || { echo "❌ Secret VPS_USER fehlt"; FAIL=1; }
+          [ -n "$TS_CLIENT_ID" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_ID fehlt"; FAIL=1; }
+          [ -n "$TS_CLIENT_SECRET" ] || { echo "❌ Secret TAILSCALE_OAUTH_CLIENT_SECRET fehlt"; FAIL=1; }
+          [ -n "$TS_TAILNET" ] || { echo "❌ Secret TAILSCALE_TAILNET fehlt"; FAIL=1; }
+          [ "$FAIL" -eq 0 ] || { echo "❌ Vorbedingungen nicht erfüllt – Abbruch"; exit 1; }
+          echo "✅ Vorbedingungen ok (SSH_KEY, VPS_USER, OAuth, Tailnet)"
+
+      - name: Connect Runner to Tailnet (MagicDNS)
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci,tag:ia4
+
+      - name: Netmap-Sync abwarten
+        run: sleep 15
+
+      - name: VPS Tailscale-IP ermitteln (API; Fallback MagicDNS)
+        env:
+          TS_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          TS_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          TS_TAILNET: ${{ secrets.TAILSCALE_TAILNET }}
+        run: |
+          set -uo pipefail
+          NODE="vps-${TARGET}"
+          FQDN="${NODE}.${TS_TAILNET}"
+          TS_TOKEN=""
+          TS_IP=""
+          for try in 1 2 3; do
+            RESP=$(curl -sS --max-time 30 -w '\n%{http_code}' \
+              --data-urlencode "client_id=$TS_CLIENT_ID" \
+              --data-urlencode "client_secret=$TS_CLIENT_SECRET" \
+              "https://api.tailscale.com/api/v2/oauth/token")
+            CODE=$(printf '%s' "$RESP" | tail -1)
+            BODY=$(printf '%s' "$RESP" | sed '$d')
+            TS_TOKEN=$(printf '%s' "$BODY" | jq -r '.access_token // empty' 2>/dev/null || true)
+            if [ -n "$TS_TOKEN" ]; then
+              echo "::add-mask::$TS_TOKEN"
+              echo "✅ OAuth-Token erhalten (HTTP ${CODE}, Versuch ${try})"
+              break
+            fi
+            echo "⚠️ OAuth-Token fehlgeschlagen (HTTP ${CODE}, Versuch ${try})"
+            sleep 5
+          done
+          if [ -n "$TS_TOKEN" ]; then
+            RESP=$(curl -sS --max-time 30 -w '\n%{http_code}' \
+              "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses" \
+              -H "Authorization: Bearer ${TS_TOKEN}")
+            CODE=$(printf '%s' "$RESP" | tail -1)
+            BODY=$(printf '%s' "$RESP" | sed '$d')
+            if [ "$CODE" = "200" ]; then
+              TS_IP=$(printf '%s' "$BODY" | jq -r --arg n "$NODE" '[.devices[] | select(.hostname == $n or .hostname == ($n + "-1"))] | sort_by(.lastSeen // "") | reverse | .[0].addresses[0] // empty' 2>/dev/null | head -1 || true)
+              [ "$TS_IP" = "null" ] && TS_IP=""
+            else
+              echo "⚠️ Devices-API Fehler (HTTP ${CODE})"
+            fi
+          fi
+          if [ -z "$TS_IP" ]; then
+            echo "⚠️ Keine Tailscale-IP via API – Fallback auf MagicDNS-FQDN ${FQDN}"
+            VPS_TS_IP="$FQDN"
+          else
+            echo "✅ Node ${NODE} → ${TS_IP}"
+            VPS_TS_IP="$TS_IP"
+          fi
+          echo "VPS_TS_IP=${VPS_TS_IP}" >> "$GITHUB_ENV"
+
+      - name: SSH-Key vorbereiten
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_TS_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Ansible installieren
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
+
+      - name: Ansible-Collections installieren
+        working-directory: ansible
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: "Qdrant-Diagnose ausführen (read-only, Inventar: inventories/${TARGET}/hosts.yml)"
+        working-directory: ansible
+        run: |
+          set -euo pipefail
+          export SSH_KEY_PATH="$HOME/.ssh/id_ed25519"
+          echo "▶️  Qdrant read-only Diagnose auf vps-${TARGET} – keine Mutation"
+          ansible-playbook playbooks/diagnose-qdrant.yml \
+            -i "inventories/${TARGET}/hosts.yml" \
+            -e "ansible_host=$VPS_TS_IP"
