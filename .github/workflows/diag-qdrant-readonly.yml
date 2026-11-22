@@ -29,17 +29,18 @@ on:
   push:
     branches:
       - diag/qdrant-prod-readonly
+      - diag/qdrant-dev-readonly
 
 permissions:
   contents: read
 
 jobs:
   diagnose-qdrant:
-    name: "Qdrant-Ist-Zustand (target: ${{ github.event_name == 'push' && 'prod' || inputs.target }}) – read-only"
+    name: "Qdrant-Ist-Zustand (target: ${{ github.event_name == 'push' && (contains(github.ref_name, 'dev') && 'dev' || 'prod') || inputs.target }}) – read-only"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      TARGET: ${{ github.event_name == 'push' && 'prod' || inputs.target }}
+      TARGET: ${{ github.event_name == 'push' && (contains(github.ref_name, 'dev') && 'dev' || 'prod') || inputs.target }}
       VPS_USER: ${{ secrets.VPS_USER }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
 
