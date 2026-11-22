@@ -30,12 +30,24 @@ When "HTTPS-GET auf $Base/ ausgefuehrt wird (Runner im Tailnet)"
 Then-True "HTTP 200 ueber TLS (war: $code)" ($code.Trim() -eq '200') $code
 
 # ── Q2: Zertifikat passt zum MagicDNS-Namen (Tailscale-CA, Terminierung durch TS) ──
+# WICHTIG (Root-Cause 2026-11-22): stdout (PEM-Kette) und stderr (Handshake-Diagnose)
+# NIEMALS mischen. `2>&1 | openssl x509` liefert OpenSSL einen gemischten Strom, den
+# der OSSL_STORE-Decoder (ab 3.5.x, Runner ubuntu-26.04) als 'unsupported' abbricht
+# ('Could not find certificate from <stdin>', 1608010C). Daher: stdout -> Datei,
+# stderr -> eigene Datei, stdin -> /dev/null (kein EOF-Race), -showcerts fuer die Kette.
 Write-Host "`nScenario: TLS-Zertifikat ist fuer $Fqdn ausgestellt" -ForegroundColor Yellow
 Given "Tailscale stellt Zertifikate nur fuer eigene MagicDNS-Namen aus"
-$r = @(& openssl s_client -connect "${VpsIp}:6333" -servername $Fqdn 2>&1 | openssl x509 -noout -subject 2>&1)
-$rJoined = $r -join "`n"
+$certPem = Join-Path ([System.IO.Path]::GetTempPath()) ("qdrant-sclient-{0}.pem" -f [guid]::NewGuid().ToString('N'))
+$certErr = "$certPem.err"
+$opensslVer = (@(& openssl version 2>&1) -join ' ').Trim()
+Write-Host "  [diag] $opensslVer"
+$null = & bash -c "openssl s_client -connect '${VpsIp}:6333' -servername '$Fqdn' -showcerts </dev/null >'$certPem' 2>'$certErr'"
+$subj = (@(& openssl x509 -in $certPem -noout -subject -nameopt RFC2253 2>&1) -join "`n")
+$sslErr = if (Test-Path $certErr) { Get-Content $certErr -Raw } else { '' }
+$certDetail = "$subj`n--- s_client stderr ---`n$sslErr"
 When "das Server-Zertifikat vom Runner inspiziert wird"
-Then-True "Subject enthaelt $Fqdn" ($rJoined -match [regex]::Escape($Fqdn)) $rJoined
+Then-True "Subject enthaelt $Fqdn" ($subj -match [regex]::Escape($Fqdn)) $certDetail
+Remove-Item $certPem, $certErr -ErrorAction SilentlyContinue
 
 # ── Q3: Health-Endpoint /healthz liefert ok (Qdrant intern HTTP) ──
 Write-Host "`nScenario: Health-Endpoint /healthz ist ok" -ForegroundColor Yellow
