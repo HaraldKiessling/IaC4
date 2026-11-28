@@ -87,8 +87,10 @@ jobs:
         run: |
           echo "### Tailscale-Nodes"
           curl -s -H "Authorization: Bearer ${TS_TOKEN}" \
-            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses,lastSeen,online" \
-            | jq -r '.devices[] | select(.hostname | test("vps-${{ inputs.target }}")) | "\(.hostname)  ip=\(.addresses[0])  online=\(.online)  lastSeen=\(.lastSeen)"' || true
+            "https://api.tailscale.com/api/v2/tailnet/${TS_TAILNET}/devices?fields=hostname,addresses,lastSeen" \
+            | jq -r '.devices[]? | select(.hostname | test("vps-${{ inputs.target }}")) | "\(.hostname)  ip=\(.addresses[0])  lastSeen=\(.lastSeen)"' || true
+          echo "### tailscale status"
+          tailscale status 2>/dev/null | grep -E 'vps-' || true
 
       - name: SSH-Key vorbereiten
         run: |
